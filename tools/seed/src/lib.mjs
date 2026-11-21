@@ -38,7 +38,13 @@ export function generatePassword(length = PASSWORD_LENGTH) {
   return password;
 }
 
-/** Development or Stage only: https and the app-dev- or app-stg- host. */
+/** The only hosts the seed tool talks to. */
+export const SEED_HOSTS = {
+  dev: "app-dev-dialwarden.theriark.dev",
+  stage: "app-stg-dialwarden.theriark.dev",
+};
+
+/** Development or Stage only: https, the exact host and no port. */
 export function checkBaseUrl(value, env) {
   let url;
   try {
@@ -46,16 +52,15 @@ export function checkBaseUrl(value, env) {
   } catch {
     throw new SeedError("--base-url must be a URL");
   }
-  const prefix = env === "dev" ? "app-dev-" : "app-stg-";
+  const host = env === "dev" ? SEED_HOSTS.dev : SEED_HOSTS.stage;
   const ok =
     url.protocol === "https:" &&
-    url.hostname.startsWith(prefix) &&
+    url.hostname === host &&
+    url.port === "" &&
     url.username === "" &&
     url.password === "";
   if (!ok) {
-    throw new SeedError(
-      `--base-url for --env ${env} must be https://${prefix}...`,
-    );
+    throw new SeedError(`--base-url for --env ${env} must be https://${host}`);
   }
   return url.origin;
 }

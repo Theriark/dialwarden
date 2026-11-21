@@ -30,16 +30,17 @@ RUN --mount=type=cache,id=dialwarden-pnpm-store,target=/pnpm/store \
  && cp LICENSE LICENSING.md THIRD_PARTY_NOTICES /out/
 
 FROM node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime
-# The commit, its commit time and the feature baseline (feature_baseline.sh),
-# read by packages/entitlement. They never change on promotion: Stage and
-# Production run this same digest.
+# The commit, its commit time and the feature baseline (feature_baseline.sh).
+# They go into /app/build-info.json (below), the only place the server reads
+# them in production, so no environment variable can move the dates the
+# licence rule compares. They never change on promotion: Stage and Production
+# run this same digest. A build without both dates fails here.
 ARG REVISION=unknown
 ARG SOURCE_DATE_EPOCH
 ARG FEATURE_BASELINE_EPOCH
-ENV NODE_ENV=production \
-    DIALWARDEN_REVISION=${REVISION} \
-    DIALWARDEN_BUILD_EPOCH=${SOURCE_DATE_EPOCH} \
-    DIALWARDEN_FEATURE_BASELINE_EPOCH=${FEATURE_BASELINE_EPOCH}
+ENV NODE_ENV=production
+RUN test -n "${SOURCE_DATE_EPOCH}" && test -n "${FEATURE_BASELINE_EPOCH}" \
+ || { echo "SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH are required" >&2; exit 1; }
 # The app needs neither npm, corepack nor yarn at run time: remove them, and
 # create the two volume folders of deploy/dokploy.json for UID 10001 (a new
 # named volume copies their owner). Everything else stays owned by root, so the
@@ -52,6 +53,10 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
  && chmod 0750 /data /demo-servers
 WORKDIR /app
 COPY --from=build /out/ /app/
+RUN printf '{"revision":"%s","buildEpoch":"%s","featureBaselineEpoch":"%s"}\n' \
+      "${REVISION}" "${SOURCE_DATE_EPOCH}" "${FEATURE_BASELINE_EPOCH}" \
+      > /app/build-info.json \
+ && chmod 0444 /app/build-info.json
 USER 10001:10001
 VOLUME ["/data", "/demo-servers"]
 EXPOSE 8080

@@ -1,16 +1,24 @@
 // Import of an app backup export (it-input-1 3.1). Only on an empty instance,
-// during first run: no user exists yet. The upload goes to a staging folder in
-// the data folder, is decrypted, unpacked and verified, then replaces the empty
-// database while the API answers 503. When the export came from an instance
-// with another APP_SECRET_KEY, its encrypted columns are re-encrypted with this
-// instance's key first; this instance's key never changes.
+// during first run: no user exists yet. One import runs at a time. The upload
+// goes to a staging folder in the data folder, is decrypted, unpacked and
+// verified, then replaces the empty database while the API answers 503. When
+// the export came from an instance with another APP_SECRET_KEY, its encrypted
+// columns are re-encrypted with this instance's key first; this instance's key
+// never changes. Sessions in the export are dropped: nobody is signed in after
+// an import.
 import { createWriteStream } from "node:fs";
-import { copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import Database from "better-sqlite3";
-import { createAead, ENCRYPTED_COLUMNS, type Aead } from "../crypto/aead.js";
+import {
+  createAead,
+  ENCRYPTED_COLUMNS,
+  KeyMismatchError,
+  type Aead,
+} from "../crypto/aead.js";
+import { MIGRATIONS } from "../db/migrations.js";
 import { DB_FILE } from "../db/store.js";
 import type { AppContext } from "../http/context.js";
 import { ApiError } from "../http/errors.js";
@@ -26,6 +34,8 @@ import { readManifest, verifyBackup } from "./engine.js";
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const TABLE_SQL = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?";
+const DB_SUFFIXES = ["", "-wal", "-shm"];
+const ASIDE = ".before-import";
 
 /** Re-encrypts every registered column from one key to another. */
 export function reencrypt(path: string, from: Aead, to: Aead): number {
@@ -59,12 +69,27 @@ export function reencrypt(path: string, from: Aead, to: Aead): number {
   return changed;
 }
 
+/** Deletes the sessions of an imported database (nobody stays signed in). */
+export function dropSessions(path: string): void {
+  const db = new Database(path);
+  try {
+    if (db.prepare(TABLE_SQL).get("sessions") !== undefined) {
+      db.prepare("DELETE FROM sessions").run();
+    }
+  } finally {
+    db.close();
+  }
+}
+
 export interface ImportResult {
   /** createdAt of the imported backup. */
   createdAt: string;
   /** Encrypted values moved to this instance's key. */
   reencrypted: number;
 }
+
+const importFailed = (reason: string) =>
+  new ApiError(422, "import_failed", { reason });
 
 export async function importFirstRun(
   ctx: AppContext,
@@ -74,24 +99,39 @@ export async function importFirstRun(
   if (!ctx.auth.setupRequired()) {
     throw new ApiError(409, "setup_done");
   }
-  if (ctx.maintenance) {
+  if (ctx.importing || ctx.maintenance) {
     throw new ApiError(409, "import_running");
   }
+  ctx.importing = true;
+  try {
+    return await runImport(ctx, body, passphrase);
+  } finally {
+    ctx.importing = false;
+  }
+}
+
+async function runImport(
+  ctx: AppContext,
+  body: Readable,
+  passphrase: string,
+): Promise<ImportResult> {
   const dataDir = ctx.store.dataDir;
   const staging = await mkdtemp(join(dataDir, ".import-"));
   try {
     const upload = join(staging, "upload.dwbx");
-    await pipeline(
-      body,
-      byteLimit(MAX_ARCHIVE_BYTES),
-      createWriteStream(upload, { mode: 0o600 }),
-    );
     let appKeyHex: string | null;
     try {
-      ({ appKeyHex } = await importArchive(upload, passphrase, staging));
+      await pipeline(
+        body,
+        byteLimit(MAX_ARCHIVE_BYTES),
+        createWriteStream(upload, { mode: 0o600 }),
+      );
+      ({ appKeyHex } = await importArchive(upload, passphrase, staging, {
+        removeSource: true,
+      }));
     } catch (error) {
       if (error instanceof ArchiveError) {
-        throw new ApiError(422, "import_failed", { reason: error.message });
+        throw importFailed(error.message);
       }
       throw error;
     }
@@ -103,11 +143,25 @@ export async function importFirstRun(
       throw new ApiError(422, "import_failed", { reason: "verify", checks });
     }
     const manifest = await readManifest(folder);
+    // An export from a newer build has a migration this build cannot run.
+    const known = MIGRATIONS.some((m) => m.id === manifest.migrationId);
+    if (!known) {
+      throw importFailed("the export comes from a newer Dialwarden version");
+    }
+    const imported = join(folder, DB_FILE);
+    dropSessions(imported);
     let reencrypted = 0;
     if (appKeyHex !== null && HEX64.test(appKeyHex)) {
       const old = createAead(Buffer.from(appKeyHex, "hex"));
       if (old.kid !== ctx.aead.kid) {
-        reencrypted = reencrypt(join(folder, DB_FILE), old, ctx.aead);
+        try {
+          reencrypted = reencrypt(imported, old, ctx.aead);
+        } catch (error) {
+          if (error instanceof KeyMismatchError) {
+            throw importFailed("a value is encrypted with an unknown key");
+          }
+          throw error;
+        }
       }
     }
     await swapDatabase(ctx, folder, manifest.blobs);
@@ -117,6 +171,32 @@ export async function importFirstRun(
   }
 }
 
+/** Moves the database files to NAME.before-import (or back with back). */
+async function moveAside(dataDir: string, back = false): Promise<void> {
+  for (const suffix of DB_SUFFIXES) {
+    const live = join(dataDir, `${DB_FILE}${suffix}`);
+    const aside = `${live}${ASIDE}`;
+    try {
+      await (back ? rename(aside, live) : rename(live, aside));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+}
+
+async function removeDatabase(dataDir: string, suffix = ""): Promise<void> {
+  for (const name of DB_SUFFIXES) {
+    await rm(join(dataDir, `${DB_FILE}${name}${suffix}`), { force: true });
+  }
+}
+
+/**
+ * Puts the imported database in place. The empty database is moved aside, not
+ * deleted, and comes back when the imported one does not open, so a failed
+ * import never leaves the instance without a working database.
+ */
 async function swapDatabase(
   ctx: AppContext,
   folder: string,
@@ -129,18 +209,30 @@ async function swapDatabase(
       throw new ApiError(409, "setup_done");
     }
     ctx.store.close();
-    for (const suffix of ["", "-wal", "-shm"]) {
-      await rm(join(dataDir, `${DB_FILE}${suffix}`), { force: true });
+    await removeDatabase(dataDir, ASIDE);
+    await moveAside(dataDir);
+    try {
+      await copyFile(join(folder, DB_FILE), join(dataDir, DB_FILE));
+      for (const blob of blobs) {
+        const parts = blob.path.split("/");
+        await mkdir(join(dataDir, ...parts.slice(0, -1)), {
+          recursive: true,
+          mode: 0o750,
+        });
+        await copyFile(join(folder, ...parts), join(dataDir, ...parts));
+      }
+      await ctx.store.open();
+    } catch (error) {
+      ctx.store.close();
+      await removeDatabase(dataDir);
+      await moveAside(dataDir, true);
+      await ctx.store.open();
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw importFailed("the imported database does not open");
     }
-    await copyFile(join(folder, DB_FILE), join(dataDir, DB_FILE));
-    for (const blob of blobs) {
-      const parts = blob.path.split("/");
-      await mkdir(join(dataDir, ...parts.slice(0, -1)), {
-        recursive: true,
-        mode: 0o750,
-      });
-      await copyFile(join(folder, ...parts), join(dataDir, ...parts));
-    }
+    await removeDatabase(dataDir, ASIDE);
   } finally {
     try {
       if (!ctx.store.isOpen) {

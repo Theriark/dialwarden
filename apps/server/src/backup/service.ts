@@ -79,7 +79,13 @@ export class BackupService {
         revision: this.#options.revision,
         now: this.#now(),
       });
-      const deleted = await pruneBackups(this.dataDir, this.#now());
+      // A retention failure does not turn a good backup into a failed one.
+      let deleted: string[] = [];
+      try {
+        deleted = await pruneBackups(this.dataDir, this.#now());
+      } catch (error) {
+        log.warn({ err: error }, "backup retention failed");
+      }
       const sizeBytes = result.manifest.database.size;
       activity.record("backup.done", {
         actor,
@@ -162,6 +168,11 @@ export class BackupService {
       { next: next?.toISOString() ?? null },
       "backup schedule started",
     );
+  }
+
+  /** Runs the daily job once now (tests: the job takes no other path). */
+  async runScheduledNow(): Promise<void> {
+    await this.#job?.trigger();
   }
 
   /** Stops the job and waits for a running backup to end. */

@@ -13,7 +13,7 @@ import {
   type ScryptOptions,
 } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, open, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -24,11 +24,20 @@ import { createGunzip, createGzip } from "node:zlib";
 export const ARCHIVE_MAGIC = "DWBX";
 export const ARCHIVE_VERSION = 1;
 const HEADER_LENGTH = 36;
+const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
+/** The only key derivation parameters an archive may name (the exporter's). */
 const SCRYPT = { logN: 15, r: 8, p: 1 };
 export const MIN_PASSPHRASE_LENGTH = 12;
+/**
+ * Passphrases are printable ASCII: the import sends it in a header, which
+ * Node reads as latin1, so any other character would derive another key.
+ */
+export const PASSPHRASE_CHARS = /^[\x20-\x7e]+$/;
 /** Largest archive accepted, and largest tar it may expand to. */
-export const MAX_ARCHIVE_BYTES = 8 * 1024 ** 3;
+export const MAX_ARCHIVE_BYTES = 2 * 1024 ** 3;
+/** Largest app-secret.key entry (64 hex characters and a newline). */
+const MAX_KEY_ENTRY_BYTES = 256;
 
 /** Names an archive may contain (forward slashes, no other paths). */
 export const ARCHIVE_NAME =
@@ -158,12 +167,22 @@ export async function* exportArchive(
   const tar = Readable.from(
     tarStream(dir, [{ name: "app-secret.key", data: keyFile }]),
   );
-  const gzip = tar.pipe(createGzip());
-  for await (const chunk of gzip) {
-    const out = cipher.update(chunk as Buffer);
-    if (out.length > 0) {
-      yield out;
+  const gzip = createGzip();
+  // pipeline forwards a read error to gzip (and so to the loop below); the
+  // finally block closes the files when the client stops reading.
+  const piped = pipeline(tar, gzip);
+  piped.catch(() => undefined);
+  try {
+    for await (const chunk of gzip) {
+      const out = cipher.update(chunk as Buffer);
+      if (out.length > 0) {
+        yield out;
+      }
     }
+    await piped;
+  } finally {
+    tar.destroy();
+    gzip.destroy();
   }
   const last = cipher.final();
   if (last.length > 0) {
@@ -187,11 +206,16 @@ export function byteLimit(max: number): Transform {
   });
 }
 
-/** Decrypts and unpacks an archive file into a new folder. */
+/**
+ * Decrypts and unpacks an archive file into a new folder. With removeSource
+ * the archive file is deleted once decrypted, so the disk never holds the
+ * upload, the tar and the unpacked files at the same time.
+ */
 export async function importArchive(
   file: string,
   passphrase: string,
   target: string,
+  options: { removeSource?: boolean } = {},
 ): Promise<{ appKeyHex: string | null }> {
   const info = await stat(file);
   if (info.size < HEADER_LENGTH + TAG_LENGTH || info.size > MAX_ARCHIVE_BYTES) {
@@ -211,14 +235,22 @@ export async function importArchive(
   if (magic !== ARCHIVE_MAGIC || version !== ARCHIVE_VERSION) {
     throw new ArchiveError("not a Dialwarden backup export");
   }
-  // Bounded parameters: a crafted header cannot make scrypt use huge memory.
-  if (logN < 14 || logN > 20 || r < 1 || r > 16 || p < 1 || p > 4) {
+  // Only the exporter's parameters: a crafted header cannot make scrypt use
+  // more memory or time than an export does.
+  if (logN !== SCRYPT.logN || r !== SCRYPT.r || p !== SCRYPT.p) {
     throw new ArchiveError("unsupported key derivation parameters");
   }
   const salt = header.subarray(8, 24);
-  const iv = header.subarray(24, 36);
-  const key = await deriveKey(passphrase, salt, { logN, r, p });
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  const iv = header.subarray(24, 24 + IV_LENGTH);
+  let key: Buffer;
+  try {
+    key = await deriveKey(passphrase, salt, { logN, r, p });
+  } catch {
+    throw new ArchiveError("the key derivation failed");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", key, iv, {
+    authTagLength: TAG_LENGTH,
+  });
   decipher.setAAD(header);
   decipher.setAuthTag(tag);
   await mkdir(target, { recursive: true, mode: 0o700 });
@@ -240,9 +272,16 @@ export async function importArchive(
     }
     throw new ArchiveError("wrong passphrase or damaged file");
   }
+  if (options.removeSource === true) {
+    await rm(file, { force: true });
+  }
   const folder = join(target, "backup");
-  const appKeyHex = await untar(tarPath, folder);
-  return { appKeyHex };
+  try {
+    const appKeyHex = await untar(tarPath, folder);
+    return { appKeyHex };
+  } finally {
+    await rm(tarPath, { force: true });
+  }
 }
 
 /** A NUL-terminated header field as text. */
@@ -265,6 +304,7 @@ async function untar(tarPath: string, folder: string): Promise<string | null> {
   const { size } = await stat(tarPath);
   const handle = await open(tarPath, "r");
   let appKeyHex: string | null = null;
+  const seen = new Set<string>();
   try {
     let offset = 0;
     const header = Buffer.alloc(512);
@@ -280,8 +320,15 @@ async function untar(tarPath: string, folder: string): Promise<string | null> {
       if ((type !== "0" && type !== "\0") || !ARCHIVE_NAME.test(name)) {
         throw new ArchiveError(`unexpected entry in the archive: ${name}`);
       }
+      if (seen.has(name)) {
+        throw new ArchiveError(`duplicate entry in the archive: ${name}`);
+      }
+      seen.add(name);
       if (start + length > size) {
         throw new ArchiveError("truncated archive");
+      }
+      if (name === "app-secret.key" && length > MAX_KEY_ENTRY_BYTES) {
+        throw new ArchiveError("app-secret.key entry too large");
       }
       if (name === "app-secret.key") {
         const data = Buffer.alloc(length);

@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildApp } from "./app.js";
 
+/* eslint-disable security/detect-non-literal-fs-filename -- a throwaway folder under the system temporary folder */
+
 const dir = await mkdtemp(join(tmpdir(), "dialwarden-openapi-"));
 try {
   const app = await buildApp({ env: { LOG_LEVEL: "silent", DATA_DIR: dir } });

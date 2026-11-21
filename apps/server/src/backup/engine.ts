@@ -448,7 +448,10 @@ export async function listBackups(dataDir: string): Promise<BackupListItem[]> {
       });
     }
   }
-  return items.sort((a, b) => b.id.localeCompare(a.id));
+  // Numeric order, so 20261121-0330-10 sorts after 20261121-0330-9.
+  return items.sort((a, b) =>
+    b.id.localeCompare(a.id, "en", { numeric: true }),
+  );
 }
 
 /**

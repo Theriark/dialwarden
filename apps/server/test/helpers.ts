@@ -8,6 +8,8 @@ import { testKeyRing } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp, type BuildOptions } from "../src/app.js";
 
+/* eslint-disable security/detect-non-literal-fs-filename -- test folders under the system temporary folder */
+
 /**
  * The image build variables every test app runs with (2026-11-21T07:00:00Z),
  * so licence dates in the tests never depend on the clock.

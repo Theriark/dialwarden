@@ -1,8 +1,9 @@
 // The licence key functionality of Dialwarden (LICENSING.md): build information,
 // licence tokens, the public key slots, revocation, the feature registry, the
 // CRA-safe rule and the gate every other module asks (getEntitlement, can,
-// limit, isServerEditable). The Dockerfile turns the build arguments REVISION,
-// SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH into the variables read here.
+// limit, isServerEditable). readBuildInfo parses the build variables; in
+// production the server takes them from the image's build-info.json
+// (apps/server/src/build-info.ts), never from the environment.
 import type { FeatureKey, LimitKey } from "./registry.js";
 import type { BuildDates, Entitlement } from "./rule.js";
 
