@@ -23,6 +23,17 @@ function isZod(value: unknown): value is z.ZodType {
   return value instanceof z.ZodType;
 }
 
+/** A request that does not match its route schema (answered with 400). */
+export class RequestValidationError extends Error {
+  readonly issues: z.ZodError["issues"];
+
+  constructor(error: z.ZodError) {
+    super("request validation failed");
+    this.name = "RequestValidationError";
+    this.issues = error.issues;
+  }
+}
+
 export const validatorCompiler: FastifySchemaCompiler<unknown> = (route) => {
   const schema = route.schema;
   if (!isZod(schema)) {
@@ -30,7 +41,10 @@ export const validatorCompiler: FastifySchemaCompiler<unknown> = (route) => {
   }
   return (data: unknown) => {
     const result = schema.safeParse(data);
-    return result.success ? { value: result.data } : { error: result.error };
+    if (result.success) {
+      return { value: result.data };
+    }
+    return { error: new RequestValidationError(result.error) };
   };
 };
 
@@ -41,7 +55,17 @@ export const serializerCompiler: FastifySerializerCompiler<unknown> = (
   if (!isZod(schema)) {
     return (data: unknown) => JSON.stringify(data);
   }
-  return (data: unknown) => JSON.stringify(schema.parse(data));
+  // A handler that returns the wrong shape is a server bug: a logged 500,
+  // never a 400 that blames the client.
+  return (data: unknown) => {
+    const result = schema.safeParse(data);
+    if (!result.success) {
+      throw new Error("response serialization failed", {
+        cause: result.error,
+      });
+    }
+    return JSON.stringify(result.data);
+  };
 };
 
 function toJsonSchema(schema: z.ZodType, io: "input" | "output"): unknown {

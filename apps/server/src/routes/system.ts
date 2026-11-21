@@ -3,9 +3,9 @@
 import { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { MIN_PASSPHRASE_LENGTH } from "../backup/archive.js";
 import { BACKUP_ID } from "../backup/engine.js";
 import { SETTING_KEYS } from "../db/settings.js";
+import { passphraseSchema } from "../http/schemas.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 
 const checkSchema = z.object({
@@ -153,9 +153,7 @@ export function systemRoutes(app: FastifyInstance): void {
       config: owner,
       schema: {
         tags: ["backup"],
-        body: z.object({
-          passphrase: z.string().min(MIN_PASSPHRASE_LENGTH).max(1024),
-        }),
+        body: z.object({ passphrase: passphraseSchema }),
       },
     },
     async (request, reply) => {

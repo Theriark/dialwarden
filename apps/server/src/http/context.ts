@@ -1,5 +1,6 @@
 // What every route can reach (app.ctx), the request session, and the route
-// config keys: auth (public, user or owner; /api routes default to user) and
+// config keys: auth (public, user or owner; every matched route defaults to
+// user, so a route that should be open says auth "public") and
 // entitlement (a FeatureKey; the route answers 402 on Free, contract C1).
 import type {
   BuildInfo,
@@ -37,6 +38,8 @@ export interface AppContext {
   backups: BackupService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
+  /** True while a first-run import runs (one at a time). */
+  importing: boolean;
   /** Every registered route (the registry test reads it). */
   routes: RouteInfo[];
 }

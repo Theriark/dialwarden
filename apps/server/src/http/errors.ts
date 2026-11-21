@@ -4,6 +4,7 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import type { FeatureKey, LimitKey } from "@dialwarden/entitlement";
 import { z } from "zod";
+import { RequestValidationError } from "./zod.js";
 
 export class ApiError extends Error {
   readonly statusCode: number;
@@ -61,7 +62,9 @@ export function limitReached(
 
 export const errorSchema = z.object({ error: z.string() }).loose();
 
-function zodIssues(error: z.ZodError): { path: string; message: string }[] {
+function zodIssues(
+  error: RequestValidationError,
+): { path: string; message: string }[] {
   return error.issues.map((issue) => ({
     path: issue.path.map(String).join("."),
     message: issue.message,
@@ -78,7 +81,9 @@ export function errorHandler(
     void reply.code(error.statusCode).send(body);
     return;
   }
-  if (error instanceof z.ZodError) {
+  // Only request validation is the client's fault; any other ZodError (for
+  // example a response that does not match its schema) is a logged 500.
+  if (error instanceof RequestValidationError) {
     const body = { error: "validation", issues: zodIssues(error) };
     void reply.code(400).send(body);
     return;

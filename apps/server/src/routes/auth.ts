@@ -4,20 +4,20 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Readable } from "node:stream";
 import { z } from "zod";
 import type { PublicUser } from "../auth/service.js";
+import type { ActiveSession } from "../auth/sessions.js";
 import { importFirstRun } from "../backup/import.js";
-import { MIN_PASSPHRASE_LENGTH } from "../backup/archive.js";
+import { MAX_ARCHIVE_BYTES } from "../backup/archive.js";
 import { ApiError } from "../http/errors.js";
 import { clearSessionCookie, setSessionCookie } from "../http/guard.js";
 import {
   emailSchema,
   newPasswordSchema,
+  passphraseSchema,
   passwordSchema,
   signedInSchema,
   userSchema,
 } from "../http/schemas.js";
 import type { ZodTypeProvider } from "../http/zod.js";
-
-const passphraseSchema = z.string().min(MIN_PASSPHRASE_LENGTH).max(1024);
 
 const secondFactor = z.object({
   code: z.string().max(16).optional(),
@@ -40,6 +40,14 @@ function startSession(
   });
   setSessionCookie(app, reply, session);
   return { status: "ok" as const, user, csrfToken: session.csrfToken };
+}
+
+/** The session of a signed-in route (the guard already refused anonymous). */
+function signedIn(request: FastifyRequest): ActiveSession {
+  if (request.session === null) {
+    throw new ApiError(401, "unauthenticated");
+  }
+  return request.session;
 }
 
 function answer(body: z.infer<typeof secondFactor>) {
@@ -113,6 +121,12 @@ export function authRoutes(app: FastifyInstance): void {
       const body: unknown = request.body;
       if (!(body instanceof Readable)) {
         throw new ApiError(415, "octet_stream_required");
+      }
+      // Refused before a byte is stored; the stream is capped as well.
+      const declared = Number(request.headers["content-length"] ?? 0);
+      if (declared > MAX_ARCHIVE_BYTES) {
+        body.resume();
+        throw new ApiError(413, "too_large", { max: MAX_ARCHIVE_BYTES });
       }
       const passphrase = request.headers["x-dialwarden-passphrase"];
       const result = await importFirstRun(app.ctx, body, passphrase);
@@ -193,9 +207,11 @@ export function authRoutes(app: FastifyInstance): void {
     },
   );
 
+  // Public so an expired session still gets its cookie cleared; the guard
+  // still checks the CSRF header whenever a session exists.
   api.post(
     "/api/v1/auth/logout",
-    { schema: { tags: ["auth"] } },
+    { config: { auth: "public" }, schema: { tags: ["auth"] } },
     async (request, reply) => {
       if (request.session !== null) {
         app.ctx.sessions.destroy(request.session.id);
@@ -277,8 +293,10 @@ export function authRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      const userId = request.session?.user.id ?? "";
-      const codes = app.ctx.auth.totpEnable(userId, request.body.code);
+      const session = signedIn(request);
+      const codes = app.ctx.auth.totpEnable(session.user.id, request.body.code);
+      // A session stolen before TOTP was on does not stay valid.
+      app.ctx.sessions.destroyForUser(session.user.id, session.id);
       return { recoveryCodes: codes };
     },
   );
@@ -292,12 +310,13 @@ export function authRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const userId = request.session?.user.id ?? "";
+      const session = signedIn(request);
       await app.ctx.auth.totpDisable(
-        userId,
+        session.user.id,
         request.body.password,
         answer(request.body),
       );
+      app.ctx.sessions.destroyForUser(session.user.id, session.id);
       return reply.code(204).send();
     },
   );

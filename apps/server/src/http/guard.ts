@@ -2,8 +2,10 @@
 // 1. reads the session from the signed cookie;
 // 2. refuses API calls with 503 while a first-run import runs;
 // 3. checks the CSRF header on every state-changing request with a session;
-// 4. enforces config.auth (API routes default to "user", so a route that
-//    forgets the setting is protected, not open);
+// 4. enforces config.auth. Every matched route defaults to "user", so a route
+//    that forgets the setting is protected, not open. The level comes from the
+//    matched route, never from request.url: Fastify routes on the decoded path,
+//    so /%61pi/v1/activity reaches the /api/v1/activity handler;
 // 5. answers 402 (contract C1) for a route whose config.entitlement feature the
 //    current plan does not include.
 import { timingSafeEqual } from "node:crypto";
@@ -33,20 +35,28 @@ function readSession(app: FastifyInstance, request: FastifyRequest): void {
 }
 
 function authLevel(request: FastifyRequest): AuthLevel {
-  const configured = request.routeOptions.config.auth;
-  if (configured !== undefined) {
-    return configured;
+  // No matched route: the not-found handler answers 404 to everybody.
+  if (request.routeOptions.url === undefined) {
+    return "public";
   }
-  return request.url.startsWith("/api/") ? "user" : "public";
+  return request.routeOptions.config.auth ?? "user";
+}
+
+/** The matched route pattern (decoded), or the raw URL when none matched. */
+function routePath(request: FastifyRequest): string {
+  return request.routeOptions.url ?? request.url;
 }
 
 export function registerGuard(app: FastifyInstance): void {
   app.decorateRequest("session", null);
   app.addHook("onRequest", async (request) => {
-    if (app.ctx.maintenance && request.url.startsWith("/api/")) {
+    if (app.ctx.maintenance && routePath(request).startsWith("/api/")) {
       throw new ApiError(503, "maintenance");
     }
-    readSession(app, request);
+    // While a first-run import swaps the database the store is closed.
+    if (app.ctx.store.isOpen) {
+      readSession(app, request);
+    }
     const session = request.session;
     if (session !== null && !SAFE_METHODS.has(request.method)) {
       const header = request.headers["x-csrf-token"];

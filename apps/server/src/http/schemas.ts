@@ -6,6 +6,7 @@ import {
 } from "@dialwarden/entitlement";
 import { z } from "zod";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "../auth/hashing.js";
+import { MIN_PASSPHRASE_LENGTH, PASSPHRASE_CHARS } from "../backup/archive.js";
 
 export const emailSchema = z.email().max(254);
 
@@ -16,6 +17,16 @@ export const newPasswordSchema = z
 
 /** A password being checked (any length the policy ever allowed). */
 export const passwordSchema = z.string().min(1).max(MAX_PASSWORD_LENGTH);
+
+/**
+ * A backup passphrase: printable ASCII only, for export and import alike (the
+ * import reads it from a header, which Node decodes as latin1).
+ */
+export const passphraseSchema = z
+  .string()
+  .min(MIN_PASSPHRASE_LENGTH)
+  .max(1024)
+  .regex(PASSPHRASE_CHARS, "printable ASCII characters only");
 
 export const userSchema = z.object({
   id: z.string(),
