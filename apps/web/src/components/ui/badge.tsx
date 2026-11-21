@@ -12,12 +12,7 @@ import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
 export type BadgeKind =
-  | "error"
-  | "warning"
-  | "pending"
-  | "success"
-  | "info"
-  | "neutral";
+  "error" | "warning" | "pending" | "success" | "info" | "neutral";
 
 interface BadgeProps {
   kind: BadgeKind;

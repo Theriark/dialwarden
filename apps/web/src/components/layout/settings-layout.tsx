@@ -9,9 +9,7 @@ import {
 import { PageHeader } from "./page-header";
 
 type SettingsPath =
-  | "/settings/profile"
-  | "/settings/licence"
-  | "/settings/backup";
+  "/settings/profile" | "/settings/licence" | "/settings/backup";
 
 const SECTIONS: readonly { to: SettingsPath; label: string }[] = [
   { to: "/settings/profile", label: "Profile" },

@@ -49,7 +49,10 @@ describe("api client", () => {
 
   it("throws an ApiError with the server code and details", async () => {
     const body = { error: "rate_limited", retryAfter: 90 };
-    vi.stubGlobal("fetch", vi.fn(async () => answer(429, body)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => answer(429, body)),
+    );
     const failure = await failureOf(
       api("/api/v1/auth/login", { method: "POST" }),
     );
@@ -89,7 +92,10 @@ describe("api client", () => {
 
   it("treats 204 as no content and a 401 session as signed out", async () => {
     const empty = () => new Response(null, { status: 204 });
-    vi.stubGlobal("fetch", vi.fn(async () => empty()));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => empty()),
+    );
     const nothing = await api("/api/v1/auth/logout", { method: "POST" });
     expect(nothing).toBeUndefined();
     vi.stubGlobal(

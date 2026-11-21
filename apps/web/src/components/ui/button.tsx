@@ -62,8 +62,7 @@ export function Button({
   );
 }
 
-export interface IconButtonProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** The accessible name; icon-only controls always have one. */
   label: string;
   children: ReactNode;
