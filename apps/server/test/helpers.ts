@@ -22,6 +22,12 @@ export const BUILD_ENV = {
   DIALWARDEN_FEATURE_BASELINE_EPOCH: "1795244400",
 };
 
+/**
+ * A build-info path that never exists, so a test reads BUILD_ENV and never a
+ * real /app/build-info.json (a test run inside the image).
+ */
+export const NO_BUILD_INFO_FILE = "/nonexistent/dialwarden-build-info.json";
+
 export interface TestApp {
   app: FastifyInstance;
   dataDir: string;
@@ -47,6 +53,7 @@ export async function testApp(
   const app = await buildApp({
     keys: testKeyRing,
     out: discard(),
+    buildInfoFile: NO_BUILD_INFO_FILE,
     ...build,
     env,
   });

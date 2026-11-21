@@ -26,6 +26,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BUILD_ENV,
   headersOf,
+  NO_BUILD_INFO_FILE,
+  setupHeaders,
   setupOwner,
   tempDir,
   testApp,
@@ -288,6 +290,7 @@ describe("backup", () => {
         APP_SECRET_KEY: key,
         ...BUILD_ENV,
       },
+      buildInfoFile: NO_BUILD_INFO_FILE,
     });
     try {
       const login = await restored.inject({
@@ -462,11 +465,13 @@ describe("backup", () => {
     // Another instance with its own APP_SECRET_KEY.
     const fresh = await testApp();
     try {
+      const firstRun = setupHeaders(fresh.app);
       const upload = (secret: string) =>
         fresh.app.inject({
           method: "POST",
           url: "/api/v1/setup/import",
           headers: {
+            ...firstRun,
             "content-type": "application/octet-stream",
             "x-dialwarden-passphrase": secret,
           },
@@ -523,6 +528,7 @@ function importInto(
     method: "POST",
     url: "/api/v1/setup/import",
     headers: {
+      ...setupHeaders(app),
       "content-type": "application/octet-stream",
       "x-dialwarden-passphrase": passphrase,
       ...headers,
