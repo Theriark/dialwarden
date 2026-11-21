@@ -1,0 +1,22 @@
+{
+  "name": "@dialwarden/formats",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Format engine (contract C2). P0: skeleton; the adapters arrive in P2.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

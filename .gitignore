@@ -12,4 +12,5 @@ playwright-report/
 test-results/
 screenshots/
 *.tsbuildinfo
+THIRD_PARTY_NOTICES
 .DS_Store

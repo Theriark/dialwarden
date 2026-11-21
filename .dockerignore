@@ -1,0 +1,17 @@
+# The build stage needs the whole workspace (the frozen install checks every
+# workspace package against pnpm-lock.yaml). tools/ never reaches the runtime
+# stage: it copies only the server deploy (pnpm deploy --filter @dialwarden/server).
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+**/*.log
+**/*.tsbuildinfo
+.env
+.env.*
+data
+screenshots
+test-results
+playwright-report
+THIRD_PARTY_NOTICES

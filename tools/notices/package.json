@@ -1,0 +1,8 @@
+{
+  "name": "@dialwarden/tools-notices",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Build helpers: THIRD_PARTY_NOTICES, licence audit and the outside-host asset check. Never part of the image.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module"
+}

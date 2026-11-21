@@ -9,7 +9,9 @@
 #     before the first release, otherwise the next feature version 27.<minor+1>.0.
 #     A candidate of the open line that is already on <commit> and seals <digest> is
 #     reused; otherwise the next number of the line is minted. A <commit> that a
-#     stable tag already points at fails.
+#     stable tag already points at fails, and so does a candidate whose
+#     major.minor differs from "line" in packages/entitlement/feature-line.json
+#     of <commit> (the feature line the licence baseline is computed from).
 #   release_tags.sh current <commit> <digest>
 #     The candidate Stage runs: the highest -rc.N tag on <commit> that seals <digest>.
 #
@@ -103,6 +105,14 @@ for tag in "${candidates[@]}"; do
     reuse="${tag}"
   fi
 done
+
+# The candidate belongs to the feature line the commit declares. A new feature
+# version (27.<minor+1>.0) needs feature-line.json updated in the same change.
+line="$(git show "${commit}:packages/entitlement/feature-line.json" 2>/dev/null | jq -r '.line // empty' || true)"
+[[ "${line}" =~ ^27\.(0|[1-9][0-9]*)$ ]] ||
+  fail "packages/entitlement/feature-line.json of ${commit} has no valid line (27.<minor>), got '${line}'"
+[[ "${open%.*}" == "${line}" ]] ||
+  fail "the next candidate is ${open}, but feature-line.json of ${commit} says line ${line}; update the feature line first"
 
 echo "version=${open}"
 if [[ -n "${reuse}" ]]; then
