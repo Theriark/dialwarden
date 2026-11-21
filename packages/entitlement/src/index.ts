@@ -33,9 +33,7 @@ export function epochToIso(value: string | undefined): string | null {
   return new Date(Number(value) * 1000).toISOString().replace(".000Z", "Z");
 }
 
-export function readBuildInfo(
-  env: NodeJS.ProcessEnv = process.env,
-): BuildInfo {
+export function readBuildInfo(env: NodeJS.ProcessEnv = process.env): BuildInfo {
   const revision = env["DIALWARDEN_REVISION"] ?? "";
   return {
     revision: REVISION.test(revision) ? revision : "unknown",
