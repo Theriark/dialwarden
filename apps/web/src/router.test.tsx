@@ -17,6 +17,9 @@ import { startRouter } from "./test/start";
 
 afterEach(resetAfterEach);
 
+/** What the owner types to sign in; the stubbed server accepts it as is. */
+const OWNER_PASSPHRASE = "owner-passphrase-for-router-tests";
+
 /** The instance as the route guards see it; a test changes it as it goes. */
 interface World {
   setupRequired: boolean;
@@ -49,7 +52,7 @@ function stubWorld(world: World, extra?: Handler) {
 const buttonNamed = (name: string) =>
   screen.getByRole<HTMLButtonElement>("button", { name });
 
-async function signIn(password = "correct horse battery staple") {
+async function signIn(password = OWNER_PASSPHRASE) {
   const user = userEvent.setup();
   await user.type(
     await screen.findByLabelText("E-mail address"),
@@ -104,9 +107,9 @@ describe("router", () => {
     expect(alert.textContent).toContain(
       "The e-mail address or password is wrong.",
     );
-    expect(screen.getByLabelText<HTMLInputElement>("E-mail address").value).toBe(
-      "owner@example.test",
-    );
+    expect(
+      screen.getByLabelText<HTMLInputElement>("E-mail address").value,
+    ).toBe("owner@example.test");
     expect(screen.getByLabelText<HTMLInputElement>("Password").value).toBe(
       "not-the-password",
     );
@@ -129,7 +132,7 @@ describe("router", () => {
     await screen.findByText("Coming in a later phase");
     expect(router.state.location.pathname).toBe("/presets");
     expect(bodies).toEqual([
-      { email: "owner@example.test", password: "correct horse battery staple" },
+      { email: "owner@example.test", password: OWNER_PASSPHRASE },
     ]);
     expect(currentCsrf()).toBe("csrf-test");
     expect(client.getQueryData(keys.session)).toEqual(OWNER);
