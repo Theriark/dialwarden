@@ -1,4 +1,7 @@
 // Answer shapes for the page tests, exactly as the P1-A server sends them.
+// The imports carry the .js suffix so the server's contract test
+// (apps/server/src/http/contract.test.ts) can import this file under its own
+// module resolution and check every fixture against the running server.
 import {
   FEATURE_KEYS,
   type BackupItem,
@@ -6,8 +9,22 @@ import {
   type FeatureKey,
   type Health,
   type Registry,
+  type SignedIn,
   type SystemStatus,
-} from "../api/schema";
+} from "../api/schema.js";
+
+/** The owner session every signed-in page test starts from. */
+export const OWNER: SignedIn = {
+  status: "ok",
+  csrfToken: "csrf-test",
+  user: {
+    id: "u1",
+    email: "owner@example.test",
+    name: "Owner Person",
+    role: "owner",
+    totpEnabled: false,
+  },
+};
 
 export function entitlement(overrides: Partial<Entitlement> = {}): Entitlement {
   const features = Object.fromEntries(
@@ -47,6 +64,29 @@ export function paidFromEnvironment(): Entitlement {
       warn30: false,
     },
     envLicence: { present: true, state: "active", ignored: false },
+  });
+}
+
+/** A customer key added in the UI, with no environment licence behind it. */
+export function paidFromUi(): Entitlement {
+  const paid = paidFromEnvironment();
+  return entitlement({
+    ...paid,
+    source: "ui",
+    envLicence: { present: false, state: "none", ignored: false },
+    licence: {
+      ...(paid.licence ?? {
+        lidHash8: null,
+        last6: "",
+        customerName: null,
+        kind: null,
+        issuedAt: null,
+        updatesUntil: null,
+        warn30: false,
+      }),
+      kind: "customer",
+      customerName: "Example Guild",
+    },
   });
 }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isThemePreference, resolveTheme } from "./theme";
+import indexHtml from "../../index.html?raw";
+import { isThemePreference, resolveTheme, THEME_KEY } from "./theme";
 
 describe("theme", () => {
   it("resolves system to the operating system choice", () => {
@@ -14,5 +15,12 @@ describe("theme", () => {
     expect(isThemePreference("system")).toBe(true);
     expect(isThemePreference("blue")).toBe(false);
     expect(isThemePreference(null)).toBe(false);
+  });
+
+  it("reads the same key as the inline script of index.html", () => {
+    // The script runs before the first paint (contract C8); it must read the
+    // key the store writes, or the page flashes the wrong theme.
+    expect(indexHtml).toContain(`localStorage.getItem("${THEME_KEY}")`);
+    expect(indexHtml).toContain('setAttribute("data-theme", theme)');
   });
 });
