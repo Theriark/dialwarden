@@ -1,0 +1,6 @@
+# Development licence key slot, current (packages/entitlement/src/keys.ts).
+# Empty until the operator creates the development signing key in the setup
+# broker under D5 (dev-work-plan people dependency 4). P1-C then commits the
+# development public key here as one SPKI PEM block, with the SHA-256
+# fingerprint of its DER encoding in a comment (it-input-1 1.4).
+# This key verifies internal-dev licences only, never customer licences.

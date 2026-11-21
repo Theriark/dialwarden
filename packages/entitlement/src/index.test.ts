@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { epochToIso, readBuildInfo } from "./index.js";
+import {
+  EntitlementGate,
+  epochToIso,
+  readBuildInfo,
+  resolveEntitlement,
+  ruleDates,
+  type Entitlement,
+} from "./index.js";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
 
@@ -32,5 +39,74 @@ describe("readBuildInfo", () => {
     expect(epochToIso("")).toBeNull();
     expect(epochToIso("-1")).toBeNull();
     expect(epochToIso("2026-11-21")).toBeNull();
+  });
+});
+
+describe("ruleDates", () => {
+  it("uses the image dates", () => {
+    const dates = ruleDates(
+      {
+        revision: sha,
+        buildDate: "2027-03-01T00:00:00Z",
+        featureBaseline: "2026-12-01T00:00:00Z",
+      },
+      new Date("2030-01-01T00:00:00Z"),
+    );
+    expect(dates.buildDate.toISOString()).toBe("2027-03-01T00:00:00.000Z");
+    expect(dates.featureBaseline.toISOString()).toBe(
+      "2026-12-01T00:00:00.000Z",
+    );
+  });
+
+  it("falls back to the start time outside an image build", () => {
+    const start = new Date("2026-11-21T08:00:00Z");
+    const dates = ruleDates(readBuildInfo({}), start);
+    expect(dates.buildDate).toEqual(start);
+    expect(dates.featureBaseline).toEqual(start);
+  });
+});
+
+describe("EntitlementGate", () => {
+  const entitlement = (paid: boolean): Entitlement =>
+    resolveEntitlement({
+      ui: null,
+      env: paid
+        ? {
+            state: "active",
+            payload: null,
+            lidHash8: "abcdef01",
+            last6: "xyz123",
+            reason: null,
+          }
+        : null,
+      envIgnored: false,
+      buildDate: null,
+      featureBaseline: null,
+      now: new Date(),
+    });
+
+  it("answers can and limit from the current entitlement", () => {
+    let paid = false;
+    const gate = new EntitlementGate(() => entitlement(paid), () => []);
+    expect(gate.can("schedules")).toBe(false);
+    expect(gate.limit("servers")).toBe(3);
+    paid = true;
+    expect(gate.can("schedules")).toBe(true);
+    expect(gate.limit("users")).toBeNull();
+    expect(gate.getEntitlement().plan).toBe("paid");
+  });
+
+  it("on Free only the chosen three servers are editable", () => {
+    const chosen = ["a", "b", "c", "d"];
+    const gate = new EntitlementGate(() => entitlement(false), () => chosen);
+    expect(gate.isServerEditable("a")).toBe(true);
+    expect(gate.isServerEditable("c")).toBe(true);
+    expect(gate.isServerEditable("d")).toBe(false);
+    expect(gate.isServerEditable("z")).toBe(false);
+  });
+
+  it("on Paid every server is editable", () => {
+    const gate = new EntitlementGate(() => entitlement(true), () => []);
+    expect(gate.isServerEditable("z")).toBe(true);
   });
 });

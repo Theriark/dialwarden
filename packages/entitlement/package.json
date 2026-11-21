@@ -2,7 +2,7 @@
   "name": "@dialwarden/entitlement",
   "version": "27.0.0",
   "private": true,
-  "description": "Licence key functionality of Dialwarden (see LICENSING.md). P0: build information only.",
+  "description": "Licence key functionality of Dialwarden (see LICENSING.md): licence tokens, public key slots, revocation, the feature registry and the CRA-safe entitlement rule.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "exports": {
@@ -11,14 +11,21 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./feature-line.json": "./feature-line.json"
+    "./feature-line.json": "./feature-line.json",
+    "./testing": {
+      "source": "./test/testing.ts"
+    }
   },
   "files": [
     "dist",
+    "keys",
     "feature-line.json"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.1.5"
   }
 }
