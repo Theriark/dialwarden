@@ -7,7 +7,7 @@ import { renderNotices } from "./lib.mjs";
 import { listLicences } from "./pnpm.mjs";
 
 const target = process.argv[2] ?? "THIRD_PARTY_NOTICES";
-const LICENCE_FILE = /^(licen[cs]e|copying)(\.[a-z]+)?$/i;
+const LICENCE_FILE = /^(?:licen[cs]e|copying)(?:\.[a-z]+|)$/i;
 
 function licenceText(dir) {
   if (dir === "") {

@@ -74,15 +74,15 @@ export function licenceAllowed(expression, allowed) {
     return value;
   };
   const parseAtom = () => {
-    const token = next();
-    if (token === "(") {
+    const atom = next();
+    if (atom === "(") {
       const value = parseOr();
       if (next() !== ")") {
         throw new Error("unbalanced parenthesis");
       }
       return value;
     }
-    if (token === undefined || ["OR", "AND", "WITH", ")"].includes(token)) {
+    if (atom === undefined || ["OR", "AND", "WITH", ")"].includes(atom)) {
       throw new Error("unexpected end of expression");
     }
     if (peek() === "WITH") {
@@ -91,7 +91,7 @@ export function licenceAllowed(expression, allowed) {
         throw new Error("WITH without an exception");
       }
     }
-    return allowed.has(token);
+    return allowed.has(atom);
   };
   try {
     const result = parseOr();
@@ -166,7 +166,7 @@ export function auditLicences(all, prod, allowed, exceptions) {
   return problems;
 }
 
-const OUTSIDE_URL = /^\s*(https?:)?\/\//i;
+const OUTSIDE_URL = /^\s*(?:https?:\/\/|\/\/)/i;
 const FONT_HOSTS = /fonts\.(googleapis|gstatic)\.com/gi;
 // CSS, and HTML or SVG with style blocks and style attributes: any url().
 const STYLE_URL = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
