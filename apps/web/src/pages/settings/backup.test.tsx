@@ -43,10 +43,7 @@ function answers(items: BackupItem[] | "error") {
       list.unshift(fresh);
       return { status: 201, body: fresh };
     }
-    if (
-      method === "POST" &&
-      path === "/api/v1/system/app-secret/acknowledge"
-    ) {
+    if (method === "POST" && path === "/api/v1/system/app-secret/acknowledge") {
       return { status: 204 };
     }
     return undefined;

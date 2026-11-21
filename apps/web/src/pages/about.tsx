@@ -60,8 +60,12 @@ function InstanceCard() {
       }
     >
       <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-        <Fact label="Version" mono>{info.version}</Fact>
-        <Fact label="Revision" mono>{info.revision}</Fact>
+        <Fact label="Version" mono>
+          {info.version}
+        </Fact>
+        <Fact label="Revision" mono>
+          {info.revision}
+        </Fact>
         <Fact label="Build date">{formatDateTime(info.buildDate)}</Fact>
         <Fact label="Feature baseline">
           {formatDateTime(info.featureBaseline)}

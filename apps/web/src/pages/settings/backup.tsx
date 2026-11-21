@@ -160,7 +160,8 @@ function ExportDialog({
       toast.push({
         kind: "success",
         title: "Export started",
-        description: "Keep the passphrase: the file cannot be opened without it.",
+        description:
+          "Keep the passphrase: the file cannot be opened without it.",
       });
     },
   });
@@ -228,8 +229,12 @@ function BackupRow({
   return (
     <tr>
       <Td mono>{formatDateTime(item.createdAt)}</Td>
-      <Td align="right" mono>{formatBytes(item.sizeBytes)}</Td>
-      <Td align="right" mono>{item.blobCount}</Td>
+      <Td align="right" mono>
+        {formatBytes(item.sizeBytes)}
+      </Td>
+      <Td align="right" mono>
+        {item.blobCount}
+      </Td>
       <Td mono>{item.appVersion ?? "—"}</Td>
       <Td>
         {item.integrity === "ok" ? (
