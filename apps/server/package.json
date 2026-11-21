@@ -2,19 +2,33 @@
   "name": "@dialwarden/server",
   "version": "27.0.0",
   "private": true,
-  "description": "Dialwarden server. P0: health stub, replaced by the server core in P1.",
+  "description": "Dialwarden server: API, authentication, entitlement, SQLite storage and the backup engine.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
+  "bin": {
+    "dialwarden": "dist/cli.js"
+  },
   "files": [
     "dist"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "openapi": "node dist/openapi.js"
   },
   "dependencies": {
     "@dialwarden/entitlement": "workspace:*",
-    "fastify": "^5.4.0"
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/swagger": "^9.5.1",
+    "argon2": "^0.43.1",
+    "better-sqlite3": "^12.2.0",
+    "croner": "^9.1.0",
+    "drizzle-orm": "^0.44.4",
+    "fastify": "^5.4.0",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }
