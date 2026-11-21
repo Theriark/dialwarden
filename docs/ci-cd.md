@@ -34,24 +34,45 @@ also have `dry_run=true`, which checks everything and writes nothing.
 
 ## Merge gate (CI)
 
-`STRICT` in `ci.yml` is `false` until phase P0 adds the application and `true`
-after. With `false`, a check whose input does not exist is skipped (never a pass)
-and a tripwire fails the run as soon as an application file exists.
+`STRICT` in `ci.yml` is `true` since phase P0 added the application: every job
+must run and succeed, and a skipped job fails the gate. (`false` was the setup
+mode before the application existed: a check without input was skipped, never
+passed, and a tripwire failed the run as soon as an application file existed.)
 
 | Job | Checks |
 | --- | --- |
 | detect | which inputs exist; STRICT value; tripwire |
-| 1 - lint, typecheck, unit tests and build | `pnpm install --frozen-lockfile`, then `pnpm run lint`, `typecheck`, `test`, `build` |
+| 1 - lint, typecheck, unit tests and build | `pnpm install --frozen-lockfile`, then `pnpm run lint` (eslint with security rules, no warnings; prettier), `typecheck`, `test` (vitest), `build` (ends with `check:assets`: no outside host in CSS `url()` or `@import`, no outside font host) |
 | 2 - dependency audit and licence audit | `pnpm audit --prod --audit-level moderate`, `pnpm run licence:audit` |
-| 3 - hygiene | LICENSE is FCL-1.0-MIT; no edition names; no private key block; gitleaks on the tree and on every commit of the range |
-| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH; image runs as non-root; `/healthz` answers 200 with the commit as `revision` |
+| 3 - hygiene | LICENSE is FCL-1.0-MIT; no edition names; no private key block; no OSS claim in README.md, LICENSING.md, docs/ or apps/web/src (the exact phrase "not open source" is the one allowed use); every `packs/*/fixtures` and `packages/formats/fixtures` folder has a SYNTHETIC.md that lists each file; gitleaks on the tree and on every commit of the range |
+| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH; image user 10001:10001 and process UID 10001; base image Node 24; no tools/ in the image; read-only root file system with /tmp as tmpfs; `/healthz` answers 200 with the commit as `revision`, the commit time as `buildDate`, the feature baseline as `featureBaseline` and the package version; `/readyz` answers 200 |
 | SBOM | syft SPDX SBOM of the image and grype scan (fails on a fixable high or critical) |
 | DCO | Signed-off-by on every commit (`.github/scripts/dco.sh`) |
 | Merge gate summary | the only required result; fails on any failure, and on any skip when STRICT is true |
 
-P0 provides the root scripts `lint`, `typecheck`, `test`, `build` and
-`licence:audit`, the `packageManager` field (pnpm through corepack) and
-`pnpm.onlyBuiltDependencies` (argon2, better-sqlite3), then sets STRICT to true.
+The root `package.json` provides the scripts `lint`, `typecheck`, `test`,
+`build`, `check:assets`, `notices` and `licence:audit`, the `packageManager`
+field (pnpm 10, exact version, through corepack) and
+`pnpm.onlyBuiltDependencies` (argon2, better-sqlite3).
+
+`pnpm-lock.yaml` is resolved by the lock job (`ci.yml` with `mode=lock`, run on
+the feature branch) and committed by it; nobody edits it by hand.
+
+## Workspace
+
+| Path | What it is |
+| --- | --- |
+| `apps/server` | Fastify server on port 8080. P0: health stub (`/healthz`, `/readyz`); P1 replaces it with the server core |
+| `apps/web` | Vite web app, built to `apps/web/dist`; P1-B builds the shell |
+| `packages/entitlement` | Licence key functionality (LICENSING.md): build information now, licence rule and feature registry from P1; `feature-line.json` |
+| `packages/formats` | Format engine (contract C2), with synthetic fixtures |
+| `packages/packs-schema` | Pack schema (contract C3) |
+| `packs/` | Game packs, one folder per game with `pack.json` |
+| `tools/licence`, `tools/seed`, `tools/notices` | Build and crew tools; never in the image |
+
+Workspace packages resolve to their TypeScript sources for typecheck and tests
+(export condition `source`) and to `dist/` at run time; `pnpm -r run build`
+builds them in dependency order.
 
 ## Image build and the licence build date
 
@@ -61,13 +82,29 @@ The image is built once, on the merge to development, by the job
 - `SOURCE_DATE_EPOCH` is the commit time of the built commit (`git log -1 --format=%ct`),
   passed as a build argument and with `rewrite-timestamp=true`, so layer and config
   timestamps come from the commit and the build is repeatable.
-- The Dockerfile (P0) turns the `SOURCE_DATE_EPOCH` build argument into the build
-  date the entitlement module reads. Paid is active when the licence signature is
-  valid, the licence is not revoked and this build date is on or before the licence
-  `updatesUntil` (rnd-report-1 3.3). Stage and Production run the same digest, so
-  the build date never changes on promotion.
+- The Dockerfile turns the build arguments `REVISION`, `SOURCE_DATE_EPOCH` and
+  `FEATURE_BASELINE_EPOCH` into `DIALWARDEN_REVISION`, `DIALWARDEN_BUILD_EPOCH`
+  and `DIALWARDEN_FEATURE_BASELINE_EPOCH`, which the entitlement module reads and
+  `/healthz` reports as `revision`, `buildDate` and `featureBaseline`. Paid is
+  active when the licence signature is valid, the licence is not revoked and the
+  build is covered by the licence `updatesUntil` (rnd-report-1 3.3, with the
+  CRA-safe baseline rule of P1). Stage and Production run the same digest, so
+  these values never change on promotion.
+- Feature baseline: `packages/entitlement/feature-line.json` names the feature
+  line (`27.0`). `.github/scripts/feature_baseline.sh` prints the commit time of
+  the tag `v<line>.0` (`v27.0.0`) when it exists, otherwise `SOURCE_DATE_EPOCH`.
+  CI passes it to every image build (docker-build, SBOM, Development). Promote -
+  Stage (`release_tags.sh next`, also in a dry run) refuses a candidate whose
+  major.minor differs from the feature line of the promoted commit, so a new
+  feature version starts with a change to `feature-line.json`.
 - Labels: `org.opencontainers.image.source`, `revision`, `created` (the commit time)
   and `licenses=LicenseRef-FCL-1.0-MIT`.
+- The image: `node:24-slim` pinned by digest (both stages, Dependabot keeps it
+  current); `pnpm deploy --prod` of `@dialwarden/server` only, so nothing from
+  `tools/` is in it; npm, corepack and yarn removed; `USER 10001:10001`;
+  `VOLUME /data`; `EXPOSE 8080`; `HEALTHCHECK` with node `fetch` on `/healthz`.
+  Application files belong to root, so the app writes only to `/data` and
+  `/tmp`. `LICENSE`, `LICENSING.md` and `THIRD_PARTY_NOTICES` are in `/app`.
 - Only the tag `sha-<commit>` is pushed. Promote - Stage adds `27.x.y-rc.N` and
   `stage`; Release adds `27.x.y` and `latest`. Every tag is a carbon copy of the
   same multi-arch index digest.
@@ -92,7 +129,8 @@ cosign verify ghcr.io/theriark/dialwarden-app:27.0.0 \
 - The development signing key is held by the setup broker. Development receives a
   development licence through the deploy-spec env kind `dev_licence`, signed by the
   broker at prepare time. Until the broker supports that kind, `deploy/dokploy.json`
-  does not list it (the broker refuses unknown kinds).
+  does not list it (the broker refuses unknown kinds); P1-C adds
+  `DIALWARDEN_LICENCE`.
 - CI generates throwaway Ed25519 test keys at run time for the licence unit tests.
   No private key block may be committed (hygiene check).
 
@@ -105,7 +143,9 @@ cosign verify ghcr.io/theriark/dialwarden-app:27.0.0 \
 | APP_SECRET_KEY | hex64, generated by the broker; encrypts stored secrets |
 | SESSION_SECRET | hex64, generated by the broker |
 | BASE_URL | `https://<host>` of the environment |
-| DEV_SEED_DEMO | `true` on Development only (the broker skips DEV_SEED names on Stage) |
+| DEMO_SEED | literal `true` on Development and Stage (renamed from DEV_SEED_DEMO in P0, so Stage has demo servers for the QA cards) |
+| TRUSTED_PROXIES | literal `172.31.1.0/24,172.17.0.1` (Dokploy network and the tunnel hop; never a wildcard) |
+| LOG_LEVEL | literal `info` |
 
 Domains: Development `app-dev-dialwarden.theriark.dev`, Stage
 `app-stg-dialwarden.theriark.dev`. Production stays empty until a release is

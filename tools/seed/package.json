@@ -1,0 +1,11 @@
+{
+  "name": "@dialwarden/tools-seed",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Seed accounts for Development and, after Gate 2, Stage (P1, P8). Never part of the image.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

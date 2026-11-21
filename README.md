@@ -28,7 +28,9 @@ Compose file and the documentation arrive with the application.
 
 Source available under the [Fair Core License, Version 1.0, MIT Future License](LICENSE)
 (FCL-1.0-MIT). Each version becomes MIT two years after its release. The licence
-forbids moving, changing, disabling or circumventing the licence key functionality.
+forbids moving, changing, disabling or circumventing the licence key functionality;
+[LICENSING.md](LICENSING.md) says which code that is. Third-party licences:
+[docs/licences.md](docs/licences.md).
 
 ## Development
 

@@ -1,0 +1,8 @@
+{
+  "name": "@dialwarden/packs",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Game packs (one folder per game with pack.json). The first packs arrive in P3.",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "type": "module"
+}

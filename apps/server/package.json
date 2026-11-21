@@ -1,0 +1,20 @@
+{
+  "name": "@dialwarden/server",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Dialwarden server. P0: health stub, replaced by the server core in P1.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@dialwarden/entitlement": "workspace:*",
+    "fastify": "^5.4.0"
+  }
+}

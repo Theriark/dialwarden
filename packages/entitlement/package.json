@@ -1,0 +1,24 @@
+{
+  "name": "@dialwarden/entitlement",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Licence key functionality of Dialwarden (see LICENSING.md). P0: build information only.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./feature-line.json": "./feature-line.json"
+  },
+  "files": [
+    "dist",
+    "feature-line.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@dialwarden/web",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Dialwarden web interface. P0: skeleton; the shell arrives in P1-B.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "vite": "^7.0.0"
+  }
+}
