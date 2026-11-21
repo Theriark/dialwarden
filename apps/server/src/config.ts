@@ -24,7 +24,7 @@ export interface AppConfig {
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
 const HEX64 = /^[0-9a-fA-F]{64}$/;
-const PROXY_ENTRY = /^[0-9a-fA-F.:]+(\/\d{1,3})?$/;
+const PROXY_ENTRY = /^[0-9a-fA-F.:]+(?:\/\d|\/\d\d|\/\d\d\d)?$/;
 const ZERO_PREFIX = /\/0+$/;
 
 const nonEmpty = (value: string | undefined): string | null => {

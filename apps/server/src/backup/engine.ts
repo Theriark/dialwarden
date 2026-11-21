@@ -33,7 +33,7 @@ import { DB_FILE, LOCK_FILE } from "../db/store.js";
 export const BACKUPS_DIR = "backups";
 export const SNAPSHOTS_DIR = "snapshots";
 export const MANIFEST_FILE = "manifest.json";
-export const BACKUP_ID = /^\d{8}-\d{4}(-\d{1,3})?$/;
+export const BACKUP_ID = /^\d{8}-\d{4}(?:-\d|-\d\d|-\d\d\d)?$/;
 export const RETENTION_DAYS = 3;
 export const RETENTION_MIN = 3;
 const SHA256 = /^[0-9a-f]{64}$/;

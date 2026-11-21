@@ -122,7 +122,7 @@ describe("backup", () => {
   it("takes a consistent copy with an integrity check and a full manifest", async () => {
     const { app, dataDir, owner } = await seeded();
     const id = await backupNow(app, owner);
-    expect(id).toMatch(/^\d{8}-\d{4}(-\d{1,3})?$/);
+    expect(id).toMatch(/^\d{8}-\d{4}(?:-\d|-\d\d|-\d\d\d)?$/);
     const dir = join(backupsDir(dataDir), id);
     const manifest = await readManifest(dir);
     expect(manifest).toMatchObject({

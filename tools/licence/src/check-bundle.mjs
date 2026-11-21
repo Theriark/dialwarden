@@ -22,7 +22,7 @@ const MAX_FILE_BYTES = 32 * 1024 * 1024;
 const RULES = [
   {
     name: "private key block",
-    pattern: /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----/,
+    pattern: /-----BEGIN (?:[A-Z0-9]+ PRIVATE|PRIVATE) KEY-----/,
   },
   {
     name: "test helper reference",

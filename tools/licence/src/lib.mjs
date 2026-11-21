@@ -22,7 +22,8 @@ const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 const ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const ISO_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d|\.\d\d|\.\d\d\d)?Z$/;
 
 export class LicenceToolError extends Error {
   constructor(message) {

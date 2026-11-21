@@ -97,7 +97,13 @@ export function loggerOptions(
   return {
     level,
     redact: { paths: REDACT_PATHS, censor: "[redacted]" },
-    serializers: { err: serializeError },
+    serializers: {
+      // Fastify's logger type wants a string stack on every serialized error.
+      err: (error: Error) => {
+        const out = serializeError(error);
+        return { ...out, stack: out.stack ?? "" };
+      },
+    },
     ...(stream === undefined ? {} : { stream }),
   };
 }
