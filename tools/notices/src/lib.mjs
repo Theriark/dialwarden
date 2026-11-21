@@ -168,17 +168,22 @@ export function auditLicences(all, prod, allowed, exceptions) {
 
 const OUTSIDE_URL = /^\s*(https?:)?\/\//i;
 const FONT_HOSTS = /fonts\.(googleapis|gstatic)\.com/gi;
+// CSS, and HTML or SVG with style blocks and style attributes: any url().
+const STYLE_URL = /url\(\s*(['"]?)([^'")]*)\1\s*\)/gi;
+// JavaScript with inlined CSS: only a lowercase url( that is not a call such as
+// new URL( or x.url(, so script code gives no false positives. Quotes inside a
+// JavaScript string may be escaped with a backslash.
+const SCRIPT_URL = /(?<![\w$.])url\(\s*\\?(['"]?)([^'"\\)]*)\\?\1\s*\)/g;
+const IMPORT = /@import\s+\\?(['"])([^'"\\]*)\\?\1/gi;
 
-/** Outside URLs in CSS url() and @import, and outside font hosts anywhere. */
-export function findOutsideAssets(text, isCss) {
+/**
+ * Outside URLs in CSS url() and @import, and outside font hosts anywhere. kind
+ * is "style" for .css, .html and .svg files, "script" for .js and .mjs files.
+ */
+export function findOutsideAssets(text, kind) {
   const found = [];
-  if (isCss) {
-    for (const match of text.matchAll(/url\(\s*(['"]?)([^'")]*)\1\s*\)/gi)) {
-      if (OUTSIDE_URL.test(match[2])) {
-        found.push(match[2]);
-      }
-    }
-    for (const match of text.matchAll(/@import\s+(['"])([^'"]*)\1/gi)) {
+  for (const pattern of [kind === "script" ? SCRIPT_URL : STYLE_URL, IMPORT]) {
+    for (const match of text.matchAll(pattern)) {
       if (OUTSIDE_URL.test(match[2])) {
         found.push(match[2]);
       }

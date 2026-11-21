@@ -109,15 +109,41 @@ describe("findOutsideAssets", () => {
       "b{background:url(data:image/png;base64,AAAA)}",
       'c{src:url("http://example.com/f.woff2")}',
     ].join("\n");
-    expect(findOutsideAssets(css, true)).toEqual([
+    expect(findOutsideAssets(css, "style")).toEqual([
       "https://fonts.googleapis.com/css2?family=Inter",
       "http://example.com/f.woff2",
       "//cdn.example.com/x.css",
       "fonts.googleapis.com",
     ]);
-    const html = '<link href="https://fonts.gstatic.com/s/inter.woff2">';
-    expect(findOutsideAssets(html, false)).toEqual(["fonts.gstatic.com"]);
-    expect(findOutsideAssets("url(https://example.com/a)", false)).toEqual([]);
+    const link = '<link href="https://fonts.gstatic.com/s/inter.woff2">';
+    expect(findOutsideAssets(link, "style")).toEqual(["fonts.gstatic.com"]);
+  });
+
+  it("finds url() in HTML style blocks and attributes", () => {
+    const html = [
+      "<style>body{background:url(https://cdn.example.com/bg.png)}</style>",
+      "<div style=\"background-image: url('//img.example.com/a.png')\"></div>",
+      '<img src="/assets/logo.svg">',
+    ].join("\n");
+    expect(findOutsideAssets(html, "style")).toEqual([
+      "https://cdn.example.com/bg.png",
+      "//img.example.com/a.png",
+    ]);
+  });
+
+  it("finds CSS inlined into JavaScript, not URL calls", () => {
+    const js = [
+      'const css = "a{background:url(https://cdn.example.com/a.png)}";',
+      'const api = new URL("https://store.steampowered.com/app/1");',
+      'const b = link.url("https://example.com/b");',
+      'const c = "@import \\"https://cdn.example.com/c.css\\";";',
+      'const d = "b{src:url(\\"//cdn.example.com/d.woff2\\")}";',
+    ].join("\n");
+    expect(findOutsideAssets(js, "script")).toEqual([
+      "https://cdn.example.com/a.png",
+      "//cdn.example.com/d.woff2",
+      "https://cdn.example.com/c.css",
+    ]);
   });
 });
 

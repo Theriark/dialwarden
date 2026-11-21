@@ -23,6 +23,11 @@ updates:
         update-types:
           - minor
           - patch
+    # Node types follow the Node 24 line (engines, base image): no major updates.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
   # The node:24-slim base image digest in both FROM lines of the Dockerfile.
   - package-ecosystem: docker
     directory: /
@@ -35,3 +40,8 @@ updates:
         update-types:
           - minor
           - patch
+    # The base stays on Node 24 (engines, CI smoke assertion): no node 25 and up.
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major

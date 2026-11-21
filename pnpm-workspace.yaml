@@ -3,3 +3,7 @@ packages:
   - packages/*
   - tools/*
   - packs
+# pnpm deploy (Dockerfile) builds the image's lock file from pnpm-lock.yaml only
+# when workspace packages are injected. Packages without peer dependencies stay
+# symlinked in the workspace (dedupeInjectedDeps, on by default).
+injectWorkspacePackages: true

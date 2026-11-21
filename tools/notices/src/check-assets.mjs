@@ -1,6 +1,8 @@
 // pnpm run check:assets (after the web build): fails when the built web app
-// references an outside host in CSS url() or @import, or an outside font host
-// anywhere. Fonts are self-hosted (CSP font-src 'self', brand rules).
+// references an outside host in a CSS url() or @import (in CSS files, in style
+// blocks and attributes of HTML and SVG, and in CSS inlined into JavaScript), or
+// an outside font host anywhere. Fonts are self-hosted (CSP font-src 'self',
+// brand rules).
 import { readdirSync, readFileSync } from "node:fs";
 import { extname, join, relative } from "node:path";
 import { findOutsideAssets } from "./lib.mjs";
@@ -29,7 +31,8 @@ let problems = 0;
 for (const file of all.filter((f) => CHECKED.has(extname(f)))) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- listed above
   const text = readFileSync(file, "utf8");
-  for (const url of findOutsideAssets(text, extname(file) === ".css")) {
+  const kind = [".js", ".mjs"].includes(extname(file)) ? "script" : "style";
+  for (const url of findOutsideAssets(text, kind)) {
     console.error(`::error::${relative(".", file)} references outside ${url}`);
     problems += 1;
   }
