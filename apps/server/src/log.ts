@@ -93,7 +93,7 @@ export function serializeError(error: unknown, depth = 0): SerializedError {
 export function loggerOptions(
   level: string,
   stream?: NodeJS.WritableStream,
-): FastifyServerOptions["logger"] {
+): NonNullable<FastifyServerOptions["logger"]> {
   return {
     level,
     redact: { paths: REDACT_PATHS, censor: "[redacted]" },
