@@ -46,9 +46,9 @@ env:
   SIGNER: https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development
   OIDC_ISSUER: https://token.actions.githubusercontent.com
   # Registered for this product by the setup broker (github_repo_status).
-  DEV_APPLICATION_ID: ""
+  DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
   DEV_HOST: app-dev-dialwarden.theriark.dev
-  STAGE_APPLICATION_ID: ""
+  STAGE_APPLICATION_ID: "-cMPJhRMwT7vxF8fl_sxV"
   STAGE_HOST: app-stg-dialwarden.theriark.dev
 
 jobs:

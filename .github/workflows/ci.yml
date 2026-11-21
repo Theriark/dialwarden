@@ -549,7 +549,7 @@ jobs:
       IMAGE: ghcr.io/theriark/dialwarden-app
       SOURCE_SHA: ${{ github.sha }}
       # Registered for this product by the setup broker (github_repo_status).
-      DEV_APPLICATION_ID: ""
+      DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
       DEV_HOST: app-dev-dialwarden.theriark.dev
     steps:
       - name: Require the registered Development application
