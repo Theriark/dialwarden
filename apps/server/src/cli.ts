@@ -7,7 +7,6 @@
 // consistently. It never runs migrations.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { readBuildInfo } from "@dialwarden/entitlement";
 import Database from "better-sqlite3";
 import {
   pruneBackups,
@@ -15,6 +14,7 @@ import {
   runBackup,
   verifyBackup,
 } from "./backup/engine.js";
+import { loadBuildInfo } from "./build-info.js";
 import { loadConfig } from "./config.js";
 import { DB_FILE } from "./db/store.js";
 import { VERSION } from "./version.js";
@@ -64,7 +64,7 @@ async function backup(): Promise<number> {
       sqlite,
       dataDir: config.dataDir,
       appVersion: VERSION,
-      revision: readBuildInfo(process.env).revision,
+      revision: loadBuildInfo(process.env).revision,
       now: new Date(),
     });
     const pruned = await pruneBackups(config.dataDir, new Date());

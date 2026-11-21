@@ -12,6 +12,9 @@ import {
 } from "node:crypto";
 
 const VERSION = "dwenc1";
+const IV_LENGTH = 12;
+const TAG_LENGTH = 16;
+const KEY_ID = /^[0-9a-f]{8}$/;
 
 export class KeyMismatchError extends Error {
   constructor(readonly expected: string, readonly found: string) {
@@ -45,20 +48,24 @@ export function createAead(key: Buffer): Aead {
     if (parts.length !== 5 || parts[0] !== VERSION) {
       throw new Error("not an encrypted value");
     }
-    const [, found = "", iv = "", data = "", tag = ""] = parts;
-    if (
-      found.length !== kid.length ||
-      !timingSafeEqual(Buffer.from(found), Buffer.from(kid))
-    ) {
+    const [, found = "", ivText = "", data = "", tagText = ""] = parts;
+    if (!KEY_ID.test(found)) {
+      throw new Error("not an encrypted value");
+    }
+    if (!timingSafeEqual(Buffer.from(found), Buffer.from(kid))) {
       throw new KeyMismatchError(kid, found);
     }
-    const decipher = createDecipheriv(
-      "aes-256-gcm",
-      key,
-      Buffer.from(iv, "base64url"),
-    );
+    // Fixed lengths: a short GCM tag would make a forgery far cheaper.
+    const iv = Buffer.from(ivText, "base64url");
+    const tag = Buffer.from(tagText, "base64url");
+    if (iv.length !== IV_LENGTH || tag.length !== TAG_LENGTH) {
+      throw new Error("not an encrypted value");
+    }
+    const decipher = createDecipheriv("aes-256-gcm", key, iv, {
+      authTagLength: TAG_LENGTH,
+    });
     decipher.setAAD(Buffer.from(context, "utf8"));
-    decipher.setAuthTag(Buffer.from(tag, "base64url"));
+    decipher.setAuthTag(tag);
     return Buffer.concat([
       decipher.update(Buffer.from(data, "base64url")),
       decipher.final(),
@@ -67,8 +74,10 @@ export function createAead(key: Buffer): Aead {
   return {
     kid,
     encrypt(plaintext, context) {
-      const iv = randomBytes(12);
-      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      const iv = randomBytes(IV_LENGTH);
+      const cipher = createCipheriv("aes-256-gcm", key, iv, {
+        authTagLength: TAG_LENGTH,
+      });
       cipher.setAAD(Buffer.from(context, "utf8"));
       const data = Buffer.concat([cipher.update(plaintext), cipher.final()]);
       return [
@@ -105,4 +114,5 @@ export const ENCRYPTED_COLUMNS = [
   { table: "licence", column: "token_enc", context: "licence.token" },
   { table: "users", column: "totp_secret_enc", context: "users.totp_secret" },
   { table: "users", column: "totp_pending_enc", context: "users.totp_pending" },
+  { table: "users", column: "recovery_key_enc", context: "users.recovery_key" },
 ] as const;

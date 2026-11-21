@@ -72,6 +72,18 @@ CREATE INDEX activity_events_type ON activity_events (type, id);
 CREATE INDEX activity_events_server ON activity_events (server_id, id);
 `;
 
+// Recovery codes are hashed with a random key per user, kept encrypted with
+// APP_SECRET_KEY (column users.recovery_key_enc). The first-run import
+// re-encrypts it with the other columns, so the codes keep working after an
+// import from an instance with another key.
+const recoveryKey = `
+ALTER TABLE users ADD COLUMN recovery_key_enc TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
+  { id: "0002_recovery_key", sql: recoveryKey },
 ];
+
+/** The id of the newest migration this build knows. */
+export const LATEST_MIGRATION = MIGRATIONS.at(-1)?.id ?? null;

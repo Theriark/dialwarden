@@ -2,13 +2,7 @@
 // limit and the optional TOTP step, password change, profile, and TOTP enrol,
 // enable and disable with 10 recovery codes. P1 has one role, owner; P8 adds
 // admin, editor and viewer.
-import {
-  createHash,
-  createHmac,
-  hkdfSync,
-  randomBytes,
-  randomUUID,
-} from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { and, count, eq, isNull, lt, or } from "drizzle-orm";
 import type { ActivityService } from "../activity/service.js";
 import { ApiError } from "../http/errors.js";
@@ -27,6 +21,7 @@ import {
 
 export const TOTP_SECRET_CONTEXT = "users.totp_secret";
 export const TOTP_PENDING_CONTEXT = "users.totp_pending";
+export const RECOVERY_KEY_CONTEXT = "users.recovery_key";
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 export const CHALLENGE_MAX_ATTEMPTS = 5;
 const MAX_CHALLENGES = 1000;
@@ -64,7 +59,6 @@ interface Challenge {
 export interface AuthServiceOptions {
   store: Store;
   aead: Aead;
-  appKey: Buffer;
   activity: ActivityService;
   now?: () => Date;
   limiter?: LoginLimiter;
@@ -78,7 +72,6 @@ export class AuthService {
   readonly #activity: ActivityService;
   readonly #now: () => Date;
   readonly #limiter: LoginLimiter;
-  readonly #recoveryKey: Buffer;
   readonly #challenges = new Map<string, Challenge>();
 
   constructor(options: AuthServiceOptions) {
@@ -88,19 +81,15 @@ export class AuthService {
     this.#now = options.now ?? (() => new Date());
     this.#limiter =
       options.limiter ?? new LoginLimiter(() => this.#now().getTime());
-    this.#recoveryKey = Buffer.from(
-      hkdfSync(
-        "sha256",
-        options.appKey,
-        Buffer.alloc(0),
-        "dialwarden-recovery-codes",
-        32,
-      ),
-    );
   }
 
-  #recoveryHash(code: string): string {
-    return createHmac("sha256", this.#recoveryKey)
+  /**
+   * Recovery codes are an HMAC with a random key per user. The key is stored
+   * encrypted with APP_SECRET_KEY (users.recovery_key_enc), so the first-run
+   * import re-encrypts it and the codes survive a move to another key.
+   */
+  #recoveryHash(key: Buffer, code: string): string {
+    return createHmac("sha256", key)
       .update(normaliseRecoveryCode(code))
       .digest("hex");
   }
@@ -148,6 +137,7 @@ export class AuthService {
       totpLastStep: null,
       createdAt: now,
       updatedAt: now,
+      recoveryKeyEnc: null,
     };
     // The check and the insert run in one transaction: two concurrent setup
     // requests cannot both create an owner.
@@ -174,7 +164,9 @@ export class AuthService {
     address: string,
   ): Promise<LoginResult> {
     const email = emailInput.trim().toLowerCase();
-    const wait = this.#limiter.retryAfterSeconds(address, email);
+    // The attempt counts as a failure before the (awaited) hash check, so
+    // concurrent requests cannot all pass the limit; a success hands it back.
+    const wait = this.#limiter.reserve(address, email);
     if (wait > 0) {
       throw new ApiError(429, "rate_limited", { retryAfter: wait });
     }
@@ -188,13 +180,14 @@ export class AuthService {
         ? await verifyAgainstDummy(passwordInput)
         : await verifyPassword(row.passwordHash, passwordInput);
     if (!ok || row === undefined) {
-      this.#limiter.fail(address, email);
       throw invalidCredentials();
     }
     if (row.totpSecretEnc === null) {
-      this.#limiter.succeed(email);
+      this.#limiter.succeed(address, email);
       return { status: "ok", user: publicUser(row) };
     }
+    // The password was right; the second step decides the rest.
+    this.#limiter.release(address, email);
     return { status: "totp_required", challenge: this.#newChallenge(row.id) };
   }
 
@@ -235,17 +228,16 @@ export class AuthService {
       throw new ApiError(401, "challenge_expired");
     }
     const row = this.#user(challenge.userId);
-    const wait = this.#limiter.retryAfterSeconds(address, row.email);
+    const wait = this.#limiter.reserve(address, row.email);
     if (wait > 0) {
       throw new ApiError(429, "rate_limited", { retryAfter: wait });
     }
     challenge.attempts += 1;
     if (this.#checkSecondFactor(row, answer)) {
       this.#challenges.delete(key);
-      this.#limiter.succeed(row.email);
+      this.#limiter.succeed(address, row.email);
       return publicUser(this.#user(row.id));
     }
-    this.#limiter.fail(address, row.email);
     if (challenge.attempts >= CHALLENGE_MAX_ATTEMPTS) {
       this.#challenges.delete(key);
     }
@@ -279,8 +271,9 @@ export class AuthService {
         .run();
       return result.changes === 1;
     }
-    if (answer.recoveryCode !== undefined) {
-      const codeHash = this.#recoveryHash(answer.recoveryCode);
+    if (answer.recoveryCode !== undefined && row.recoveryKeyEnc !== null) {
+      const key = this.#aead.decrypt(row.recoveryKeyEnc, RECOVERY_KEY_CONTEXT);
+      const codeHash = this.#recoveryHash(key, answer.recoveryCode);
       const usedAt = this.#now().toISOString();
       const result = this.#store.db
         .update(recoveryCodes)
@@ -314,6 +307,12 @@ export class AuthService {
       .set({ passwordHash, updatedAt })
       .where(eq(users.id, userId))
       .run();
+    // A second-factor step started with the old password ends here too.
+    for (const [key, challenge] of this.#challenges) {
+      if (challenge.userId === userId) {
+        this.#challenges.delete(key);
+      }
+    }
     this.#activity.record("user.changed", {
       actor: row.email,
       data: { action: "password_changed", userId },
@@ -368,6 +367,11 @@ export class AuthService {
     }
     const codes = newRecoveryCodes();
     const totpSecretEnc = this.#aead.encrypt(secret, TOTP_SECRET_CONTEXT);
+    const recoveryKey = randomBytes(32);
+    const recoveryKeyEnc = this.#aead.encrypt(
+      recoveryKey,
+      RECOVERY_KEY_CONTEXT,
+    );
     const updatedAt = this.#now().toISOString();
     this.#store.sqlite.transaction(() => {
       this.#store.db
@@ -376,6 +380,7 @@ export class AuthService {
           totpSecretEnc,
           totpPendingEnc: null,
           totpLastStep: step,
+          recoveryKeyEnc,
           updatedAt,
         })
         .where(eq(users.id, userId))
@@ -385,7 +390,7 @@ export class AuthService {
         .where(eq(recoveryCodes.userId, userId))
         .run();
       for (const recovery of codes) {
-        const codeHash = this.#recoveryHash(recovery);
+        const codeHash = this.#recoveryHash(recoveryKey, recovery);
         this.#store.db
           .insert(recoveryCodes)
           .values({ userId, codeHash, usedAt: null })
@@ -423,6 +428,7 @@ export class AuthService {
           totpSecretEnc: null,
           totpPendingEnc: null,
           totpLastStep: null,
+          recoveryKeyEnc: null,
           updatedAt,
         })
         .where(eq(users.id, userId))

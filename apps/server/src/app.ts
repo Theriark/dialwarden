@@ -9,7 +9,6 @@ import fastifySwagger from "@fastify/swagger";
 import {
   EntitlementGate,
   loadKeyRing,
-  readBuildInfo,
   REVOKED_LID_HASHES,
   ruleDates,
   type KeyRing,
@@ -19,6 +18,7 @@ import { ActivityService } from "./activity/service.js";
 import { AuthService } from "./auth/service.js";
 import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
+import { loadBuildInfo } from "./build-info.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { createAead } from "./crypto/aead.js";
 import { loadAppKey } from "./crypto/app-key.js";
@@ -58,6 +58,8 @@ export interface BuildOptions {
   logStream?: NodeJS.WritableStream;
   /** Registers more routes before the app is ready (tests, later modules). */
   extend?: (app: FastifyInstance) => void;
+  /** The build information file read in production (tests pass their own). */
+  buildInfoFile?: string;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -80,7 +82,7 @@ export async function buildApp(
   const env = options.env ?? process.env;
   const config: AppConfig = { ...loadConfig(env), ...options.config };
   const now = options.now ?? (() => new Date());
-  const build = readBuildInfo(env);
+  const build = loadBuildInfo(env, options.buildInfoFile);
   const startedAt = now();
 
   const app = fastify({
@@ -146,7 +148,7 @@ export async function buildApp(
     entitlement,
     editable,
     sessions: new SessionService(store, now),
-    auth: new AuthService({ store, aead, appKey: appKey.key, activity, now }),
+    auth: new AuthService({ store, aead, activity, now }),
     backups: new BackupService({
       store,
       activity,
@@ -158,6 +160,7 @@ export async function buildApp(
       now,
     }),
     maintenance: false,
+    importing: false,
     routes: [],
   };
   app.decorate("ctx", ctx);

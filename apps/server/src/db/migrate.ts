@@ -1,6 +1,7 @@
-// The migration runner (dev-work-plan P1-A step 2). Before it applies anything
-// to a database that already has data, it takes a consistent copy (the SQLite
-// backup API) into DATA_DIR/backups/pre-migration/ and keeps the last 3.
+// The migration runner (dev-work-plan P1-A step 2). On a database that already
+// had migrations, it takes a consistent copy (the SQLite backup API) before
+// each migration into DATA_DIR/backups/pre-migration/ and keeps the last 3, so
+// a failure in a later migration still has a copy of the state before it.
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -12,6 +13,7 @@ export const PRE_MIGRATION_KEEP = 3;
 
 export interface MigrationResult {
   applied: string[];
+  /** The last pre-migration copy taken by this run, or null. */
   preMigrationCopy: string | null;
   latest: string | null;
 }
@@ -89,15 +91,17 @@ export async function migrate(
   }
   const done = new Set(applied.map((row) => row.id));
   const pending = migrations.filter((migration) => !done.has(migration.id));
-  const first = pending[0];
+  // A fresh database has nothing to keep; one with data gets a copy before
+  // every migration.
+  const hasData = applied.length > 0;
   let copy: string | null = null;
-  if (first !== undefined && applied.length > 0) {
-    copy = await preMigrationCopy(sqlite, options, first.id);
-  }
   const record = sqlite.prepare(
     "INSERT INTO schema_migrations (id, checksum, applied_at) VALUES (?, ?, ?)",
   );
   for (const migration of pending) {
+    if (hasData) {
+      copy = await preMigrationCopy(sqlite, options, migration.id);
+    }
     const appliedAt = options.now().toISOString();
     sqlite.transaction(() => {
       sqlite.exec(migration.sql);
