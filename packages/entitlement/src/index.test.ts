@@ -87,7 +87,10 @@ describe("EntitlementGate", () => {
 
   it("answers can and limit from the current entitlement", () => {
     let paid = false;
-    const gate = new EntitlementGate(() => entitlement(paid), () => []);
+    const gate = new EntitlementGate(
+      () => entitlement(paid),
+      () => [],
+    );
     expect(gate.can("schedules")).toBe(false);
     expect(gate.limit("servers")).toBe(3);
     paid = true;
@@ -98,7 +101,10 @@ describe("EntitlementGate", () => {
 
   it("on Free only the chosen three servers are editable", () => {
     const chosen = ["a", "b", "c", "d"];
-    const gate = new EntitlementGate(() => entitlement(false), () => chosen);
+    const gate = new EntitlementGate(
+      () => entitlement(false),
+      () => chosen,
+    );
     expect(gate.isServerEditable("a")).toBe(true);
     expect(gate.isServerEditable("c")).toBe(true);
     expect(gate.isServerEditable("d")).toBe(false);
@@ -106,7 +112,10 @@ describe("EntitlementGate", () => {
   });
 
   it("on Paid every server is editable", () => {
-    const gate = new EntitlementGate(() => entitlement(true), () => []);
+    const gate = new EntitlementGate(
+      () => entitlement(true),
+      () => [],
+    );
     expect(gate.isServerEditable("z")).toBe(true);
   });
 });
