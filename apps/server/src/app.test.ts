@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
   BUILD_ENV,
+  discard,
   headersOf,
   setupOwner,
   testApp,
@@ -137,6 +138,7 @@ describe("APP_SECRET_KEY", () => {
       const second = await buildApp({
         keys: testKeyRing,
         env: { LOG_LEVEL: "silent", DATA_DIR: first.dataDir, ...BUILD_ENV },
+        out: discard(),
       });
       try {
         expect(second.ctx.aead.kid).toBe(kid);
