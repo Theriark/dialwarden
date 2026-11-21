@@ -208,7 +208,10 @@ jobs:
             while IFS= read -r -d '' file; do
               name="${file#"${dir}/"}"
               [[ "${name}" == "SYNTHETIC.md" ]] && continue
-              grep -qF -- "${name}" "${dir}/SYNTHETIC.md" || {
+              # A whole entry only (bounded by line start or end, a pipe, a space
+              # or a backtick), so r.ini is not taken as listed by server.ini.
+              escaped="$(printf '%s' "${name}" | sed -e 's/[][\.*^$+?(){}|]/\\&/g')"
+              grep -qE -- '(^|[|[:space:]`])'"${escaped}"'($|[|[:space:]`])' "${dir}/SYNTHETIC.md" || {
                 echo "::error file=${file}::${name} is not listed in ${dir}/SYNTHETIC.md"
                 status=1
               }
@@ -317,7 +320,15 @@ jobs:
             if (fs.existsSync("/app/tools") || !fs.existsSync("/app/THIRD_PARTY_NOTICES")) process.exit(1);
             if (fs.readdirSync("/app/node_modules/@dialwarden").some((n) => n.startsWith("tools-"))) process.exit(1);
           ' || { echo "::error::tools/ is in the image or THIRD_PARTY_NOTICES is missing"; exit 1; }
-          # Read-only root file system: the app may write only to /data and /tmp.
+          # Both volume folders of deploy/dokploy.json belong to UID 10001, mode 0750.
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            for (const dir of ["/data", "/demo-servers"]) {
+              const s = fs.statSync(dir);
+              if (s.uid !== 10001 || (s.mode & 0o777) !== 0o750) process.exit(1);
+            }
+          ' || { echo "::error::/data or /demo-servers is not owned by 10001 with mode 0750"; exit 1; }
+          # Read-only root file system: the app may write only to the volumes and /tmp.
           # Throwaway values generated for this run only; nothing is reused.
           docker run -d --name smoke -p 8080:8080 --read-only --tmpfs /tmp \
             -e APP_SECRET_KEY="$(openssl rand -hex 32)" \

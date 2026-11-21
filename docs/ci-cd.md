@@ -42,10 +42,10 @@ passed, and a tripwire failed the run as soon as an application file existed.)
 | Job | Checks |
 | --- | --- |
 | detect | which inputs exist; STRICT value; tripwire |
-| 1 - lint, typecheck, unit tests and build | `pnpm install --frozen-lockfile`, then `pnpm run lint` (eslint with security rules, no warnings; prettier), `typecheck`, `test` (vitest), `build` (ends with `check:assets`: no outside host in CSS `url()` or `@import`, no outside font host) |
+| 1 - lint, typecheck, unit tests and build | `pnpm install --frozen-lockfile`, then `pnpm run lint` (eslint with security rules, no warnings; prettier), `typecheck`, `test` (vitest), `build` (ends with `check:assets`: no outside host in a CSS `url()` or `@import` of CSS files, HTML and SVG style, or CSS inlined into JavaScript; no outside font host) |
 | 2 - dependency audit and licence audit | `pnpm audit --prod --audit-level moderate`, `pnpm run licence:audit` |
-| 3 - hygiene | LICENSE is FCL-1.0-MIT; no edition names; no private key block; no OSS claim in README.md, LICENSING.md, docs/ or apps/web/src (the exact phrase "not open source" is the one allowed use); every `packs/*/fixtures` and `packages/formats/fixtures` folder has a SYNTHETIC.md that lists each file; gitleaks on the tree and on every commit of the range |
-| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH; image user 10001:10001 and process UID 10001; base image Node 24; no tools/ in the image; read-only root file system with /tmp as tmpfs; `/healthz` answers 200 with the commit as `revision`, the commit time as `buildDate`, the feature baseline as `featureBaseline` and the package version; `/readyz` answers 200 |
+| 3 - hygiene | LICENSE is FCL-1.0-MIT; no edition names; no private key block; no OSS claim in README.md, LICENSING.md, docs/ or apps/web/src (the exact phrase "not open source" is the one allowed use); every `packs/*/fixtures` and `packages/formats/fixtures` folder has a SYNTHETIC.md that lists each file as a whole entry; gitleaks on the tree and on every commit of the range |
+| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH; image user 10001:10001 and process UID 10001; base image Node 24; no tools/ in the image; `/data` and `/demo-servers` owned by 10001, mode 0750; read-only root file system with /tmp as tmpfs; `/healthz` answers 200 with the commit as `revision`, the commit time as `buildDate`, the feature baseline as `featureBaseline` and the package version; `/readyz` answers 200 |
 | SBOM | syft SPDX SBOM of the image and grype scan (fails on a fixable high or critical) |
 | DCO | Signed-off-by on every commit (`.github/scripts/dco.sh`) |
 | Merge gate summary | the only required result; fails on any failure, and on any skip when STRICT is true |
@@ -101,10 +101,14 @@ The image is built once, on the merge to development, by the job
   and `licenses=LicenseRef-FCL-1.0-MIT`.
 - The image: `node:24-slim` pinned by digest (both stages, Dependabot keeps it
   current); `pnpm deploy --prod` of `@dialwarden/server` only, so nothing from
-  `tools/` is in it; npm, corepack and yarn removed; `USER 10001:10001`;
-  `VOLUME /data`; `EXPOSE 8080`; `HEALTHCHECK` with node `fetch` on `/healthz`.
-  Application files belong to root, so the app writes only to `/data` and
-  `/tmp`. `LICENSE`, `LICENSING.md` and `THIRD_PARTY_NOTICES` are in `/app`.
+  `tools/` is in it. The deploy derives its lock file from `pnpm-lock.yaml`
+  (`injectWorkspacePackages: true`) and installs it frozen, so the image holds
+  exactly the production versions CI tested and audited; the build fails if pnpm
+  falls back to a fresh resolution. npm, corepack and yarn removed;
+  `USER 10001:10001`; `VOLUME /data /demo-servers` (both owned by 10001, mode
+  0750); `EXPOSE 8080`; `HEALTHCHECK` with node `fetch` on `/healthz`.
+  Application files belong to root, so the app writes only to the two volumes
+  and `/tmp`. `LICENSE`, `LICENSING.md` and `THIRD_PARTY_NOTICES` are in `/app`.
 - Only the tag `sha-<commit>` is pushed. Promote - Stage adds `27.x.y-rc.N` and
   `stage`; Release adds `27.x.y` and `latest`. Every tag is a carbon copy of the
   same multi-arch index digest.
