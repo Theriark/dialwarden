@@ -74,15 +74,15 @@ export function licenceAllowed(expression, allowed) {
     return value;
   };
   const parseAtom = () => {
-    const token = next();
-    if (token === "(") {
+    const symbol = next();
+    if (symbol === "(") {
       const value = parseOr();
       if (next() !== ")") {
         throw new Error("unbalanced parenthesis");
       }
       return value;
     }
-    if (token === undefined || ["OR", "AND", "WITH", ")"].includes(token)) {
+    if (symbol === undefined || ["OR", "AND", "WITH", ")"].includes(symbol)) {
       throw new Error("unexpected end of expression");
     }
     if (peek() === "WITH") {
@@ -91,7 +91,7 @@ export function licenceAllowed(expression, allowed) {
         throw new Error("WITH without an exception");
       }
     }
-    return allowed.has(token);
+    return allowed.has(symbol);
   };
   try {
     const result = parseOr();

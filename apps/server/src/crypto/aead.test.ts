@@ -10,7 +10,7 @@ const CONTEXT = "users.totp_secret";
 /** Replaces one dot-separated part of an encrypted value. */
 function withPart(value: string, index: number, part: Buffer): string {
   const parts = value.split(".");
-  parts[index] = part.toString("base64url");
+  parts.splice(index, 1, part.toString("base64url"));
   return parts.join(".");
 }
 

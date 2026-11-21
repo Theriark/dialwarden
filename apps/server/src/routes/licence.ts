@@ -51,7 +51,10 @@ export function licenceRoutes(app: FastifyInstance): void {
     async (request) => {
       const actor = actorOf(request.session);
       const result = app.ctx.licences.setUiLicence(request.body.token, actor);
-      if (result.state === "malformed" || result.state === "invalid_signature") {
+      if (
+        result.state === "malformed" ||
+        result.state === "invalid_signature"
+      ) {
         throw new ApiError(422, "invalid_licence", {
           reason: result.reason ?? result.state,
         });

@@ -164,7 +164,10 @@ export function systemRoutes(app: FastifyInstance): void {
       );
       const name = `dialwarden-${id}.dwbx`;
       void reply.header("content-type", "application/octet-stream");
-      void reply.header("content-disposition", `attachment; filename="${name}"`);
+      void reply.header(
+        "content-disposition",
+        `attachment; filename="${name}"`,
+      );
       void reply.header("cache-control", "no-store");
       return reply.send(Readable.from(stream));
     },

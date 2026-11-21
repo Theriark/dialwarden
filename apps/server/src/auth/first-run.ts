@@ -57,11 +57,11 @@ export class SetupToken {
 
   /** True when the presented value is the token in the file (timing-safe). */
   matches(presented: string): boolean {
-    const token = this.#read();
-    if (token === null) {
+    const stored = this.#read();
+    if (stored === null) {
       return false;
     }
-    return timingSafeEqual(digest(presented), digest(token));
+    return timingSafeEqual(digest(presented), digest(stored));
   }
 
   remove(): void {

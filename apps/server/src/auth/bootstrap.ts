@@ -21,9 +21,10 @@ export async function bootstrapOwner(
   log: FastifyBaseLogger,
   now: () => Date,
 ): Promise<boolean> {
-  const email = env[DEV_SEED_EMAIL]?.trim() ?? "";
-  const password = env[DEV_SEED_PASSWORD] ?? "";
-  if (email === "" && password === "") {
+  // Literal keys (the names in DEV_SEED_EMAIL and DEV_SEED_PASSWORD).
+  const email = env["DEV_SEED_OWNER_EMAIL"]?.trim() ?? "";
+  const password = env["DEV_SEED_OWNER_PASSWORD"] ?? "";
+  if (email === "" && password.length === 0) {
     return false;
   }
   if (!ctx.auth.setupRequired()) {

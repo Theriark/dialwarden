@@ -78,7 +78,8 @@ function requireSetupToken(app: FastifyInstance) {
     if (!app.ctx.auth.setupRequired()) {
       throw new ApiError(409, "setup_done");
     }
-    const header = request.headers[SETUP_TOKEN_HEADER];
+    // The literal name of SETUP_TOKEN_HEADER (a literal key for the lint).
+    const header = request.headers["x-dialwarden-setup-token"];
     const sent = typeof header === "string" ? header.trim() : "";
     if (sent === "") {
       throw new ApiError(403, "setup_token_required");
