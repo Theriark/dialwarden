@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 import { setCsrf } from "../api/client";
 import { keys } from "../api/queries";
-import type { SignedIn } from "../api/schema";
 import { setPendingChallenge } from "../api/session";
 import { createQueryClient } from "../app";
 import { ToastProvider } from "../components/ui/toast";
