@@ -21,11 +21,7 @@ import { Card } from "../../components/ui/card";
 import { CodeBlock, CopyButton } from "../../components/ui/code-block";
 import { ConfirmDialog, Dialog } from "../../components/ui/dialog";
 import { PasswordField, TextField } from "../../components/ui/field";
-import {
-  CardSkeleton,
-  ErrorState,
-  Skeleton,
-} from "../../components/ui/states";
+import { CardSkeleton, ErrorState, Skeleton } from "../../components/ui/states";
 import { useToast } from "../../components/ui/toast";
 
 const MIN_PASSWORD = 12;
@@ -403,11 +399,7 @@ function EnrolDialog({
         </Button>
       }
     >
-      <CodeBlock
-        value={codes.join("\n")}
-        label="Recovery codes"
-        copy={false}
-      />
+      <CodeBlock value={codes.join("\n")} label="Recovery codes" copy={false} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <CopyButton value={codes.join("\n")} label="Copy all codes" />
         <label className="flex items-center gap-2 text-sm">
@@ -505,9 +497,13 @@ function TwoFactorCard({ user }: { user: User }) {
   const onIcon = <ShieldCheck className="size-3.5" aria-hidden="true" />;
   const offIcon = <ShieldOff className="size-3.5" aria-hidden="true" />;
   const badge = user.totpEnabled ? (
-    <Badge kind="success" icon={onIcon}>On</Badge>
+    <Badge kind="success" icon={onIcon}>
+      On
+    </Badge>
   ) : (
-    <Badge kind="neutral" icon={offIcon}>Off</Badge>
+    <Badge kind="neutral" icon={offIcon}>
+      Off
+    </Badge>
   );
   return (
     <Card
