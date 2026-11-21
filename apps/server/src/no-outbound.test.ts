@@ -1,39 +1,83 @@
 // No-outbound test (legal-input-1 5.5, dev-work-plan P1-A step 11). With its
 // default settings the app opens no network connection of its own. Every way
-// out (TCP and TLS sockets, DNS, UDP and fetch) is trapped while the app
-// starts, listens, serves the first-run and signed-in API, runs the backup
-// schedule, takes a backup and stops. Any attempt fails the test.
+// out (TCP and TLS sockets, every DNS function and resolver, UDP and fetch) is
+// trapped before the app's modules load, then the app starts, listens, serves
+// the first-run and signed-in API, runs its scheduled backup job, takes a
+// backup and stops. Any attempt fails the test.
+//
+// Looking up an IP literal stays allowed: Node answers it without the network,
+// and net.Server.listen goes through dns.lookup even for 127.0.0.1.
 import dgram from "node:dgram";
 import dns from "node:dns";
 import net from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { headersOf, setupOwner, testApp } from "../test/helpers.js";
+
+type Helpers = typeof import("../test/helpers.js");
 
 const attempts: string[] = [];
+let helpers: Helpers;
 
 function trap(name: string): never {
   attempts.push(name);
   throw new Error(`outbound network access blocked: ${name}`);
 }
 
-beforeAll(() => {
+/** Every DNS function that can reach a server (c-ares or getaddrinfo). */
+const DNS_FUNCTIONS = [
+  "lookupService",
+  "resolve",
+  "resolve4",
+  "resolve6",
+  "resolveAny",
+  "resolveCaa",
+  "resolveCname",
+  "resolveMx",
+  "resolveNaptr",
+  "resolveNs",
+  "resolvePtr",
+  "resolveSoa",
+  "resolveSrv",
+  "resolveTxt",
+  "reverse",
+] as const;
+
+function trapAll(target: object, label: string): void {
+  for (const name of DNS_FUNCTIONS) {
+    if (typeof Reflect.get(target, name) === "function") {
+      const spy = vi.spyOn(target as Record<string, () => unknown>, name);
+      spy.mockImplementation(() => trap(`${label}.${name}`));
+    }
+  }
+}
+
+beforeAll(async () => {
   vi.spyOn(net.Socket.prototype, "connect").mockImplementation(() =>
     trap("net.Socket.connect"),
   );
   vi.spyOn(dgram.Socket.prototype, "send").mockImplementation(() =>
     trap("dgram.Socket.send"),
   );
-  vi.spyOn(dns, "lookup").mockImplementation(() => trap("dns.lookup"));
-  vi.spyOn(dns, "resolve").mockImplementation(() => trap("dns.resolve"));
+  const lookup = dns.lookup.bind(dns) as (...args: unknown[]) => void;
+  vi.spyOn(dns, "lookup").mockImplementation((...args: unknown[]) => {
+    const [hostname] = args;
+    if (typeof hostname === "string" && net.isIP(hostname) !== 0) {
+      lookup(...args);
+      return;
+    }
+    trap(`dns.lookup ${String(hostname)}`);
+  });
   vi.spyOn(dns.promises, "lookup").mockImplementation(() =>
     trap("dns.promises.lookup"),
   );
-  vi.spyOn(dns.promises, "resolve").mockImplementation(() =>
-    trap("dns.promises.resolve"),
-  );
+  trapAll(dns, "dns");
+  trapAll(dns.promises, "dns.promises");
+  trapAll(dns.Resolver.prototype, "dns.Resolver");
+  trapAll(dns.promises.Resolver.prototype, "dns.promises.Resolver");
   vi.stubGlobal("fetch", async (input: unknown) =>
     trap(`fetch ${String(input)}`),
   );
+  // Loaded only now, so a call made while a module loads is caught too.
+  helpers = await import("../test/helpers.js");
 });
 
 afterAll(() => {
@@ -45,14 +89,27 @@ describe("no outbound connections", () => {
   it("the trap catches a connection attempt", async () => {
     expect(() => net.connect(443, "192.0.2.1")).toThrow(/blocked/);
     await expect(fetch("https://example.invalid/")).rejects.toThrow(/blocked/);
+    expect(() => dns.resolve4("example.invalid", () => undefined)).toThrow(
+      /blocked/,
+    );
+    const resolver = new dns.Resolver();
+    const any = () => resolver.resolveAny("example.invalid", () => undefined);
+    expect(any).toThrow(/blocked/);
+    expect(() => dns.lookup("example.invalid", () => undefined)).toThrow(
+      /blocked/,
+    );
     expect(attempts).toEqual([
       "net.Socket.connect",
       "fetch https://example.invalid/",
+      "dns.resolve4",
+      "dns.Resolver.resolveAny",
+      "dns.lookup example.invalid",
     ]);
     attempts.length = 0;
   });
 
   it("the app makes none while it starts, serves and stops", async () => {
+    const { headersOf, setupOwner, testApp } = helpers;
     const instance = await testApp();
     try {
       const { app } = instance;
@@ -76,12 +133,21 @@ describe("no outbound connections", () => {
         const res = await app.inject({ method: "GET", url, headers });
         expect(res.statusCode, url).toBe(200);
       }
+      // The daily job, fired once by hand, then a backup through the API.
+      await app.ctx.backups.runScheduledNow();
       const backup = await app.inject({
         method: "POST",
         url: "/api/v1/system/backups",
         headers: headersOf(owner),
       });
       expect(backup.statusCode).toBe(201);
+      const list = await app.inject({
+        method: "GET",
+        url: "/api/v1/system/backups",
+        headers: headersOf(owner),
+      });
+      const { items } = list.json<{ items: unknown[] }>();
+      expect(items.length).toBeGreaterThanOrEqual(2);
     } finally {
       await instance.close();
     }

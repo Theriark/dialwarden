@@ -16,6 +16,9 @@ export const TOKEN_PREFIX = "DW1";
 export const KINDS = ["customer", "internal-dev"];
 export const REVOCATION_SALT = "dialwarden-revocation-v1";
 export const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
+/** Longest token accepted, as in token.ts. */
+export const MAX_TOKEN_LENGTH = 4096;
+const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
 const ULID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -171,25 +174,80 @@ export function lidHash8(lid) {
   return createHash("sha256").update(lid, "utf8").digest("hex").slice(0, 8);
 }
 
+/** Strict base64url, as token.ts: no padding, and it must re-encode the same. */
+function strictBase64url(part) {
+  if (typeof part !== "string" || !BASE64URL.test(part)) {
+    return null;
+  }
+  const bytes = Buffer.from(part, "base64url");
+  return bytes.toString("base64url") === part ? bytes : null;
+}
+
+/** The payload checks of token.ts (the same ones issue applies). */
+function wellFormed(payload) {
+  if (typeof payload !== "object" || payload === null) {
+    return false;
+  }
+  const { customer } = payload;
+  const shapes =
+    payload.v === 1 &&
+    payload.plan === "paid" &&
+    typeof payload.lid === "string" &&
+    typeof payload.issuedAt === "string" &&
+    typeof customer === "object" &&
+    customer !== null &&
+    (payload.maxServers === undefined ||
+      typeof payload.maxServers === "number") &&
+    (payload.features === undefined || Array.isArray(payload.features));
+  if (!shapes) {
+    return false;
+  }
+  try {
+    buildPayload({
+      kind: payload.kind,
+      updatesUntil: payload.updatesUntil,
+      issuedAt: payload.issuedAt,
+      lid: payload.lid,
+      maxServers: payload.maxServers,
+      customerId: customer.id,
+      customerName: customer.name,
+    });
+    return true;
+  } catch (error) {
+    if (error instanceof LicenceToolError) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /**
  * Checks a token's signature with one public key. The summary never holds the
  * token or the licence id (only lidHash8). Dates and the CRA-safe rule are the
- * app's job; this checks the signature only.
+ * app's job; this checks the format, the payload fields and the signature, and
+ * answers malformed wherever token.ts would.
  */
 export function inspectLicence(token, publicKey) {
-  const parts = token.trim().split(".");
+  const trimmed = token.trim();
+  if (trimmed.length > MAX_TOKEN_LENGTH) {
+    return { signature: "malformed" };
+  }
+  const parts = trimmed.split(".");
   if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) {
     return { signature: "malformed" };
   }
-  const bytes = Buffer.from(parts[1] ?? "", "base64url");
-  const signature = Buffer.from(parts[2] ?? "", "base64url");
+  const bytes = strictBase64url(parts[1]);
+  const signature = strictBase64url(parts[2]);
+  if (bytes === null || signature === null) {
+    return { signature: "malformed" };
+  }
   let payload;
   try {
     payload = JSON.parse(bytes.toString("utf8"));
   } catch {
     return { signature: "malformed" };
   }
-  if (typeof payload !== "object" || payload === null) {
+  if (!wellFormed(payload)) {
     return { signature: "malformed" };
   }
   let valid = false;
