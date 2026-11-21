@@ -16,7 +16,7 @@ inputs:
     description: Domain that must be attached to that application (identity check).
     required: true
   image:
-    description: Immutable reference ghcr.io/theriark/dialwarden-app@sha256:<64 hex>.
+    description: Immutable reference ghcr.io/theriark/dialwarden@sha256:<64 hex>.
     required: true
   health-url:
     description: Passive health URL of the target (HTTP GET, expects 200).
@@ -78,8 +78,8 @@ runs:
         for required in APP_ID EXPECTED_HOST IMAGE HEALTH_URL TITLE DOKPLOY_URL DOKPLOY_API_KEY CF_ID CF_SECRET; do
           [[ -n "${!required}" ]] || { echo "::error::${required} is missing"; exit 1; }
         done
-        [[ "${IMAGE}" =~ ^ghcr\.io/theriark/dialwarden-app@sha256:[0-9a-f]{64}$ ]] || {
-          echo "::error::image must be ghcr.io/theriark/dialwarden-app@sha256:<64 hex>"
+        [[ "${IMAGE}" =~ ^ghcr\.io/theriark/dialwarden@sha256:[0-9a-f]{64}$ ]] || {
+          echo "::error::image must be ghcr.io/theriark/dialwarden@sha256:<64 hex>"
           exit 1
         }
         [[ "${EXPECTED_REVISION}" =~ ^([0-9a-f]{40})?$ ]] || {
@@ -210,7 +210,7 @@ runs:
         }
         post_deploy() {
           api_post application.deploy "$(jq -nc --arg a "${APP_ID}" --arg t "$1" \
-            --arg d "dialwarden-app GitHub Actions run ${GITHUB_RUN_ID}" \
+            --arg d "dialwarden GitHub Actions run ${GITHUB_RUN_ID}" \
             '{applicationId: $a, title: $t, description: $d}')"
         }
 

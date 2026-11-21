@@ -36,20 +36,20 @@ permissions:
 # One delivery run at a time per repository (shared with CI on development and
 # Release); a live run is never cancelled.
 concurrency:
-  group: dialwarden-app-delivery
+  group: dialwarden-delivery
   cancel-in-progress: false
 
 env:
-  IMAGE: ghcr.io/theriark/dialwarden-app
+  IMAGE: ghcr.io/theriark/dialwarden
   NODE_VERSION: "24"
   # The keyless signing identity of the Development build (ci.yml).
-  SIGNER: https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development
+  SIGNER: https://github.com/Theriark/dialwarden/.github/workflows/ci.yml@refs/heads/development
   OIDC_ISSUER: https://token.actions.githubusercontent.com
   # Registered for this product by the setup broker (github_repo_status).
   DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
-  DEV_HOST: app-dev-dialwarden.theriark.dev
+  DEV_HOST: dev-dialwarden.theriark.dev
   STAGE_APPLICATION_ID: "-cMPJhRMwT7vxF8fl_sxV"
-  STAGE_HOST: app-stg-dialwarden.theriark.dev
+  STAGE_HOST: stg-dialwarden.theriark.dev
 
 jobs:
   plan:
@@ -253,9 +253,9 @@ jobs:
           fi
           {
             if [[ "${DRY_RUN}" == "true" ]]; then
-              echo "## dialwarden-app Promote - Stage: DRY RUN (nothing is changed)"
+              echo "## dialwarden Promote - Stage: DRY RUN (nothing is changed)"
             else
-              echo "## dialwarden-app Promote - Stage: plan"
+              echo "## dialwarden Promote - Stage: plan"
             fi
             echo
             echo "- Commit Development runs: \`${COMMIT}\` (CI run \`${DEV_RUN}\`)"
@@ -448,7 +448,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## dialwarden-app promoted to Stage"
+            echo "## dialwarden promoted to Stage"
             echo
             echo "- Source commit: \`${SOURCE_SHA}\` (Development CI run \`${DEV_RUN_ID}\`)"
             echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (no rebuild), also tagged \`${RC_TAG#v}\` and \`stage\`"
