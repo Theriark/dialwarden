@@ -1,7 +1,7 @@
 version: 2
 # Every entry targets development: all work enters there (docs/ci-cd.md), never
-# stage or main. Phase P0 adds the npm (pnpm workspace, directory /) and docker
-# (base image digest in the Dockerfile) entries together with those files.
+# stage or main. Weekly; minor and patch updates are grouped into one pull request
+# per ecosystem, major updates come one by one.
 updates:
   # Every action is pinned to a full commit SHA with the version in a comment;
   # Dependabot updates the SHA and that comment.
@@ -11,3 +11,37 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     target-branch: development
+  # The pnpm workspace (package.json files and pnpm-lock.yaml).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    target-branch: development
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    # Node types follow the Node 24 line (engines, base image): no major updates.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types:
+          - version-update:semver-major
+  # The node:24-slim base image digest in both FROM lines of the Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    target-branch: development
+    groups:
+      docker-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    # The base stays on Node 24 (engines, CI smoke assertion): no node 25 and up.
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major

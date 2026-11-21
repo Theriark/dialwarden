@@ -1,0 +1,12 @@
+# Prose, workflows and generated files keep their own layout; Prettier checks code.
+*.md
+LICENSE
+THIRD_PARTY_NOTICES
+pnpm-lock.yaml
+.github/
+docs/
+deploy/
+**/dist/
+**/coverage/
+**/node_modules/
+**/fixtures/

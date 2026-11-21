@@ -9,10 +9,10 @@ name: CI
 # unlocked by an offline signed licence key checked inside the image. There is no
 # CE/EE split and no second image.
 #
-# STRICT is "false" until phase P0 adds the application; P0 sets it to "true".
-# With "false" a check whose input does not exist is skipped and reported as
-# skipped, never as a pass, and the tripwire in `detect` fails the run if an
-# application file exists. With "true" every check must run and succeed.
+# STRICT is "true" since phase P0 added the application: every check must run
+# and succeed, and a skipped check fails the gate. ("false" was the setup mode: a
+# check whose input did not exist was skipped, and the tripwire in `detect` failed
+# the run if an application file existed.)
 #
 # How CI is started: a push to a feature branch never runs this workflow. For pull
 # requests the ONLY trigger is the label event, and a run does anything only for the
@@ -54,7 +54,7 @@ env:
   IMAGE_NAME: dialwarden-app
   # "true": no check may skip; any result other than success fails the gate.
   # "false": skips are tolerated only while no application file exists.
-  STRICT: "false"
+  STRICT: "true"
 
 jobs:
   detect:
@@ -185,6 +185,39 @@ jobs:
             echo "::error::a private key block is committed"
             status=1
           fi
+          # FCL-1.0-MIT is source-available, never open source (legal-input-1 1.7):
+          # no open source claim in the README, docs, LICENSING.md or the web app.
+          # The exact phrase "not open source" is the one allowed use.
+          claims="$(git grep -nIiE 'open[- ]?source' -- README.md LICENSING.md docs apps/web/src |
+            sed -E 's/not open source//Ig' | grep -iE ':.*open[- ]?source' || true)"
+          if [[ -n "${claims}" ]]; then
+            echo "${claims}"
+            echo "::error::an open source claim appears; Dialwarden is source-available (FCL-1.0-MIT)"
+            status=1
+          fi
+          # Fixtures are synthetic and written by Theriark (legal-input-1 2): every
+          # fixtures folder has a SYNTHETIC.md that lists each of its files.
+          shopt -s nullglob
+          for dir in packs/*/fixtures packages/formats/fixtures; do
+            [[ -d "${dir}" ]] || continue
+            if [[ ! -f "${dir}/SYNTHETIC.md" ]]; then
+              echo "::error file=${dir}::${dir} has no SYNTHETIC.md"
+              status=1
+              continue
+            fi
+            while IFS= read -r -d '' file; do
+              name="${file#"${dir}/"}"
+              [[ "${name}" == "SYNTHETIC.md" ]] && continue
+              # A whole entry only (bounded by line start or end, a pipe, a space
+              # or a backtick), so r.ini is not taken as listed by server.ini.
+              escaped="$(printf '%s' "${name}" | sed -e 's/[][\.*^$+?(){}|]/\\&/g')"
+              grep -qE -- '(^|[|[:space:]`])'"${escaped}"'($|[|[:space:]`])' "${dir}/SYNTHETIC.md" || {
+                echo "::error file=${file}::${name} is not listed in ${dir}/SYNTHETIC.md"
+                status=1
+              }
+            done < <(find "${dir}" -type f -print0)
+          done
+          shopt -u nullglob
           # Credential scan with gitleaks (MIT), pinned by digest, default rules: the
           # checked-out tree, then every commit of the pull request or push, so a
           # secret added and removed again inside the range is found too.
@@ -220,6 +253,9 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Tags are needed for the feature baseline (feature_baseline.sh).
+          fetch-depth: 0
       - id: epoch
         shell: bash
         run: |
@@ -230,6 +266,9 @@ jobs:
           epoch="$(git log -1 --format=%ct HEAD)"
           echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u -d "@${epoch}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          baseline="$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)"
+          echo "baseline=${baseline}" >> "$GITHUB_OUTPUT"
+          echo "baseline_date=$(date -u -d "@${baseline}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - name: Build both architectures
@@ -244,6 +283,7 @@ jobs:
           build-args: |
             REVISION=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Load the amd64 image for the checks
@@ -260,15 +300,37 @@ jobs:
           build-args: |
             REVISION=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           cache-from: type=gha
-      - name: Image must run as non-root and answer /healthz
+      - name: Image must run as UID 10001 and answer /healthz
         shell: bash
+        env:
+          CREATED: ${{ steps.epoch.outputs.created }}
+          BASELINE_DATE: ${{ steps.epoch.outputs.baseline_date }}
         run: |
           set -euo pipefail
           user="$(docker image inspect "${IMAGE_NAME}:ci" --format '{{.Config.User}}')"
           [[ -n "${user}" && "${user}" != "root" && "${user}" != "0" && "${user}" != "0:0" ]] || { echo "::error::image runs as root"; exit 1; }
+          [[ "${user}" == "10001:10001" ]] || { echo "::error::image user is '${user}', not 10001:10001"; exit 1; }
+          # The pinned base is Node 24, and nothing from tools/ is in the image.
+          node_version="$(docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -p process.versions.node)"
+          [[ "${node_version}" == 24.* ]] || { echo "::error::base image runs Node ${node_version}, not 24"; exit 1; }
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            if (fs.existsSync("/app/tools") || !fs.existsSync("/app/THIRD_PARTY_NOTICES")) process.exit(1);
+            if (fs.readdirSync("/app/node_modules/@dialwarden").some((n) => n.startsWith("tools-"))) process.exit(1);
+          ' || { echo "::error::tools/ is in the image or THIRD_PARTY_NOTICES is missing"; exit 1; }
+          # Both volume folders of deploy/dokploy.json belong to UID 10001, mode 0750.
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            for (const dir of ["/data", "/demo-servers"]) {
+              const s = fs.statSync(dir);
+              if (s.uid !== 10001 || (s.mode & 0o777) !== 0o750) process.exit(1);
+            }
+          ' || { echo "::error::/data or /demo-servers is not owned by 10001 with mode 0750"; exit 1; }
+          # Read-only root file system: the app may write only to the volumes and /tmp.
           # Throwaway values generated for this run only; nothing is reused.
-          docker run -d --name smoke -p 8080:8080 \
+          docker run -d --name smoke -p 8080:8080 --read-only --tmpfs /tmp \
             -e APP_SECRET_KEY="$(openssl rand -hex 32)" \
             -e SESSION_SECRET="$(openssl rand -hex 32)" \
             -e BASE_URL=http://localhost:8080 \
@@ -282,6 +344,23 @@ jobs:
           echo "${body}"
           revision="$(jq -r '.revision // empty' <<<"${body}")"
           [[ "${revision}" == "${GITHUB_SHA}" ]] || { echo "::error::/healthz reports revision '${revision}', not ${GITHUB_SHA}"; exit 1; }
+          # P0 acceptance: buildDate is the commit time, featureBaseline the
+          # baseline (equal to buildDate until v27.0.0 exists), version the line.
+          build_date="$(jq -r '.buildDate // empty' <<<"${body}")"
+          [[ "${build_date}" == "${CREATED}" ]] || { echo "::error::/healthz buildDate '${build_date}' is not the commit time ${CREATED}"; exit 1; }
+          baseline="$(jq -r '.featureBaseline // empty' <<<"${body}")"
+          [[ "${baseline}" == "${BASELINE_DATE}" ]] || { echo "::error::/healthz featureBaseline '${baseline}' is not ${BASELINE_DATE}"; exit 1; }
+          version="$(jq -r '.version // empty' <<<"${body}")"
+          [[ "${version}" == "$(jq -r '.version' package.json)" ]] || { echo "::error::/healthz version '${version}' is not package.json's"; exit 1; }
+          uid="$(docker exec smoke id -u)"
+          [[ "${uid}" == "10001" ]] || { echo "::error::the app runs as UID ${uid}, not 10001"; exit 1; }
+          curl -fsS http://localhost:8080/readyz >/dev/null || { echo "::error::/readyz did not answer 200"; exit 1; }
+          {
+            echo "## Image smoke test (amd64)"
+            echo
+            echo "- User: ${user}, process UID ${uid}, Node ${node_version}, read-only root file system"
+            echo "- /healthz: \`${body}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
           docker rm -f smoke >/dev/null
 
   sbom:
@@ -294,8 +373,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch="$(git log -1 --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "baseline=$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
         with:
           context: .
           platforms: linux/amd64
@@ -305,6 +395,8 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:sbom
           build-args: |
             REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           cache-from: type=gha
       - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
@@ -471,6 +563,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
+          fetch-depth: 0
       - id: epoch
         shell: bash
         run: |
@@ -478,6 +571,7 @@ jobs:
           epoch="$(git log -1 --format=%ct HEAD)"
           echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
           echo "created=$(date -u -d "@${epoch}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "baseline=$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -501,6 +595,7 @@ jobs:
           build-args: |
             REVISION=${{ github.sha }}
             SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           labels: |
             org.opencontainers.image.title=Dialwarden
             org.opencontainers.image.source=https://github.com/${{ github.repository }}

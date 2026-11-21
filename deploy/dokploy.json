@@ -5,6 +5,8 @@
     {"name": "APP_SECRET_KEY", "kind": "hex64"},
     {"name": "SESSION_SECRET", "kind": "hex64"},
     {"name": "BASE_URL", "kind": "base_url"},
-    {"name": "DEV_SEED_DEMO", "kind": "literal", "value": "true"}
+    {"name": "DEMO_SEED", "kind": "literal", "value": "true"},
+    {"name": "TRUSTED_PROXIES", "kind": "literal", "value": "172.31.1.0/24,172.17.0.1"},
+    {"name": "LOG_LEVEL", "kind": "literal", "value": "info"}
   ]
 }
