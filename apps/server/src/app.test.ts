@@ -1,24 +1,43 @@
+// Server core (dev-work-plan P1-A steps 1, 3 and 10): health and readiness, the
+// OpenAPI document, the generated APP_SECRET_KEY and log redaction.
+import { rm, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { Writable } from "node:stream";
+import { testKeyRing } from "@dialwarden/entitlement/testing";
 import { afterEach, describe, expect, it } from "vitest";
-import type { FastifyInstance } from "fastify";
+import {
+  BUILD_ENV,
+  headersOf,
+  setupOwner,
+  testApp,
+  type TestApp,
+} from "../test/helpers.js";
 import { buildApp } from "./app.js";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
-let app: FastifyInstance | undefined;
+let current: TestApp | undefined;
 
 afterEach(async () => {
-  await app?.close();
-  app = undefined;
+  await current?.close();
+  current = undefined;
 });
 
-describe("health stub", () => {
-  it("reports version, revision, build date and baseline", async () => {
-    app = buildApp({
-      LOG_LEVEL: "silent",
-      DIALWARDEN_REVISION: sha,
-      DIALWARDEN_BUILD_EPOCH: "1795244400",
-      DIALWARDEN_FEATURE_BASELINE_EPOCH: "1795244400",
-    });
-    const res = await app.inject({ method: "GET", url: "/healthz" });
+/** A stream that keeps every log line the app writes. */
+function logCapture(): { stream: Writable; text: () => string } {
+  const lines: string[] = [];
+  const stream = new Writable({
+    write(chunk: Buffer | string, _encoding, done) {
+      lines.push(chunk.toString());
+      done();
+    },
+  });
+  return { stream, text: () => lines.join("") };
+}
+
+describe("health", () => {
+  it("reports version, revision, build dates and the plan", async () => {
+    current = await testApp({ extraEnv: { DIALWARDEN_REVISION: sha } });
+    const res = await current.app.inject({ method: "GET", url: "/healthz" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       status: "ok",
@@ -26,13 +45,128 @@ describe("health stub", () => {
       revision: sha,
       buildDate: "2026-11-21T07:00:00Z",
       featureBaseline: "2026-11-21T07:00:00Z",
+      plan: "free",
     });
   });
 
-  it("answers readiness", async () => {
-    app = buildApp({ LOG_LEVEL: "silent" });
-    const res = await app.inject({ method: "GET", url: "/readyz" });
+  it("answers readiness after a database check", async () => {
+    current = await testApp();
+    const res = await current.app.inject({ method: "GET", url: "/readyz" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ status: "ready" });
+  });
+
+  it("is not ready while the database is closed", async () => {
+    current = await testApp();
+    current.app.ctx.store.close();
+    const res = await current.app.inject({ method: "GET", url: "/readyz" });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ status: "not_ready" });
+  });
+});
+
+describe("OpenAPI", () => {
+  it("serves an OpenAPI 3.1 document of the API", async () => {
+    current = await testApp();
+    const res = await current.app.inject({
+      method: "GET",
+      url: "/api/v1/openapi.json",
+    });
+    expect(res.statusCode).toBe(200);
+    const doc = res.json<{ openapi: string; paths: Record<string, unknown> }>();
+    expect(doc.openapi).toBe("3.1.0");
+    const paths = Object.keys(doc.paths);
+    const expected = [
+      "/api/v1/setup",
+      "/api/v1/auth/login",
+      "/api/v1/auth/totp/enrol",
+      "/api/v1/entitlement",
+      "/api/v1/licence",
+      "/api/v1/plan/editable-servers",
+      "/api/v1/activity",
+      "/api/v1/system/backups",
+    ];
+    for (const path of expected) {
+      expect(paths).toContain(path);
+    }
+    expect(paths).not.toContain("/api/v1/openapi.json");
+  });
+});
+
+describe("APP_SECRET_KEY", () => {
+  it("is generated once into the data folder, mode 0600, with a banner", async () => {
+    current = await testApp({ extraEnv: { APP_SECRET_KEY: "" } });
+    const { app, dataDir } = current;
+    const info = await stat(join(dataDir, "app-secret.key"));
+    expect(info.mode & 0o777).toBe(0o600);
+    expect(app.ctx.appKey).toMatchObject({ source: "file", generated: true });
+
+    const owner = await setupOwner(app);
+    const status = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/v1/system/status",
+        headers: headersOf(owner),
+      });
+    expect((await status()).json()).toMatchObject({
+      appSecret: { source: "file", showBackupBanner: true },
+    });
+    const ack = await app.inject({
+      method: "POST",
+      url: "/api/v1/system/app-secret/acknowledge",
+      headers: headersOf(owner),
+    });
+    expect(ack.statusCode).toBe(204);
+    expect((await status()).json()).toMatchObject({
+      appSecret: { backupAcknowledged: true, showBackupBanner: false },
+    });
+  });
+
+  it("reuses the generated key on the next start", async () => {
+    const first = await testApp({ extraEnv: { APP_SECRET_KEY: "" } });
+    const kid = first.app.ctx.aead.kid;
+    await first.app.close();
+    try {
+      const second = await buildApp({
+        keys: testKeyRing,
+        env: { LOG_LEVEL: "silent", DATA_DIR: first.dataDir, ...BUILD_ENV },
+      });
+      try {
+        expect(second.ctx.aead.kid).toBe(kid);
+        expect(second.ctx.appKey.generated).toBe(false);
+      } finally {
+        await second.close();
+      }
+    } finally {
+      await rm(first.dataDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("logs", () => {
+  it("never carry passwords, tokens or session values", async () => {
+    const log = logCapture();
+    current = await testApp({
+      logStream: log.stream,
+      extraEnv: { LOG_LEVEL: "info" },
+    });
+    const { app } = current;
+    const owner = await setupOwner(app);
+    await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: owner.email, password: owner.password },
+    });
+    app.log.info(
+      { password: owner.password, nested: { token: "probe-token-value" } },
+      "redaction probe",
+    );
+    const text = log.text();
+    expect(text).toContain("redaction probe");
+    expect(text).toContain("[redacted]");
+    expect(text).not.toContain(owner.password);
+    expect(text).not.toContain("probe-token-value");
+    expect(text).not.toContain(owner.csrf);
+    expect(text).not.toContain(owner.cookie.slice("dw_session=".length));
   });
 });
