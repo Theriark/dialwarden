@@ -1,12 +1,18 @@
-// Seed accounts (dev-work-plan P1-A step 9, references/test-accounts.md).
+// Seed accounts (dev-work-plan P1-A step 9, references/test-accounts.md, R&D
+// decision THE-2141). On Development the owner is created at start from
+// DEV_SEED_OWNER_EMAIL and DEV_SEED_OWNER_PASSWORD (deploy/dokploy.json), so
+// this tool creates the owner only on Stage (operator item 11) and in tests:
 // 1. GET /api/v1/setup must say that first-run setup is still open.
 // 2. The account is registered with the task client action browser_account
 //    (label owner), so the pair is stored before the owner exists.
-// 3. POST /api/v1/setup creates the owner.
+// 3. POST /api/v1/setup creates the owner, with the one-time setup token
+//    (--setup-token or DIALWARDEN_SETUP_TOKEN, read by the operator from
+//    DATA_DIR/setup-token or the start log) in X-Dialwarden-Setup-Token.
 // The password (24 characters from letters, digits and - _ . +) is generated
 // in this process and handed only to the task client, as one argument of an
-// argument list (no shell). It is never written to a file or a log; the tool
-// prints only the variable names the task client answers with.
+// argument list (no shell). Neither it nor the setup token is ever written to
+// a file or a log; the tool prints only the variable names the task client
+// answers with.
 import { execFile } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -20,7 +26,8 @@ export const DEFAULT_EMAIL = "owner@dialwarden.test";
 export const DEFAULT_REPO = "dialwarden-app";
 
 const USAGE =
-  "usage: node tools/seed/seed-accounts.mjs --base-url https://app-dev-dialwarden.theriark.dev --env dev|stage [--email ADDRESS] [--repo NAME]";
+  "usage: node tools/seed/seed-accounts.mjs --base-url https://app-stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment)";
+const SETUP_TOKEN = /^[0-9a-f]{64}$/;
 const VARIABLE_NAME = /\b[A-Z][A-Z0-9_]*_(?:EMAIL|PASSWORD)\b/g;
 
 export class SeedError extends Error {
@@ -65,7 +72,7 @@ export function checkBaseUrl(value, env) {
   return url.origin;
 }
 
-export function parseSeedArgs(argv) {
+export function parseSeedArgs(argv, env = process.env) {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -73,6 +80,7 @@ export function parseSeedArgs(argv) {
       env: { type: "string" },
       email: { type: "string" },
       repo: { type: "string" },
+      "setup-token": { type: "string" },
     },
     strict: true,
     allowPositionals: false,
@@ -83,11 +91,20 @@ export function parseSeedArgs(argv) {
   if (values["base-url"] === undefined) {
     throw new SeedError("--base-url is required");
   }
+  const baseUrl = checkBaseUrl(values["base-url"], values.env);
+  const given = values["setup-token"] ?? env.DIALWARDEN_SETUP_TOKEN ?? "";
+  const setupToken = given.trim();
+  if (!SETUP_TOKEN.test(setupToken)) {
+    throw new SeedError(
+      "the setup token is required: --setup-token or DIALWARDEN_SETUP_TOKEN (64 hex characters from DATA_DIR/setup-token)",
+    );
+  }
   return {
     env: values.env,
-    baseUrl: checkBaseUrl(values["base-url"], values.env),
+    baseUrl,
     email: values.email ?? DEFAULT_EMAIL,
     repo: values.repo ?? DEFAULT_REPO,
+    setupToken,
   };
 }
 
@@ -123,13 +140,16 @@ export async function setupOpen(baseUrl, fetchImpl, timeoutMs = 15_000) {
 
 /** Step 3: creates the owner through POST /api/v1/setup. */
 export async function createOwner(options) {
-  const { baseUrl, email, password, fetchImpl } = options;
+  const { baseUrl, email, password, setupToken, fetchImpl } = options;
   const created = await requestJson(
     fetchImpl,
     `${baseUrl}/api/v1/setup`,
     {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        "x-dialwarden-setup-token": setupToken,
+      },
       body: JSON.stringify({ email, password, name: "Owner (seed)" }),
     },
     options.timeoutMs ?? 15_000,
@@ -183,7 +203,8 @@ export async function registerAccount(options) {
 }
 
 /**
- * Seeds the owner. deps (tests): fetch, run (the task client), stdout, stderr.
+ * Seeds the owner. deps (tests): fetch, run (the task client), stdout, stderr,
+ * env (where DIALWARDEN_SETUP_TOKEN is read; default process.env).
  * Exit codes: 0 done, 1 the seed failed, 2 a usage error.
  */
 export async function main(argv, deps = {}) {
@@ -192,12 +213,12 @@ export async function main(argv, deps = {}) {
   const fetchImpl = deps.fetch ?? fetch;
   let options;
   try {
-    options = parseSeedArgs(argv);
+    options = parseSeedArgs(argv, deps.env ?? process.env);
   } catch (error) {
     stderr.write(`seed: ${error.message}\n${USAGE}\n`);
     return 2;
   }
-  const { baseUrl, env, email, repo } = options;
+  const { baseUrl, env, email, repo, setupToken } = options;
   try {
     if (!(await setupOpen(baseUrl, fetchImpl))) {
       throw new SeedError(
@@ -213,7 +234,7 @@ export async function main(argv, deps = {}) {
       password,
       run: deps.run ?? runTaskClient,
     });
-    await createOwner({ baseUrl, email, password, fetchImpl });
+    await createOwner({ baseUrl, email, password, setupToken, fetchImpl });
     const listed = names.length > 0 ? names.join(" ") : "(no names returned)";
     stdout.write(`seed: owner created on ${baseUrl}; registered ${listed}\n`);
     return 0;

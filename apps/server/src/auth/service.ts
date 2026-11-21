@@ -115,12 +115,14 @@ export class AuthService {
     return this.userCount() === 0;
   }
 
-  /** Creates the owner. Only while no user exists (first run). */
-  async setup(input: {
-    email: string;
-    password: string;
-    name: string;
-  }): Promise<PublicUser> {
+  /**
+   * Creates the owner. Only while no user exists (first run): through the
+   * setup API, or at start from DEV_SEED_OWNER_* (cause bootstrap).
+   */
+  async setup(
+    input: { email: string; password: string; name: string },
+    cause: "setup" | "bootstrap" = "setup",
+  ): Promise<PublicUser> {
     if (!this.setupRequired()) {
       throw new ApiError(409, "setup_done");
     }
@@ -153,7 +155,7 @@ export class AuthService {
     }
     this.#activity.record("user.changed", {
       actor: row.email,
-      data: { action: "created", userId: row.id, role: row.role },
+      data: { action: "created", userId: row.id, role: row.role, cause },
     });
     return publicUser(row);
   }

@@ -1,12 +1,15 @@
 // Test helpers for apps/server. Outside src/, so never built into the image.
 // Every credential here is generated when the test runs.
 import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import { testKeyRing } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
 import { buildApp, type BuildOptions } from "../src/app.js";
+import { SETUP_TOKEN_FILE } from "../src/auth/first-run.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- test folders under the system temporary folder */
 
@@ -41,7 +44,12 @@ export async function testApp(
     ...BUILD_ENV,
     ...extraEnv,
   };
-  const app = await buildApp({ keys: testKeyRing, ...build, env });
+  const app = await buildApp({
+    keys: testKeyRing,
+    out: discard(),
+    ...build,
+    env,
+  });
   return {
     app,
     dataDir,
@@ -50,6 +58,26 @@ export async function testApp(
       await rm(dataDir, { recursive: true, force: true });
     },
   };
+}
+
+/** A stream that drops what is written (the first-run setup line). */
+export function discard(): Writable {
+  return new Writable({
+    write(_chunk: unknown, _encoding: BufferEncoding, done: () => void) {
+      done();
+    },
+  });
+}
+
+/** The first-run setup token of a test app (DATA_DIR/setup-token). */
+export function setupTokenOf(app: FastifyInstance): string {
+  const file = join(app.ctx.store.dataDir, SETUP_TOKEN_FILE);
+  return readFileSync(file, "utf8").trim();
+}
+
+/** The header first-run setup and import need. */
+export function setupHeaders(app: FastifyInstance): Record<string, string> {
+  return { "x-dialwarden-setup-token": setupTokenOf(app) };
 }
 
 export const randomPassword = (): string =>
@@ -88,6 +116,7 @@ export async function setupOwner(
   const response = await app.inject({
     method: "POST",
     url: "/api/v1/setup",
+    headers: setupHeaders(app),
     payload: { ...credentials, name: "Owner" },
   });
   if (response.statusCode !== 201) {
