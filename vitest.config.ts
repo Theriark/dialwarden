@@ -4,7 +4,8 @@ import { defineConfig } from "vitest/config";
 // One test run for the whole workspace. Workspace packages resolve to their
 // TypeScript sources, so tests never depend on a previous build. The aliases
 // match whole import names, so @dialwarden/entitlement/testing (throwaway test
-// keys, never in the image) resolves to its own file.
+// keys, never in the image) resolves to its own file. Web component tests are
+// .test.tsx files that opt into jsdom with a @vitest-environment comment.
 const source = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
@@ -28,9 +29,12 @@ export default defineConfig({
       },
     ],
   },
+  esbuild: {
+    jsx: "automatic",
+  },
   test: {
     include: [
-      "apps/*/src/**/*.test.ts",
+      "apps/*/src/**/*.test.{ts,tsx}",
       "packages/*/src/**/*.test.ts",
       "tools/*/src/**/*.test.{ts,mjs}",
       "packs/**/*.test.ts",

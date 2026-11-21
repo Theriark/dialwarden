@@ -1,0 +1,96 @@
+@import "tailwindcss";
+@import "./tokens.css";
+
+/* The dark theme is html[data-theme="dark"], set before first paint. */
+@custom-variant dark (&:where(html[data-theme="dark"], html[data-theme="dark"] *));
+
+/* Semantic tokens mapped into the Tailwind theme: bg-surface, text-fg-muted,
+   border-border-strong, font-heading and so on switch with the theme. */
+@theme inline {
+  --color-bg: var(--dw-bg);
+  --color-surface: var(--dw-surface);
+  --color-fg: var(--dw-fg);
+  --color-fg-muted: var(--dw-fg-muted);
+  --color-primary: var(--dw-primary);
+  --color-primary-fg: var(--dw-primary-fg);
+  --color-accent-soft: var(--dw-accent-soft);
+  --color-border: var(--dw-border);
+  --color-border-strong: var(--dw-border-strong);
+  --color-skeleton: var(--dw-skeleton);
+  --color-overlay: var(--dw-overlay);
+  --color-banner: var(--dw-banner-bg);
+  --color-banner-fg: var(--dw-banner-fg);
+  --color-error: var(--dw-error);
+  --color-error-soft: var(--dw-error-soft);
+  --color-on-error: var(--dw-on-error);
+  --color-warning: var(--dw-warning);
+  --color-warning-soft: var(--dw-warning-soft);
+  --color-pending: var(--dw-pending);
+  --color-pending-soft: var(--dw-pending-soft);
+  --color-success: var(--dw-success);
+  --color-success-soft: var(--dw-success-soft);
+  --color-info: var(--dw-info);
+  --color-info-soft: var(--dw-info-soft);
+  --color-neutral: var(--dw-neutral);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  --radius-control: 6px;
+  --radius-card: 10px;
+  --shadow-card: var(--dw-shadow-card);
+}
+
+@layer base {
+  html {
+    background: var(--dw-bg);
+    color: var(--dw-fg);
+    font-family: var(--font-sans);
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+    line-height: 1.25;
+  }
+
+  code,
+  kbd,
+  pre {
+    font-family: var(--font-mono);
+  }
+
+  :focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--dw-bg),
+      0 0 0 4px var(--dw-primary);
+  }
+
+  ::placeholder {
+    color: var(--dw-fg-muted);
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0s !important;
+      transition-duration: 0s !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}

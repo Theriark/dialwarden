@@ -1,4 +1,6 @@
-// Page titles follow one pattern: "Section · Dialwarden".
+/** The document title: the section first, then the product name. */
 export function pageTitle(section?: string): string {
-  return section ? `${section} · Dialwarden` : "Dialwarden";
+  return section === undefined || section === ""
+    ? "Dialwarden"
+    : `${section} · Dialwarden`;
 }
