@@ -1,8 +1,19 @@
 // The first-run import streams the export file as the request body, with the
 // passphrase and the setup token in headers (routes/auth.ts). XMLHttpRequest
 // is used only here, for the upload progress fetch does not report.
+import { isPrintableAscii } from "../lib/passphrase";
 import { ApiError } from "./client";
 import type { ApiErrorBody, ImportResult } from "./schema";
+
+/** The server's validation answer, for a passphrase a header cannot hold. */
+function passphraseRefused(): ApiError {
+  return new ApiError(400, {
+    error: "validation",
+    issues: [
+      { path: "passphrase", message: "printable ASCII characters only" },
+    ],
+  });
+}
 
 export function uploadImport(
   file: File,
@@ -11,6 +22,10 @@ export function uploadImport(
   onProgress: (fraction: number) => void,
 ): Promise<ImportResult> {
   return new Promise((resolve, reject) => {
+    if (!isPrintableAscii(passphrase)) {
+      reject(passphraseRefused());
+      return;
+    }
     const request = new XMLHttpRequest();
     request.open("POST", "/api/v1/setup/import");
     request.setRequestHeader("content-type", "application/octet-stream");

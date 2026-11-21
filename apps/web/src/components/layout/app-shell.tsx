@@ -6,6 +6,7 @@ import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Outlet, useMatches, useRouter } from "@tanstack/react-router";
 import {
+  Info,
   LogOut,
   Menu as MenuIcon,
   Monitor,
@@ -55,6 +56,21 @@ function usePageTitle(): string | undefined {
     document.title = pageTitle(title);
   }, [title]);
   return title;
+}
+
+/**
+ * Once the local session is gone (a sign-out, or a query that learnt the
+ * server session ended), the route guard runs again and sends the user to
+ * sign in with the current page as the redirect.
+ */
+function useSignedOutRedirect(): void {
+  const router = useRouter();
+  const user = useSessionUser();
+  useEffect(() => {
+    if (user === null) {
+      void router.invalidate();
+    }
+  }, [router, user]);
 }
 
 function themeIcon(preference: ThemePreference): LucideIcon {
@@ -151,6 +167,12 @@ function UserMenu() {
             <Link to="/settings/profile">
               <UserRound className="size-4" aria-hidden="true" />
               Profile
+            </Link>
+          </Menu.Item>
+          <Menu.Item asChild className={MENU_ITEM}>
+            <Link to="/about">
+              <Info className="size-4" aria-hidden="true" />
+              About
             </Link>
           </Menu.Item>
           <Menu.Item
@@ -285,6 +307,7 @@ function PhoneTabs() {
 
 export function AppShell() {
   const title = usePageTitle();
+  useSignedOutRedirect();
   const wide = useMediaQuery("(min-width: 1024px)");
   const phone = !useMediaQuery("(min-width: 640px)");
   const [railPreferred, setRailPreferred] = useState(readNavPreference);

@@ -26,6 +26,52 @@ const MESSAGES = new Map<string, string>([
   ["validation", "Some fields are not valid."],
 ]);
 
+/** The fields the P1 screens send, as the subject of a sentence. */
+const FIELD_WORDS = new Map<string, string>([
+  ["email", "The e-mail address"],
+  ["name", "The name"],
+  ["password", "The password"],
+  ["currentPassword", "The current password"],
+  ["newPassword", "The new password"],
+  ["passphrase", "The passphrase"],
+  ["x-dialwarden-passphrase", "The passphrase"],
+  ["x-dialwarden-setup-token", "The setup token"],
+  ["token", "The licence key"],
+  ["code", "The code"],
+  ["recoveryCode", "The recovery code"],
+  ["challenge", "The sign-in step"],
+]);
+
+export interface ValidationIssue {
+  path: string;
+  message: string;
+}
+
+/**
+ * One plain sentence for a validation issue. The server's own text (zod) names
+ * sizes and formats in its own words; the common ones become sentences and
+ * the rest keep the server's text after the field name.
+ */
+export function issueSentence(issue: ValidationIssue): string {
+  const subject =
+    FIELD_WORDS.get(issue.path) ??
+    (issue.path === "" ? "The input" : `The field ${issue.path}`);
+  const text = issue.message;
+  if (/^too small/i.test(text)) {
+    return `${subject} is too short.`;
+  }
+  if (/^too big/i.test(text)) {
+    return `${subject} is too long.`;
+  }
+  if (/printable ascii/i.test(text)) {
+    return `${subject} may use only letters, digits, spaces and the punctuation of a US keyboard.`;
+  }
+  if (/^invalid email/i.test(text)) {
+    return `${subject} is not valid.`;
+  }
+  return `${subject} is not valid: ${text}.`;
+}
+
 function retryText(seconds: number): string {
   if (seconds >= 120) {
     return `${Math.ceil(seconds / 60)} minutes`;
@@ -52,7 +98,7 @@ export function errorMessage(error: unknown): string {
       const issues = error.body?.issues ?? [];
       const first = issues.at(0);
       if (first !== undefined) {
-        return `${first.path || "input"}: ${first.message}`;
+        return issueSentence(first);
       }
     }
     const known = MESSAGES.get(error.code);
@@ -73,7 +119,7 @@ export function fieldErrors(error: unknown): Map<string, string> {
   if (error instanceof ApiError && error.code === "validation") {
     for (const issue of error.body?.issues ?? []) {
       if (!out.has(issue.path)) {
-        out.set(issue.path, issue.message);
+        out.set(issue.path, issueSentence(issue));
       }
     }
   }

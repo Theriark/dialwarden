@@ -1,6 +1,6 @@
 // Session helpers shared by the sign-in, setup and shell code.
 import { useQuery, type QueryClient } from "@tanstack/react-query";
-import { api, setCsrf } from "./client";
+import { api, ApiError, setCsrf } from "./client";
 import { keys, sessionQuery } from "./queries";
 import type { SignedIn, User } from "./schema";
 
@@ -25,6 +25,25 @@ export async function signOut(client: QueryClient): Promise<void> {
   }
 }
 
+/** True for the answer that says the server session ended. */
+export function isSessionEnded(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    error.status === 401 &&
+    error.code === "unauthenticated"
+  );
+}
+
+/**
+ * Drops the local session once the server says it ended. The query client
+ * calls this for every query and mutation (app.tsx); the shell then sends the
+ * user to sign in again with the current page as the redirect.
+ */
+export function forgetSession(client: QueryClient): void {
+  setCsrf(null);
+  client.setQueryData(keys.session, null);
+}
+
 /** The signed-in user, or null outside a session. */
 export function useSessionUser(): User | null {
   const { data } = useQuery(sessionQuery());
@@ -36,27 +55,41 @@ export function useIsOwner(): boolean {
   return user?.role === "owner";
 }
 
-/** The second sign-in step challenge, kept in memory only (never in the URL). */
+/**
+ * The second sign-in step challenge, kept in memory only (never in the URL).
+ * Reading never clears it, because the page reads it in a state initialiser
+ * that StrictMode calls twice; the page clears it when the step ends, expires
+ * or is restarted.
+ */
 let pendingChallenge: string | null = null;
 
 export function setPendingChallenge(value: string | null): void {
   pendingChallenge = value;
 }
 
-export function takePendingChallenge(): string | null {
+export function readPendingChallenge(): string | null {
   return pendingChallenge;
 }
 
 /**
- * A redirect target after sign-in: same-origin paths only, so the search
- * parameter can never send the browser somewhere else.
+ * A redirect target after sign-in: a same-origin path only, so the search
+ * parameter can never send the browser somewhere else. The browser's own URL
+ * parser decides, so characters it drops (tabs, newlines) or treats as a
+ * separator (a backslash) cannot turn a path into another origin.
  */
 export function safeRedirect(target: string | undefined): string {
   if (target === undefined || !target.startsWith("/")) {
     return "/";
   }
-  if (target.startsWith("//") || target.startsWith("/\\")) {
+  const origin = window.location.origin;
+  let url: URL;
+  try {
+    url = new URL(target, origin);
+  } catch {
     return "/";
   }
-  return target;
+  if (url.origin !== origin) {
+    return "/";
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
 }

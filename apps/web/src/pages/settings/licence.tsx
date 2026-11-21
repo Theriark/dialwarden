@@ -2,7 +2,12 @@
 // 30-day warning, paste and remove (owner), and the owner-only switch
 // "Use the Free plan on this instance" for a licence managed by the
 // environment (dev-work-plan P1-A step 6).
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { KeyRound, Server, Upload } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api } from "../../api/client";
@@ -69,6 +74,16 @@ export function stateKind(state: LicenceState): BadgeKind {
 const LIST_ICON = "size-4 shrink-0 text-primary";
 const UI_OVERRIDES =
   "A key added in the UI decides while it is stored. Remove it to use the environment licence again.";
+
+/**
+ * A licence change answers the new entitlement; the plan badge of About
+ * (/healthz) and the editable servers of the Free hint follow it.
+ */
+function applyEntitlement(client: QueryClient, data: Entitlement): void {
+  client.setQueryData(keys.entitlement, data);
+  void client.invalidateQueries({ queryKey: keys.health });
+  void client.invalidateQueries({ queryKey: keys.editable });
+}
 
 function kindLabel(kind: "customer" | "internal-dev" | null): string {
   if (kind === "customer") {
@@ -206,7 +221,7 @@ function PasteCard({ entitlement }: { entitlement: Entitlement }) {
         body: { token: value },
       }),
     onSuccess: (data) => {
-      client.setQueryData(keys.entitlement, data);
+      applyEntitlement(client, data);
       setPasted("");
       toast.push({
         kind: data.plan === "paid" ? "success" : "info",
@@ -218,7 +233,7 @@ function PasteCard({ entitlement }: { entitlement: Entitlement }) {
   const remove = useMutation({
     mutationFn: () => api<Entitlement>("/api/v1/licence", { method: "DELETE" }),
     onSuccess: (data) => {
-      client.setQueryData(keys.entitlement, data);
+      applyEntitlement(client, data);
       setRemoveOpen(false);
       toast.push({ kind: "success", title: "Licence removed" });
     },
@@ -306,7 +321,7 @@ function EnvironmentCard({ entitlement }: { entitlement: Entitlement }) {
         body: { ignored },
       }),
     onSuccess: (data) => {
-      client.setQueryData(keys.entitlement, data);
+      applyEntitlement(client, data);
       toast.push({
         kind: "success",
         title: data.envLicence.ignored

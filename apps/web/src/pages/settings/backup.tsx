@@ -28,8 +28,12 @@ import {
   formatBytes,
   formatDateTime,
 } from "../../lib/format";
+import {
+  PASSPHRASE_HELP,
+  passphraseProblem,
+  passphraseReady,
+} from "../../lib/passphrase";
 
-const MIN_PASSPHRASE = 12;
 const APP_SECRET_TEXT =
   "This instance generated DATA_DIR/app-secret.key at first start. A backup restores only with the same key, so keep a copy outside this server.";
 const RETENTION_TEXT =
@@ -184,9 +188,10 @@ function ExportDialog({
         <PasswordField
           id="export-passphrase"
           label="Passphrase"
-          help={`At least ${MIN_PASSPHRASE} printable characters.`}
+          help={PASSPHRASE_HELP}
           autoComplete="off"
           value={first}
+          error={passphraseProblem(first) ?? undefined}
           onChange={(event) => {
             setFirst(event.target.value);
           }}
@@ -206,7 +211,7 @@ function ExportDialog({
             type="submit"
             variant="primary"
             loading={exportBackup.isPending}
-            disabled={first.length < MIN_PASSPHRASE || first !== again}
+            disabled={!passphraseReady(first) || first !== again}
             icon={<Download className="size-4" aria-hidden="true" />}
           >
             Export

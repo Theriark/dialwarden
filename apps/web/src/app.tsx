@@ -1,15 +1,37 @@
 // Providers around the router: TanStack Query, the theme, tooltips, toasts.
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+  type DefaultOptions,
+} from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiError } from "./api/client";
+import { forgetSession, isSessionEnded } from "./api/session";
 import { ToastProvider } from "./components/ui/toast";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { createAppRouter } from "./router";
 import { ThemeProvider } from "./theme/theme-provider";
 
-export function createQueryClient(): QueryClient {
-  return new QueryClient({
+/**
+ * The query client of the app. Whenever a query or a mutation answers that the
+ * server session ended, the local session is dropped and the shell sends the
+ * user to sign in again. The session query itself treats 401 as signed out,
+ * so it never reaches these handlers.
+ */
+export function createQueryClient(
+  queries: DefaultOptions["queries"] = {},
+): QueryClient {
+  const ended = (error: unknown) => {
+    if (isSessionEnded(error)) {
+      forgetSession(client);
+    }
+  };
+  const client = new QueryClient({
+    queryCache: new QueryCache({ onError: ended }),
+    mutationCache: new MutationCache({ onError: ended }),
     defaultOptions: {
       queries: {
         // A 4xx answer does not change on retry; a network blip may.
@@ -20,13 +42,15 @@ export function createQueryClient(): QueryClient {
           return count < 2;
         },
         refetchOnWindowFocus: false,
+        ...queries,
       },
     },
   });
+  return client;
 }
 
 export function App() {
-  const [queryClient] = useState(createQueryClient);
+  const [queryClient] = useState(() => createQueryClient());
   const [router] = useState(() => createAppRouter(queryClient));
   return (
     <QueryClientProvider client={queryClient}>

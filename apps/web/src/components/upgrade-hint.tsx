@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 import type { PaymentRequiredBody } from "../api/schema";
 import { cn } from "../lib/cn";
 
-const FEATURE_WORDS = new Map<string, string>([
+export const FEATURE_WORDS = new Map<string, string>([
   ["presets.bulk", "applying presets to many servers at once"],
   ["schedules", "scheduled changes"],
   ["drift.background", "background drift checks"],
@@ -21,7 +21,7 @@ const FEATURE_WORDS = new Map<string, string>([
   ["assistant", "the settings assistant"],
 ]);
 
-const LIMIT_WORDS = new Map<string, string>([
+export const LIMIT_WORDS = new Map<string, string>([
   ["servers", "editable servers"],
   ["users", "users"],
   ["historyVisible", "visible versions"],

@@ -218,9 +218,11 @@ function EnrolDialog({
         body: { code: code.replace(/\s/g, "") },
       }),
     onSuccess: (result) => {
+      // The session is refreshed only when the user has saved the codes
+      // (close below): a refetch now would show totpEnabled at once, and the
+      // codes are shown only this once.
       setCodes(result.recoveryCodes);
       setStep("codes");
-      void client.invalidateQueries({ queryKey: keys.session });
     },
   });
 
@@ -261,6 +263,7 @@ function EnrolDialog({
       enrol.reset();
       enable.reset();
       if (step === "codes") {
+        void client.invalidateQueries({ queryKey: keys.session });
         toast.push({ kind: "success", title: "Two-factor sign-in is on" });
       }
     }
@@ -429,17 +432,23 @@ function DisableDialog({
   const toast = useToast();
   const [phrase, setPhrase] = useState("");
   const [code, setCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
+  // The server takes a code or a recovery code (routes/auth.ts), so a user
+  // who lost the authenticator app can still turn two-factor off.
   const disable = useMutation({
     mutationFn: () =>
       api<undefined>("/api/v1/auth/totp/disable", {
         method: "POST",
-        body: { password: phrase, code: code.replace(/\s/g, "") },
+        body: useRecovery
+          ? { password: phrase, recoveryCode: code.trim() }
+          : { password: phrase, code: code.replace(/\s/g, "") },
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: keys.session });
       onOpenChange(false);
       setPhrase("");
       setCode("");
+      setUseRecovery(false);
       toast.push({ kind: "success", title: "Two-factor sign-in is off" });
     },
   });
@@ -475,17 +484,42 @@ function DisableDialog({
             setPhrase(event.target.value);
           }}
         />
-        <TextField
-          id="totp-disable-code"
-          label="Code from the app"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          className="font-mono"
-          value={code}
-          onChange={(event) => {
-            setCode(event.target.value);
+        {useRecovery ? (
+          <TextField
+            id="totp-disable-recovery"
+            label="Recovery code"
+            help="One of the codes shown when two-factor sign-in was turned on. Each works once."
+            autoComplete="one-time-code"
+            className="font-mono"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+            }}
+          />
+        ) : (
+          <TextField
+            id="totp-disable-code"
+            label="Code from the app"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            className="font-mono"
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+            }}
+          />
+        )}
+        <button
+          type="button"
+          className="self-start text-sm text-primary underline underline-offset-2"
+          onClick={() => {
+            setUseRecovery((value) => !value);
+            setCode("");
+            disable.reset();
           }}
-        />
+        >
+          {useRecovery ? "Use the authenticator app" : "Use a recovery code"}
+        </button>
       </div>
     </ConfirmDialog>
   );
@@ -505,6 +539,9 @@ function TwoFactorCard({ user }: { user: User }) {
       Off
     </Badge>
   );
+  // Both dialogs live for the whole card, outside the totpEnabled branches:
+  // the session refetch that flips the badge must never unmount the recovery
+  // codes while they are on screen.
   return (
     <Card
       title="Two-factor sign-in"
@@ -526,7 +563,6 @@ function TwoFactorCard({ user }: { user: User }) {
               Turn off
             </Button>
           </div>
-          <DisableDialog open={disableOpen} onOpenChange={setDisableOpen} />
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -543,9 +579,10 @@ function TwoFactorCard({ user }: { user: User }) {
               Turn on
             </Button>
           </div>
-          <EnrolDialog open={enrolOpen} onOpenChange={setEnrolOpen} />
         </div>
       )}
+      <EnrolDialog open={enrolOpen} onOpenChange={setEnrolOpen} />
+      <DisableDialog open={disableOpen} onOpenChange={setDisableOpen} />
     </Card>
   );
 }

@@ -7,10 +7,10 @@ import { api, ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
 import type { SignedIn } from "../api/schema";
 import {
+  readPendingChallenge,
   rememberSession,
   safeRedirect,
   setPendingChallenge,
-  takePendingChallenge,
 } from "../api/session";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -21,15 +21,23 @@ import type { LoginSearch } from "./login";
 export function TwoFactorPage({ search }: { search: LoginSearch }) {
   const client = useQueryClient();
   const router = useRouter();
-  const [challenge] = useState(takePendingChallenge);
+  const [challenge] = useState(readPendingChallenge);
   const [useRecovery, setUseRecovery] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
 
+  // A dead challenge is dropped, so coming back here asks for the password.
   const restart = (
-    <Link to="/login" search={search} className="font-medium">
+    <Link
+      to="/login"
+      search={search}
+      className="font-medium"
+      onClick={() => {
+        setPendingChallenge(null);
+      }}
+    >
       Start the sign-in again
     </Link>
   );
@@ -61,6 +69,7 @@ export function TwoFactorPage({ search }: { search: LoginSearch }) {
       router.history.push(safeRedirect(search.redirect));
     } catch (error) {
       if (error instanceof ApiError && error.code === "challenge_expired") {
+        setPendingChallenge(null);
         setExpired(true);
       } else {
         setFailure(errorMessage(error));

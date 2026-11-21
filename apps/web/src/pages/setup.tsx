@@ -18,10 +18,14 @@ import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { PasswordField, TextField } from "../components/ui/field";
 import { useToast } from "../components/ui/toast";
+import {
+  PASSPHRASE_HELP,
+  passphraseProblem,
+  passphraseReady,
+} from "../lib/passphrase";
 import { AuthFrame } from "./auth-frame";
 
 const MIN_PASSWORD = 12;
-const MIN_PASSPHRASE = 12;
 const TOKEN_HELP =
   "Printed in the server log at every start until an owner exists, and stored in DATA_DIR/setup-token.";
 const IMPORT_TEXT =
@@ -289,9 +293,10 @@ export function SetupPage() {
             <PasswordField
               id="setup-import-passphrase"
               label="Passphrase of the export"
-              help={`At least ${MIN_PASSPHRASE} characters, as entered at export time.`}
+              help={`${PASSPHRASE_HELP} As entered at export time.`}
               autoComplete="off"
               value={passphrase}
+              error={passphraseProblem(passphrase) ?? undefined}
               onChange={(event) => {
                 setPassphrase(event.target.value);
               }}
@@ -314,7 +319,7 @@ export function SetupPage() {
               loading={uploading}
               disabled={
                 file === null ||
-                passphrase.length < MIN_PASSPHRASE ||
+                !passphraseReady(passphrase) ||
                 setupKey.trim() === "" ||
                 busy
               }
