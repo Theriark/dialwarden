@@ -1,5 +1,4 @@
 import * as S from "@radix-ui/react-switch";
-import { cn } from "../../lib/cn";
 
 interface SwitchFieldProps {
   id: string;
@@ -43,7 +42,7 @@ export function SwitchField({
         disabled={disabled}
         onCheckedChange={onCheckedChange}
         aria-describedby={description !== undefined ? descriptionId : undefined}
-        className={cn(TRACK)}
+        className={TRACK}
       >
         <S.Thumb className={THUMB} />
       </S.Root>
