@@ -1,0 +1,13 @@
+version: 2
+# Every entry targets development: all work enters there (docs/ci-cd.md), never
+# stage or main. Phase P0 adds the npm (pnpm workspace, directory /) and docker
+# (base image digest in the Dockerfile) entries together with those files.
+updates:
+  # Every action is pinned to a full commit SHA with the version in a comment;
+  # Dependabot updates the SHA and that comment.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    target-branch: development
