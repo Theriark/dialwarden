@@ -23,10 +23,10 @@ export const PASSWORD_LENGTH = 24;
 export const SEED_ENVIRONMENTS = ["dev", "stage"];
 export const TASK_CLIENT = "/opt/pi-crews/shared/theriark_crew_task_client.py";
 export const DEFAULT_EMAIL = "owner@dialwarden.test";
-export const DEFAULT_REPO = "dialwarden-app";
+export const DEFAULT_REPO = "dialwarden";
 
 const USAGE =
-  "usage: node tools/seed/seed-accounts.mjs --base-url https://app-stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment)";
+  "usage: node tools/seed/seed-accounts.mjs --base-url https://stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment)";
 const SETUP_TOKEN = /^[0-9a-f]{64}$/;
 const VARIABLE_NAME = /\b[A-Z][A-Z0-9_]*_(?:EMAIL|PASSWORD)\b/g;
 
@@ -47,8 +47,8 @@ export function generatePassword(length = PASSWORD_LENGTH) {
 
 /** The only hosts the seed tool talks to. */
 export const SEED_HOSTS = {
-  dev: "app-dev-dialwarden.theriark.dev",
-  stage: "app-stg-dialwarden.theriark.dev",
+  dev: "dev-dialwarden.theriark.dev",
+  stage: "stg-dialwarden.theriark.dev",
 };
 
 /** Development or Stage only: https, the exact host and no port. */

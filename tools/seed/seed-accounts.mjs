@@ -4,7 +4,7 @@
 // Development the owner comes from DEV_SEED_OWNER_EMAIL and
 // DEV_SEED_OWNER_PASSWORD at start instead. See src/lib.mjs.
 //   node tools/seed/seed-accounts.mjs \
-//     --base-url https://app-stg-dialwarden.theriark.dev --env stage \
+//     --base-url https://stg-dialwarden.theriark.dev --env stage \
 //     --setup-token TOKEN
 // TOKEN is in DATA_DIR/setup-token or the start log of the Stage container.
 // Stage is seeded after Gate 2 by the operator or the gate script, never by

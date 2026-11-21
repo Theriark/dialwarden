@@ -16,8 +16,8 @@ import {
   variableNames,
 } from "./lib.mjs";
 
-const DEV_URL = "https://app-dev-dialwarden.theriark.dev";
-const STAGE_URL = "https://app-stg-dialwarden.theriark.dev";
+const DEV_URL = "https://dev-dialwarden.theriark.dev";
+const STAGE_URL = "https://stg-dialwarden.theriark.dev";
 const NAMES = ["DIALWARDEN_DEV_OWNER_EMAIL", "DIALWARDEN_DEV_OWNER_PASSWORD"];
 /** A token of the right form that no app holds. */
 const UNKNOWN_TOKEN = "0".repeat(64);
@@ -91,7 +91,7 @@ describe("seed-accounts", () => {
     expect(valueOf(sent, "--action")).toBe("browser_account");
     expect(valueOf(sent, "--label")).toBe("owner");
     expect(valueOf(sent, "--env")).toBe("dev");
-    expect(valueOf(sent, "--repo")).toBe("dialwarden-app");
+    expect(valueOf(sent, "--repo")).toBe("dialwarden");
     const password = valueOf(sent, "--password");
     expect(password).toHaveLength(24);
     expect(text()).toContain(NAMES[1]);
@@ -133,9 +133,9 @@ describe("seed-accounts", () => {
   // the new owner password.
   it("refuses look-alike hosts and ports", () => {
     const lookAlikes = [
-      "https://app-dev-dialwarden.example.net",
-      "https://app-dev-x.evil.example",
-      "https://app-dev-dialwarden.theriark.dev.evil.example",
+      "https://dev-dialwarden.example.net",
+      "https://dev-x.evil.example",
+      "https://dev-dialwarden.theriark.dev.evil.example",
       `${DEV_URL}:8443`,
     ];
     for (const url of lookAlikes) {
