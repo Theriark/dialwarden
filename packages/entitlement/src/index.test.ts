@@ -6,6 +6,7 @@ import {
   resolveEntitlement,
   ruleDates,
   type Entitlement,
+  type LicenceEvaluation,
 } from "./index.js";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
@@ -67,18 +68,17 @@ describe("ruleDates", () => {
 });
 
 describe("EntitlementGate", () => {
+  const activeEnv: LicenceEvaluation = {
+    state: "active",
+    payload: null,
+    lidHash8: "abcdef01",
+    last6: "xyz123",
+    reason: null,
+  };
   const entitlement = (paid: boolean): Entitlement =>
     resolveEntitlement({
       ui: null,
-      env: paid
-        ? {
-            state: "active",
-            payload: null,
-            lidHash8: "abcdef01",
-            last6: "xyz123",
-            reason: null,
-          }
-        : null,
+      env: paid ? activeEnv : null,
       envIgnored: false,
       buildDate: null,
       featureBaseline: null,

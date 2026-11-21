@@ -107,9 +107,7 @@ export interface SignedIn {
 
 /** The dw_session cookie pair (name=value) from a response. */
 export function sessionCookie(response: LightMyRequestResponse): string {
-  const found = response.cookies.find(
-    (cookie) => cookie.name === "dw_session",
-  );
+  const found = response.cookies.find((cookie) => cookie.name === "dw_session");
   if (found === undefined) {
     throw new Error("no session cookie in the response");
   }
