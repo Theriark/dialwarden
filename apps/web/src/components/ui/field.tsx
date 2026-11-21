@@ -66,14 +66,18 @@ export function FieldFrame({
         </p>
       ) : null}
       {help !== undefined && help !== "" ? (
-        <p id={`${id}-help`} className="text-sm text-fg-muted">{help}</p>
+        <p id={`${id}-help`} className="text-sm text-fg-muted">
+          {help}
+        </p>
       ) : null}
     </div>
   );
 }
 
-export interface TextFieldProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
+export interface TextFieldProps extends Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "id"
+> {
   id: string;
   label: string;
   help?: string | undefined;
@@ -153,8 +157,10 @@ export function PasswordField({
   );
 }
 
-export interface TextAreaFieldProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id"> {
+export interface TextAreaFieldProps extends Omit<
+  TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "id"
+> {
   id: string;
   label: string;
   help?: string | undefined;

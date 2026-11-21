@@ -128,7 +128,9 @@ function PlanCard({ entitlement }: { entitlement: Entitlement }) {
       }
     >
       {licence !== null && licence.warn30 && until !== null ? (
-        <Alert kind="warning" title="Updates end soon">{warning}</Alert>
+        <Alert kind="warning" title="Updates end soon">
+          {warning}
+        </Alert>
       ) : null}
       {licence !== null ? (
         <dl className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
@@ -322,9 +324,7 @@ function EnvironmentCard({ entitlement }: { entitlement: Entitlement }) {
     <Card
       title="Licence managed by the environment"
       description="DIALWARDEN_LICENCE is set for this instance. It cannot be removed here."
-      aside={
-        <Badge kind={stateKind(env.state)}>{stateLabel(env.state)}</Badge>
-      }
+      aside={<Badge kind={stateKind(env.state)}>{stateLabel(env.state)}</Badge>}
     >
       {env.state !== "active" ? <Alert kind="warning">{unusable}</Alert> : null}
       {overridden ? <Alert kind="info">{UI_OVERRIDES}</Alert> : null}

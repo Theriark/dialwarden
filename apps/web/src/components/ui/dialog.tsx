@@ -146,7 +146,9 @@ export function ConfirmDialog({
           {children}
           <div className="flex flex-wrap justify-end gap-2 pt-2">
             <AD.Cancel asChild>
-              <Button variant="ghost" disabled={loading}>Cancel</Button>
+              <Button variant="ghost" disabled={loading}>
+                Cancel
+              </Button>
             </AD.Cancel>
             <Button
               variant={destructive ? "destructive" : "primary"}
