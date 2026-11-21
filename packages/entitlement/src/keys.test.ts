@@ -8,11 +8,14 @@ const pem = (key: KeyObject) =>
   key.export({ format: "pem", type: "spki" }).toString();
 
 describe("key slots", () => {
-  it("the committed slots hold no key in this build", () => {
-    // Production waits for Ruben (people dependency 5), development for D5.
+  it("the committed slots load, with no production key yet", () => {
+    // Production waits for Ruben (people dependency 5). The development slots
+    // get their key in P1-C, so only their form is checked here.
     const ring = loadKeyRing();
     expect(ring.production).toHaveLength(0);
-    expect(ring.development).toHaveLength(0);
+    for (const key of ring.development) {
+      expect(key.asymmetricKeyType).toBe("ed25519");
+    }
   });
 
   it("a comment-only slot is empty", () => {

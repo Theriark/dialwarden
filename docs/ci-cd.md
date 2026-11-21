@@ -82,10 +82,14 @@ The image is built once, on the merge to development, by the job
 - `SOURCE_DATE_EPOCH` is the commit time of the built commit (`git log -1 --format=%ct`),
   passed as a build argument and with `rewrite-timestamp=true`, so layer and config
   timestamps come from the commit and the build is repeatable.
-- The Dockerfile turns the build arguments `REVISION`, `SOURCE_DATE_EPOCH` and
-  `FEATURE_BASELINE_EPOCH` into `DIALWARDEN_REVISION`, `DIALWARDEN_BUILD_EPOCH`
-  and `DIALWARDEN_FEATURE_BASELINE_EPOCH`, which the entitlement module reads and
-  `/healthz` reports as `revision`, `buildDate` and `featureBaseline`. Paid is
+- The Dockerfile writes the build arguments `REVISION`, `SOURCE_DATE_EPOCH` and
+  `FEATURE_BASELINE_EPOCH` into `/app/build-info.json` (owned by root, mode
+  0444) and fails when either date is empty. In production the server reads
+  the dates only from that file (never from the environment, so `docker run -e`
+  cannot move them) and refuses to start without them; `/healthz` reports them
+  as `revision`, `buildDate` and `featureBaseline`. Outside production (tests, a
+  run from source) the server reads `DIALWARDEN_REVISION`,
+  `DIALWARDEN_BUILD_EPOCH` and `DIALWARDEN_FEATURE_BASELINE_EPOCH` instead. Paid is
   active when the licence signature is valid, the licence is not revoked and the
   build is covered by the licence `updatesUntil` (rnd-report-1 3.3, with the
   CRA-safe baseline rule of P1). Stage and Production run the same digest, so

@@ -330,6 +330,65 @@ describe("login", () => {
     );
     expect(elsewhere.statusCode).toBe(200);
   });
+
+  // Threat tests T2 (THE-2134 M1, code review H2): a burst of parallel
+  // attempts gets no more tries than one at a time.
+  it("counts parallel wrong passwords before any hash check ends", async () => {
+    const clock = manualClock();
+    current = await testApp({ now: clock.now });
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const address = "203.0.113.9";
+    const burst = await Promise.all(
+      Array.from({ length: 30 }, () =>
+        login(app, owner.email, "wrong-password-123", address),
+      ),
+    );
+    const codes = burst.map((res) => res.statusCode);
+    const refused = codes.filter((code) => code === 401);
+    expect(refused.length).toBeLessThanOrEqual(MAX_FAILURES_PER_ACCOUNT);
+    expect(codes.filter((code) => code === 429)).toHaveLength(
+      30 - refused.length,
+    );
+    const blocked = await login(app, owner.email, owner.password, address);
+    expect(blocked.statusCode).toBe(429);
+
+    clock.advance(WINDOW_MS + 1000);
+    const later = await login(app, owner.email, owner.password, address);
+    expect(later.statusCode).toBe(200);
+  });
+
+  it("counts parallel attempts on unknown accounts per address", async () => {
+    current = await testApp();
+    const { app } = current;
+    const address = "203.0.113.11";
+    const burst = await Promise.all(
+      Array.from({ length: 40 }, (_, i) =>
+        login(app, `nobody${i}@dialwarden.test`, "wrong-password-1", address),
+      ),
+    );
+    const refused = burst.filter((res) => res.statusCode === 401);
+    expect(refused.length).toBeLessThanOrEqual(MAX_FAILURES_PER_ADDRESS);
+    const limited = burst.filter((res) => res.statusCode === 429);
+    expect(limited).toHaveLength(40 - refused.length);
+  });
+
+  // Threat test T5.3 (THE-2134 L1, code review M2): five wrong passwords from
+  // one address do not lock the owner out from another one.
+  it("does not lock the owner out from another address", async () => {
+    current = await testApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const wrong = "wrong-password-123";
+    for (let i = 0; i < MAX_FAILURES_PER_ACCOUNT; i += 1) {
+      const res = await login(app, owner.email, wrong, "198.51.100.7");
+      expect(res.statusCode).toBe(401);
+    }
+    const there = await login(app, owner.email, owner.password, "198.51.100.7");
+    expect(there.statusCode).toBe(429);
+    const here = await login(app, owner.email, owner.password, "198.51.100.8");
+    expect(here.statusCode).toBe(200);
+  });
 });
 
 describe("TOTP", () => {
@@ -437,6 +496,57 @@ describe("TOTP", () => {
     // Five failures also lock the account for the window.
     const again = await login(app, owner.email, owner.password);
     expect(again.statusCode).toBe(429);
+  });
+});
+
+// Threat tests T6 (THE-2134 L2): turning TOTP on or off ends the other
+// sessions, so a session stolen before stays no longer valid.
+describe("TOTP changes end the other sessions", () => {
+  it("on enable and on disable", async () => {
+    const clock = manualClock();
+    current = await testApp({ now: clock.now });
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const sessionStatus = (headers: Record<string, string>) =>
+      app
+        .inject({ method: "GET", url: "/api/v1/auth/session", headers })
+        .then((res) => res.statusCode);
+
+    const b = sessionHeaders(await login(app, owner.email, owner.password));
+    const enrol = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/totp/enrol",
+      headers: headersOf(owner),
+      payload: { password: owner.password },
+    });
+    const { secret } = enrol.json<{ secret: string }>();
+    const enable = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/totp/enable",
+      headers: headersOf(owner),
+      payload: { code: codeAt(secret, clock.now()) },
+    });
+    expect(enable.statusCode).toBe(200);
+    expect(await sessionStatus(b)).toBe(401);
+    expect(await sessionStatus(headersOf(owner))).toBe(200);
+
+    clock.advance(30_000);
+    const challenge = await challengeOf(app, owner.email, owner.password);
+    const signedIn = await secondFactor(app, challenge, {
+      code: codeAt(secret, clock.now()),
+    });
+    expect(signedIn.statusCode).toBe(200);
+    const c = sessionHeaders(signedIn);
+    clock.advance(30_000);
+    const disable = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/totp/disable",
+      headers: headersOf(owner),
+      payload: { password: owner.password, code: codeAt(secret, clock.now()) },
+    });
+    expect(disable.statusCode).toBe(204);
+    expect(await sessionStatus(c)).toBe(401);
+    expect(await sessionStatus(headersOf(owner))).toBe(200);
   });
 });
 

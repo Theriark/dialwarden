@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Writable } from "node:stream";
 import { testKeyRing } from "@dialwarden/entitlement/testing";
 import { afterEach, describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   BUILD_ENV,
   headersOf,
@@ -13,6 +14,8 @@ import {
   type TestApp,
 } from "../test/helpers.js";
 import { buildApp } from "./app.js";
+
+/* eslint-disable security/detect-non-literal-fs-filename -- the test's own data folder */
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
 let current: TestApp | undefined;
@@ -172,5 +175,82 @@ describe("logs", () => {
     expect(text).not.toContain("probe-token-value");
     expect(text).not.toContain(owner.csrf);
     expect(text).not.toContain(owner.cookie.slice("dw_session=".length));
+  });
+
+  // Threat test T9 (THE-2134 L5): a database error logs its name and stack,
+  // never the query parameters its message carries.
+  it("cut query parameters from logged server errors", async () => {
+    const log = logCapture();
+    current = await testApp({
+      logStream: log.stream,
+      extraEnv: { LOG_LEVEL: "info" },
+      extend: (app) => {
+        const config = { auth: "public" as const };
+        app.get("/api/v1/test-throw", { config }, async () => {
+          throw new Error(
+            "Failed query: insert into sessions\nparams: MARKER-7f3a,other",
+          );
+        });
+      },
+    });
+    const response = await current.app.inject({
+      method: "GET",
+      url: "/api/v1/test-throw",
+    });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ error: "internal" });
+    const text = log.text();
+    expect(text).toContain("request failed");
+    expect(text).toContain("Failed query: insert into sessions");
+    expect(text).not.toContain("MARKER-7f3a");
+  });
+
+  it("redact secret fields three levels deep and keep error codes", async () => {
+    const log = logCapture();
+    current = await testApp({
+      logStream: log.stream,
+      extraEnv: { LOG_LEVEL: "info" },
+    });
+    const error = Object.assign(new Error("database is locked"), {
+      code: "SQLITE_BUSY",
+    });
+    current.app.log.info(
+      {
+        a: { b: { passwordHash: "probe-hash-value" } },
+        row: { totp_secret_enc: "probe-enc-value" },
+        err: error,
+      },
+      "redaction probe",
+    );
+    const text = log.text();
+    expect(text).not.toContain("probe-hash-value");
+    expect(text).not.toContain("probe-enc-value");
+    expect(text).toContain("SQLITE_BUSY");
+  });
+
+  // Code review M4: a handler that returns the wrong shape is a server bug.
+  it("answer a response that breaks its schema with a logged 500", async () => {
+    const log = logCapture();
+    current = await testApp({
+      logStream: log.stream,
+      extraEnv: { LOG_LEVEL: "info" },
+      extend: (app) => {
+        app.get(
+          "/api/v1/test-bad-response",
+          {
+            config: { auth: "public" },
+            schema: { response: { 200: z.object({ ok: z.boolean() }) } },
+          },
+          async () => ({ ok: "not a boolean" }),
+        );
+      },
+    });
+    const response = await current.app.inject({
+      method: "GET",
+      url: "/api/v1/test-bad-response",
+    });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ error: "internal" });
+    expect(log.text()).toContain("response serialization failed");
   });
 });

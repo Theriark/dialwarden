@@ -91,4 +91,21 @@ describe("feature registry on the server (contract C1)", () => {
       expect(route.auth, `${route.method} ${route.url}`).not.toBe("public");
     }
   });
+
+  it("every route with config.entitlement is listed under its feature", async () => {
+    current = await testApp({ extend: withProbe });
+    const listed = new Map<string, FeatureKey>();
+    for (const feature of FEATURES) {
+      for (const key of feature.routes) {
+        listed.set(key, feature.key);
+      }
+    }
+    const gated = current.app.ctx.routes.filter(
+      (route) => route.entitlement !== null && route.url !== PROBE_URL,
+    );
+    for (const route of gated) {
+      const key = `${route.method} ${route.url}`;
+      expect(listed.get(key), key).toBe(route.entitlement);
+    }
+  });
 });
