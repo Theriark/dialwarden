@@ -6,6 +6,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   cp,
+  link,
   mkdir,
   readdir,
   readFile,
@@ -17,6 +18,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import Database from "better-sqlite3";
 import { customerLicence, testKeyRing } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance } from "fastify";
@@ -31,6 +33,7 @@ import {
   type TestApp,
 } from "../../test/helpers.js";
 import { buildApp } from "../app.js";
+import { base32Decode, hotp, totpStep } from "../auth/totp.js";
 import { main } from "../cli.js";
 import { createAead } from "../crypto/aead.js";
 import { DB_FILE, LOCK_FILE } from "../db/store.js";
@@ -46,6 +49,7 @@ import {
   sha256File,
   verifyBackup,
 } from "./engine.js";
+import { exportArchive, MAX_ARCHIVE_BYTES } from "./archive.js";
 
 const DAY_MS = 86_400_000;
 const DRILL_PREFIX = "dialwarden-drill-";
@@ -184,7 +188,9 @@ describe("backup", () => {
     const sqlite = new Database(join(dataDir, DB_FILE));
     try {
       sqlite.exec("CREATE TABLE snapshots (sha256 TEXT NOT NULL)");
-      const insert = sqlite.prepare("INSERT INTO snapshots (sha256) VALUES (?)");
+      const insert = sqlite.prepare(
+        "INSERT INTO snapshots (sha256) VALUES (?)",
+      );
       insert.run(sha);
       insert.run(missing);
       const result = await runBackup({
@@ -205,8 +211,21 @@ describe("backup", () => {
         users: null,
       });
       const original = await stat(blobPath);
-      const linked = await stat(join(result.dir, ...relative.split("/")));
-      expect(linked.ino).toBe(original.ino);
+      const copied = join(result.dir, ...relative.split("/"));
+      const linked = await stat(copied);
+      expect(linked.size).toBe(original.size);
+      expect(await sha256File(copied)).toBe(sha);
+      // Same inode only where the file system has hard links (the engine
+      // falls back to a copy elsewhere, by design).
+      const probe = join(dataDir, "link-probe");
+      const canLink = await link(blobPath, probe).then(
+        () => true,
+        () => false,
+      );
+      if (canLink) {
+        await unlink(probe);
+        expect(linked.ino).toBe(original.ino);
+      }
 
       // Pruning the live blob never breaks the backup.
       await unlink(blobPath);
@@ -340,6 +359,7 @@ describe("backup", () => {
       await mkdir(join(root, "20261101-0000"));
       await utimes(join(root, "20261101-0000"), at(2), at(2));
       await mkdir(join(root, "20261121-0359"));
+      await utimes(join(root, "20261121-0359"), now, now);
       expect(await pruneBackups(dataDir, now)).toEqual(["20261101-0000"]);
       await rm(join(root, "20261121-0359"), { recursive: true });
 
@@ -397,6 +417,21 @@ describe("backup", () => {
       headers: headersOf(owner),
     });
     expect(unknown.statusCode).toBe(404);
+  });
+
+  it("refuses a second backup while one runs", async () => {
+    const { app, owner } = await seeded();
+    const post = () =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/system/backups",
+        headers: headersOf(owner),
+      });
+    const results = await Promise.all([post(), post()]);
+    const codes = results.map((res) => res.statusCode).sort();
+    expect(codes).toEqual([201, 409]);
+    const refused = results.find((res) => res.statusCode === 409);
+    expect(refused?.json()).toEqual({ error: "backup_running" });
   });
 
   it("starts the daily job and falls back to the default on a bad schedule", async () => {
@@ -459,6 +494,193 @@ describe("backup", () => {
         source: "ui",
       });
       expect((await upload(passphrase)).statusCode).toBe(409);
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  it("refuses a non-ASCII passphrase on export", async () => {
+    const { app, owner } = await seeded();
+    const exported = await app.inject({
+      method: "POST",
+      url: "/api/v1/system/backup-export",
+      headers: headersOf(owner),
+      payload: { passphrase: "pässwörd-1234-long" },
+    });
+    expect(exported.statusCode).toBe(400);
+    expect(exported.json()).toMatchObject({ error: "validation" });
+  });
+});
+
+/** POST /api/v1/setup/import with an archive body. */
+function importInto(
+  app: FastifyInstance,
+  body: Buffer | PassThrough,
+  passphrase: string,
+  headers: Record<string, string> = {},
+) {
+  return app.inject({
+    method: "POST",
+    url: "/api/v1/setup/import",
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-dialwarden-passphrase": passphrase,
+      ...headers,
+    },
+    payload: body,
+  });
+}
+
+async function collect(stream: AsyncGenerator<Buffer>): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+const PASSPHRASE = "synthetic-passphrase-1234";
+
+describe("first-run import", () => {
+  // Threat test T8 (THE-2134 L4): a header asking for heavy key derivation is
+  // refused before any derivation runs.
+  it("refuses key derivation parameters the exporter never writes", async () => {
+    current = await testApp();
+    const header = Buffer.concat([
+      Buffer.from("DWBX", "ascii"),
+      Buffer.from([1, 20, 16, 1]),
+      Buffer.alloc(28),
+    ]);
+    const body = Buffer.concat([header, Buffer.alloc(64)]);
+    const response = await importInto(current.app, body, PASSPHRASE);
+    expect(response.statusCode).toBe(422);
+    expect(response.json()).toMatchObject({ error: "import_failed" });
+  });
+
+  it("refuses an upload declared larger than the limit before storing it", async () => {
+    current = await testApp();
+    const { app, dataDir } = current;
+    const response = await importInto(app, Buffer.alloc(16), PASSPHRASE, {
+      "content-length": String(MAX_ARCHIVE_BYTES + 1),
+    });
+    expect(response.statusCode).toBe(413);
+    const staging = (await readdir(dataDir)).filter((name) =>
+      name.startsWith(".import-"),
+    );
+    expect(staging).toEqual([]);
+  });
+
+  it("runs one import at a time", async () => {
+    current = await testApp();
+    const { app } = current;
+    const slow = new PassThrough();
+    // inject starts a request only when it is awaited: then() starts it now.
+    const first = importInto(app, slow, PASSPHRASE).then((res) => res);
+    for (let i = 0; i < 100 && !app.ctx.importing; i += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(app.ctx.importing).toBe(true);
+    const second = await importInto(app, Buffer.alloc(64), PASSPHRASE);
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toEqual({ error: "import_running" });
+    slow.end(Buffer.from("not an archive"));
+    expect((await first).statusCode).toBe(422);
+    expect(app.ctx.importing).toBe(false);
+  });
+
+  it("refuses an export from a newer version and keeps the instance usable", async () => {
+    const { app, dataDir, owner } = await seeded();
+    const id = await backupNow(app, owner);
+    const copy = join(await scratch(), id);
+    await cp(join(backupsDir(dataDir), id), copy, { recursive: true });
+    const db = new Database(join(copy, DB_FILE));
+    db.prepare(
+      "INSERT INTO schema_migrations (id, checksum, applied_at) VALUES (?, ?, ?)",
+    ).run("9999_future", "0".repeat(64), "2027-01-01T00:00:00.000Z");
+    db.close();
+    const manifest = await readManifest(copy);
+    manifest.migrationId = "9999_future";
+    manifest.database.sha256 = await sha256File(join(copy, DB_FILE));
+    manifest.database.size = (await stat(join(copy, DB_FILE))).size;
+    await writeFile(join(copy, MANIFEST_FILE), JSON.stringify(manifest));
+    const archive = await collect(
+      exportArchive(copy, app.ctx.appKey.key, PASSPHRASE),
+    );
+
+    const fresh = await testApp();
+    try {
+      const response = await importInto(fresh.app, archive, PASSPHRASE);
+      expect(response.statusCode).toBe(422);
+      expect(response.json()).toMatchObject({
+        error: "import_failed",
+        reason: expect.stringContaining("newer"),
+      });
+      const setup = await fresh.app.inject({
+        method: "GET",
+        url: "/api/v1/setup",
+      });
+      expect(setup.json()).toEqual({ required: true });
+      const ready = await fresh.app.inject({ method: "GET", url: "/readyz" });
+      expect(ready.statusCode).toBe(200);
+    } finally {
+      await fresh.close();
+    }
+  });
+
+  // Code review M3: recovery codes keep working after an import into an
+  // instance with another APP_SECRET_KEY.
+  it("keeps recovery codes working after an import from another key", async () => {
+    const { app, owner } = await seeded();
+    const enrol = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/totp/enrol",
+      headers: headersOf(owner),
+      payload: { password: owner.password },
+    });
+    const { secret } = enrol.json<{ secret: string }>();
+    const code = hotp(base32Decode(secret), totpStep(new Date()));
+    const enable = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/totp/enable",
+      headers: headersOf(owner),
+      payload: { code },
+    });
+    expect(enable.statusCode).toBe(200);
+    const { recoveryCodes } = enable.json<{ recoveryCodes: string[] }>();
+    const exported = await app.inject({
+      method: "POST",
+      url: "/api/v1/system/backup-export",
+      headers: headersOf(owner),
+      payload: { passphrase: PASSPHRASE },
+    });
+    expect(exported.statusCode).toBe(200);
+
+    const fresh = await testApp();
+    try {
+      const imported = await importInto(
+        fresh.app,
+        exported.rawPayload,
+        PASSPHRASE,
+      );
+      expect(imported.statusCode).toBe(200);
+      const { reencrypted } = imported.json<{ reencrypted: number }>();
+      expect(reencrypted).toBeGreaterThan(0);
+      const sessions = fresh.app.ctx.store.sqlite
+        .prepare("SELECT count(*) AS n FROM sessions")
+        .get() as { n: number };
+      expect(sessions.n).toBe(0);
+      const login = await fresh.app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        payload: { email: owner.email, password: owner.password },
+      });
+      const { challenge } = login.json<{ challenge: string }>();
+      const recovered = await fresh.app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login/totp",
+        payload: { challenge, recoveryCode: recoveryCodes[0] },
+      });
+      expect(recovered.statusCode).toBe(200);
     } finally {
       await fresh.close();
     }

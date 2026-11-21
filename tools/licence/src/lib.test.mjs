@@ -147,6 +147,26 @@ describe("licence tool library", () => {
     expect(inspectLicence(token, stranger).signature).toBe("invalid");
     expect(inspectLicence("DW1.abc", key).signature).toBe("malformed");
   });
+
+  it("inspect answers malformed wherever the app parser refuses", () => {
+    const pair = newKeyPair();
+    const privateKey = readPrivateKey(pair.privatePem);
+    const key = readPublicKey(pair.publicPem);
+    const good = payload();
+    const noLid = { ...good };
+    delete noLid.lid;
+    const signedBadly = [{ ...good, v: 2 }, { ...good, maxServers: 0 }, noLid];
+    const tokens = signedBadly.map((body) => signLicence(body, privateKey));
+    const token = signLicence(good, privateKey);
+    const [prefix, body, signature] = token.split(".");
+    const padded = [prefix, `${body}=`, signature].join(".");
+    const long = `${token}${"A".repeat(4096)}`;
+    for (const bad of [...tokens, padded, long]) {
+      expect(parseToken(bad).ok, bad.slice(0, 40)).toBe(false);
+      expect(inspectLicence(bad, key).signature).toBe("malformed");
+    }
+    expect(inspectLicence(token, key).signature).toBe("valid");
+  });
 });
 
 describe("licence CLI", () => {

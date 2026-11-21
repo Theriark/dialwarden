@@ -8,6 +8,7 @@ import {
   generatePassword,
   main,
   PASSWORD_ALPHABET,
+  SeedError,
   variableNames,
 } from "./lib.mjs";
 
@@ -105,6 +106,22 @@ describe("seed-accounts", () => {
     const production = "https://dialwarden.theriark.com";
     expect(() => checkBaseUrl(production, "stage")).toThrow();
     expect(() => checkBaseUrl("not a url", "dev")).toThrow();
+  });
+
+  // Threat tests T10 (THE-2134): a look-alike host or a port never receives
+  // the new owner password.
+  it("refuses look-alike hosts and ports", () => {
+    const lookAlikes = [
+      "https://app-dev-dialwarden.example.net",
+      "https://app-dev-x.evil.example",
+      "https://app-dev-dialwarden.theriark.dev.evil.example",
+      `${DEV_URL}:8443`,
+    ];
+    for (const url of lookAlikes) {
+      expect(() => checkBaseUrl(url, "dev"), url).toThrow(SeedError);
+    }
+    expect(() => checkBaseUrl(STAGE_URL, "dev")).toThrow(SeedError);
+    expect(checkBaseUrl(DEV_URL, "dev")).toBe(DEV_URL);
   });
 
   it("refuses any environment but dev and stage", async () => {

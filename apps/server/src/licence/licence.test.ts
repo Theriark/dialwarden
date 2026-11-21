@@ -149,6 +149,33 @@ describe("environment licence (DIALWARDEN_LICENCE)", () => {
   });
 });
 
+describe("removing a licence in the UI", () => {
+  // Test review F6: the environment licence cannot be removed in the UI.
+  it("leaves the environment licence in place when no UI licence exists", async () => {
+    current = await testApp({
+      extraEnv: { DIALWARDEN_LICENCE: customerLicence() },
+    });
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/api/v1/licence",
+      headers: headersOf(owner),
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(await entitlementOf(app, owner)).toMatchObject({
+      plan: "paid",
+      source: "environment",
+    });
+    const events = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity?type=licence.changed",
+      headers: headersOf(owner),
+    });
+    expect(events.json<{ items: unknown[] }>().items).toEqual([]);
+  });
+});
+
 describe("UI licence", () => {
   it("decides over the environment; removing it falls back; the Free switch", async () => {
     const envToken = customerLicence({
