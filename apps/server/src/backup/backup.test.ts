@@ -18,10 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import {
-  customerLicence,
-  testKeyRing,
-} from "@dialwarden/entitlement/testing";
+import { customerLicence, testKeyRing } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -51,6 +48,7 @@ import {
 } from "./engine.js";
 
 const DAY_MS = 86_400_000;
+const DRILL_PREFIX = "dialwarden-drill-";
 let current: TestApp | undefined;
 const folders: string[] = [];
 
@@ -106,6 +104,12 @@ async function cli(args: string[]): Promise<number> {
   } finally {
     vi.restoreAllMocks();
   }
+}
+
+/** Restore drill folders currently in the temporary folder. */
+async function drillFolders(): Promise<number> {
+  const names = await readdir(tmpdir());
+  return names.filter((name) => name.startsWith(DRILL_PREFIX)).length;
 }
 
 describe("backup", () => {
@@ -352,11 +356,7 @@ describe("backup", () => {
   it("runs the restore drill and reports every check", async () => {
     const { app, dataDir, owner } = await seeded();
     const id = await backupNow(app, owner);
-    const drills = async () =>
-      (await readdir(tmpdir())).filter((name) =>
-        name.startsWith("dialwarden-drill-"),
-      ).length;
-    const before = await drills();
+    const before = await drillFolders();
 
     const response = await app.inject({
       method: "POST",
@@ -381,7 +381,7 @@ describe("backup", () => {
     ]);
     const secret = report.checks.find((c) => c.name === "secret decrypts");
     expect(secret?.detail).toContain("licence.token");
-    expect(await drills()).toBe(before);
+    expect(await drillFolders()).toBe(before);
 
     // With another key the stored secret does not decrypt.
     const dir = join(backupsDir(dataDir), id);

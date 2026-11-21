@@ -46,7 +46,9 @@ const SLOT_FILES = [
 const options = (args, names) =>
   parseArgs({
     args,
-    options: Object.fromEntries(names.map((name) => [name, { type: "string" }])),
+    options: Object.fromEntries(
+      names.map((name) => [name, { type: "string" }]),
+    ),
     strict: true,
     allowPositionals: false,
   }).values;

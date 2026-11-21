@@ -26,7 +26,11 @@ afterEach(async () => {
 function logCapture(): { stream: Writable; text: () => string } {
   const lines: string[] = [];
   const stream = new Writable({
-    write(chunk: Buffer | string, _encoding, done) {
+    write(
+      chunk: Buffer | string,
+      _encoding: BufferEncoding,
+      done: (error?: Error | null) => void,
+    ) {
       lines.push(chunk.toString());
       done();
     },

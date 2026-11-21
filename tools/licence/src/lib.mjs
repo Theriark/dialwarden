@@ -194,7 +194,8 @@ export function inspectLicence(token, publicKey) {
   }
   let valid = false;
   try {
-    valid = signature.length === 64 && verify(null, bytes, publicKey, signature);
+    valid =
+      signature.length === 64 && verify(null, bytes, publicKey, signature);
   } catch {
     valid = false;
   }

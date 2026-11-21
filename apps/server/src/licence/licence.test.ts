@@ -91,7 +91,11 @@ describe("environment licence (DIALWARDEN_LICENCE)", () => {
   it("keeps the environment token out of the database and the logs", async () => {
     const lines: string[] = [];
     const stream = new Writable({
-      write(chunk: Buffer | string, _encoding, done) {
+      write(
+        chunk: Buffer | string,
+        _encoding: BufferEncoding,
+        done: (error?: Error | null) => void,
+      ) {
         lines.push(chunk.toString());
         done();
       },

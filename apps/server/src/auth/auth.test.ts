@@ -90,6 +90,26 @@ async function challengeOf(
   return body.challenge;
 }
 
+/** An owner with TOTP on; the clock is one step past the enabling code. */
+async function ownerWithTotp(app: FastifyInstance, clock: { now: () => Date }) {
+  const owner = await setupOwner(app);
+  const enrol = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/totp/enrol",
+    headers: headersOf(owner),
+    payload: { password: owner.password },
+  });
+  const { secret } = enrol.json<{ secret: string }>();
+  const enable = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/totp/enable",
+    headers: headersOf(owner),
+    payload: { code: codeAt(secret, clock.now()) },
+  });
+  expect(enable.statusCode).toBe(200);
+  return { owner, secret };
+}
+
 describe("first-run setup", () => {
   it("creates the owner once, with an argon2id hash", async () => {
     current = await testApp();
@@ -142,7 +162,11 @@ describe("first-run setup", () => {
     const res = await current.app.inject({
       method: "POST",
       url: "/api/v1/setup",
-      payload: { email: "owner@dialwarden.test", password: "short-pw", name: "O" },
+      payload: {
+        email: "owner@dialwarden.test",
+        password: "short-pw",
+        name: "Owner",
+      },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -214,7 +238,10 @@ describe("session cookie and CSRF", () => {
     current = await testApp();
     const { app } = current;
     const owner = await setupOwner(app);
-    const anonymous = await app.inject({ method: "GET", url: "/api/v1/activity" });
+    const anonymous = await app.inject({
+      method: "GET",
+      url: "/api/v1/activity",
+    });
     expect(anonymous.statusCode).toBe(401);
     expect(anonymous.json()).toMatchObject({ error: "unauthenticated" });
     const tampered = await app.inject({
@@ -257,7 +284,10 @@ describe("login", () => {
     expect(unknown.json()).toEqual({ error: "invalid_credentials" });
     const right = await login(app, owner.email.toUpperCase(), owner.password);
     expect(right.statusCode).toBe(200);
-    expect(right.json()).toMatchObject({ status: "ok", user: { role: "owner" } });
+    expect(right.json()).toMatchObject({
+      status: "ok",
+      user: { role: "owner" },
+    });
     expect(() => sessionCookie(right)).not.toThrow();
   });
 
@@ -386,37 +416,27 @@ describe("TOTP", () => {
     expect(plain.json()).toMatchObject({ status: "ok" });
   });
 
-  it("drops a challenge after too many wrong codes", async () => {
+  it("drops a challenge after five wrong codes and rate-limits the account", async () => {
     const clock = manualClock();
     current = await testApp({ now: clock.now });
     const { app } = current;
-    const owner = await setupOwner(app);
-    const enrol = await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/totp/enrol",
-      headers: headersOf(owner),
-      payload: { password: owner.password },
-    });
-    const { secret } = enrol.json<{ secret: string }>();
-    await app.inject({
-      method: "POST",
-      url: "/api/v1/auth/totp/enable",
-      headers: headersOf(owner),
-      payload: { code: codeAt(secret, clock.now()) },
-    });
+    const { owner, secret } = await ownerWithTotp(app, clock);
     clock.advance(30_000);
     const valid = codeAt(secret, clock.now());
+    const wrong = { code: otherCode(valid) };
     const challenge = await challengeOf(app, owner.email, owner.password);
-    for (let i = 0; i < 4; i += 1) {
-      const res = await secondFactor(app, challenge, { code: otherCode(valid) });
+    for (let i = 0; i < 5; i += 1) {
+      const res = await secondFactor(app, challenge, wrong);
       expect(res.statusCode).toBe(401);
+      expect(res.json()).toEqual({ error: "invalid_code" });
     }
-    const fifth = await secondFactor(app, challenge, { code: otherCode(valid) });
-    expect(fifth.statusCode).toBe(429);
-    clock.advance(WINDOW_MS + 1000);
+    // The challenge is gone, so even the right code is refused now.
     const late = await secondFactor(app, challenge, { code: valid });
     expect(late.statusCode).toBe(401);
     expect(late.json()).toEqual({ error: "challenge_expired" });
+    // Five failures also lock the account for the window.
+    const again = await login(app, owner.email, owner.password);
+    expect(again.statusCode).toBe(429);
   });
 });
 

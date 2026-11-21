@@ -12,6 +12,7 @@ import {
 } from "./lib.mjs";
 
 const DEV_URL = "https://app-dev-dialwarden.theriark.dev";
+const STAGE_URL = "https://app-stg-dialwarden.theriark.dev";
 const NAMES = ["DIALWARDEN_DEV_OWNER_EMAIL", "DIALWARDEN_DEV_OWNER_PASSWORD"];
 let current;
 
@@ -38,24 +39,22 @@ function fetchFor(app) {
   };
 }
 
-function recorder() {
+/** The task client stand-in and the seed's dependencies around one app. */
+function harness(app) {
   const calls = [];
-  const run = async (args) => {
-    calls.push(args);
-    return JSON.stringify({ stored: NAMES });
-  };
-  return { calls, run };
-}
-
-function output() {
   const chunks = [];
-  return {
+  const sink = {
     write: (chunk) => {
       chunks.push(String(chunk));
       return true;
     },
-    text: () => chunks.join(""),
   };
+  const run = async (args) => {
+    calls.push(args);
+    return JSON.stringify({ stored: NAMES });
+  };
+  const deps = { fetch: fetchFor(app), run, stdout: sink, stderr: sink };
+  return { calls, deps, text: () => chunks.join("") };
 }
 
 const valueOf = (args, flag) => args.at(args.indexOf(flag) + 1);
@@ -63,9 +62,7 @@ const valueOf = (args, flag) => args.at(args.indexOf(flag) + 1);
 describe("seed-accounts", () => {
   it("registers the owner, creates it, and prints only variable names", async () => {
     current = await testApp();
-    const { calls, run } = recorder();
-    const out = output();
-    const deps = { fetch: fetchFor(current.app), run, stdout: out, stderr: out };
+    const { calls, deps, text } = harness(current.app);
     const code = await main(["--base-url", DEV_URL, "--env", "dev"], deps);
     expect(code).toBe(0);
     expect(calls).toHaveLength(1);
@@ -76,8 +73,8 @@ describe("seed-accounts", () => {
     expect(valueOf(args, "--repo")).toBe("dialwarden-app");
     const password = valueOf(args, "--password");
     expect(password).toHaveLength(24);
-    expect(out.text()).toContain(NAMES[1]);
-    expect(out.text()).not.toContain(password);
+    expect(text()).toContain(NAMES[1]);
+    expect(text()).not.toContain(password);
 
     // The owner signs in with the password the task client received.
     const login = await current.app.inject({
@@ -92,31 +89,29 @@ describe("seed-accounts", () => {
   it("stops before registering anything when the owner exists", async () => {
     current = await testApp();
     await setupOwner(current.app);
-    const { calls, run } = recorder();
-    const out = output();
-    const deps = { fetch: fetchFor(current.app), run, stdout: out, stderr: out };
+    const { calls, deps, text } = harness(current.app);
     const code = await main(["--base-url", DEV_URL, "--env", "dev"], deps);
     expect(code).toBe(1);
     expect(calls).toHaveLength(0);
-    expect(out.text()).toContain("owner exists");
+    expect(text()).toContain("owner exists");
   });
 
   it("accepts only the Development or Stage host over https", () => {
     expect(checkBaseUrl(`${DEV_URL}/`, "dev")).toBe(DEV_URL);
-    const stage = "https://app-stg-dialwarden.theriark.dev";
-    expect(checkBaseUrl(stage, "stage")).toBe(stage);
-    expect(() => checkBaseUrl(DEV_URL.replace("https", "http"), "dev")).toThrow();
-    expect(() => checkBaseUrl(stage, "dev")).toThrow();
-    expect(() => checkBaseUrl("https://dialwarden.theriark.com", "stage")).toThrow();
+    expect(checkBaseUrl(STAGE_URL, "stage")).toBe(STAGE_URL);
+    const insecure = DEV_URL.replace("https:", "http:");
+    expect(() => checkBaseUrl(insecure, "dev")).toThrow();
+    expect(() => checkBaseUrl(STAGE_URL, "dev")).toThrow();
+    const production = "https://dialwarden.theriark.com";
+    expect(() => checkBaseUrl(production, "stage")).toThrow();
     expect(() => checkBaseUrl("not a url", "dev")).toThrow();
   });
 
   it("refuses any environment but dev and stage", async () => {
-    const out = output();
-    const deps = { stdout: out, stderr: out };
+    const { deps, text } = harness(null);
     const args = ["--base-url", DEV_URL, "--env", "production"];
     expect(await main(args, deps)).toBe(2);
-    expect(out.text()).toContain("--env must be dev or stage");
+    expect(text()).toContain("--env must be dev or stage");
   });
 
   it("generates 24-character passwords from the allowed characters", () => {

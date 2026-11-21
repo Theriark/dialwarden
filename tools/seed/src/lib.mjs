@@ -53,7 +53,9 @@ export function checkBaseUrl(value, env) {
     url.username === "" &&
     url.password === "";
   if (!ok) {
-    throw new SeedError(`--base-url for --env ${env} must be https://${prefix}...`);
+    throw new SeedError(
+      `--base-url for --env ${env} must be https://${prefix}...`,
+    );
   }
   return url.origin;
 }
@@ -130,7 +132,9 @@ export async function createOwner(options) {
   if (created.status !== 201) {
     const error = created.body?.error;
     const code = typeof error === "string" ? error : "unknown";
-    throw new SeedError(`POST /api/v1/setup answered ${created.status} (${code})`);
+    throw new SeedError(
+      `POST /api/v1/setup answered ${created.status} (${code})`,
+    );
   }
 }
 
@@ -144,7 +148,7 @@ export function runTaskClient(args, timeoutMs = 60_000) {
       { timeout: timeoutMs, maxBuffer: 1024 * 1024 },
       (error, stdout) => {
         if (error) {
-          reject(new SeedError("the task client action browser_account failed"));
+          reject(new SeedError("browser_account failed"));
           return;
         }
         resolve(String(stdout));

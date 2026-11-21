@@ -10,6 +10,18 @@ import { afterEach, describe, expect, it } from "vitest";
 import { scan } from "./check-bundle.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
+const SOURCES = [
+  "apps/server/src",
+  "packages/entitlement/src",
+  "packages/entitlement/keys",
+];
+const BUILT = [
+  "apps/server/dist",
+  "packages/entitlement/dist",
+  "packages/entitlement/keys",
+];
+const HELPER_IMPORT =
+  'import { testKeyRing } from "@dialwarden/entitlement/testing";\n';
 const folders = [];
 
 afterEach(async () => {
@@ -41,6 +53,8 @@ function throwawayKeys() {
 
 const rules = async (dir) => (await scan([dir])).map((found) => found.rule);
 const isTest = (path) => /\.test\.[cm]?[jt]s$/.test(path);
+const fromRoot = (paths) => paths.map((path) => join(root, path));
+const whenBuilt = existsSync(join(root, "apps/server/dist")) ? it : it.skip;
 
 describe("check-bundle", () => {
   it("passes a clean bundle", async () => {
@@ -49,9 +63,7 @@ describe("check-bundle", () => {
   });
 
   it("finds a reference to the test helpers", async () => {
-    const dir = await bundle([
-      ["main.js", 'import { testKeyRing } from "@dialwarden/entitlement/testing";\n'],
-    ]);
+    const dir = await bundle([["main.js", HELPER_IMPORT]]);
     expect(await rules(dir)).toEqual([
       "test helper reference",
       "test helper name",
@@ -80,27 +92,16 @@ describe("check-bundle", () => {
   });
 
   it("refuses a missing target (the build has not run)", async () => {
-    await expect(scan([join(tmpdir(), "dialwarden-no-such-dist")])).rejects.toThrow();
+    const missing = join(tmpdir(), "dialwarden-no-such-dist");
+    await expect(scan([missing])).rejects.toThrow();
   });
 
   it("the shipped sources reference no test helper and hold no test key", async () => {
-    const targets = [
-      "apps/server/src",
-      "packages/entitlement/src",
-      "packages/entitlement/keys",
-    ].map((path) => join(root, path));
-    expect(await scan(targets, { skip: isTest })).toEqual([]);
+    expect(await scan(fromRoot(SOURCES), { skip: isTest })).toEqual([]);
   });
 
-  const built = join(root, "apps/server/dist");
-  it.skipIf(!existsSync(built))("the built bundle holds no test key", async () => {
-    const targets = [
-      "apps/server/dist",
-      "packages/entitlement/dist",
-      "packages/entitlement/keys",
-    ]
-      .map((path) => join(root, path))
-      .filter((path) => existsSync(path));
+  whenBuilt("the built bundle holds no test key", async () => {
+    const targets = fromRoot(BUILT).filter((path) => existsSync(path));
     expect(await scan(targets)).toEqual([]);
   });
 });
