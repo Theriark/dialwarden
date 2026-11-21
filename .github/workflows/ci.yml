@@ -1,11 +1,11 @@
 name: CI
 
-# Merge gate for dialwarden-app, the Development deployment job and the lock-file
+# Merge gate for dialwarden, the Development deployment job and the lock-file
 # job, in ONE workflow. This repository has exactly three workflows: CI,
 # Promote - Stage and Release (docs/ci-cd.md).
 #
 # Dialwarden is a single-image product (founder rule): one repository, one image
-# ghcr.io/theriark/dialwarden-app, the Free and Paid plans in the same build, Paid
+# ghcr.io/theriark/dialwarden, the Free and Paid plans in the same build, Paid
 # unlocked by an offline signed licence key checked inside the image. There is no
 # CE/EE split and no second image.
 #
@@ -46,12 +46,12 @@ permissions:
 # Every other event uses the single repository group shared with Promote - Stage and
 # Release: those runs never overlap and a live deployment is never cancelled.
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('ci-{0}-{1}', github.ref, github.event.label.name == 'ci-go' && 'run' || github.run_id) || 'dialwarden-app-delivery' }}
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}-{1}', github.ref, github.event.label.name == 'ci-go' && 'run' || github.run_id) || 'dialwarden-delivery' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: "24"
-  IMAGE_NAME: dialwarden-app
+  IMAGE_NAME: dialwarden
   # "true": no check may skip; any result other than success fails the gate.
   # "false": skips are tolerated only while no application file exists.
   STRICT: "true"
@@ -415,7 +415,7 @@ jobs:
           }
           packages="$(jq '.packages | length' sbom.spdx.json)"
           {
-            echo "## dialwarden-app SBOM"
+            echo "## dialwarden SBOM"
             echo
             echo "- Artefact: sbom.spdx.json (SPDX JSON from syft), ${packages} packages"
             echo "- Source commit: ${GITHUB_SHA}"
@@ -500,7 +500,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## dialwarden-app merge gate (STRICT=${STRICT:-unknown})"
+            echo "## dialwarden merge gate (STRICT=${STRICT:-unknown})"
             echo
             echo "| Job | Result |"
             echo "| --- | --- |"
@@ -546,11 +546,11 @@ jobs:
       # Keyless cosign signature with the GitHub OIDC identity of this workflow.
       id-token: write
     env:
-      IMAGE: ghcr.io/theriark/dialwarden-app
+      IMAGE: ghcr.io/theriark/dialwarden
       SOURCE_SHA: ${{ github.sha }}
       # Registered for this product by the setup broker (github_repo_status).
       DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
-      DEV_HOST: app-dev-dialwarden.theriark.dev
+      DEV_HOST: dev-dialwarden.theriark.dev
     steps:
       - name: Require the registered Development application
         shell: bash
@@ -660,7 +660,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## dialwarden-app deployed to Development"
+            echo "## dialwarden deployed to Development"
             echo
             echo "- Source commit: \`${SOURCE_SHA}\` (build date ${CREATED}, SOURCE_DATE_EPOCH)"
             echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (linux/amd64 and linux/arm64, cosign signed, SBOM attested)"

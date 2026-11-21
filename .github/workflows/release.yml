@@ -37,7 +37,7 @@ permissions:
 # One delivery run at a time per repository (shared with CI on development and
 # Promote - Stage); a live run is never cancelled.
 concurrency:
-  group: dialwarden-app-delivery
+  group: dialwarden-delivery
   cancel-in-progress: false
 
 jobs:
@@ -52,12 +52,12 @@ jobs:
       contents: write
       packages: write
     env:
-      IMAGE: ghcr.io/theriark/dialwarden-app
-      SIGNER: https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development
+      IMAGE: ghcr.io/theriark/dialwarden
+      SIGNER: https://github.com/Theriark/dialwarden/.github/workflows/ci.yml@refs/heads/development
       OIDC_ISSUER: https://token.actions.githubusercontent.com
       # Registered for this product by the setup broker (github_repo_status).
-      STAGE_APPLICATION_ID: ""
-      STAGE_HOST: app-stg-dialwarden.theriark.dev
+      STAGE_APPLICATION_ID: "-cMPJhRMwT7vxF8fl_sxV"
+      STAGE_HOST: stg-dialwarden.theriark.dev
       DRY_RUN_INPUT: ${{ inputs.dry_run }}
       # In the workspace: runner.temp is not available at job level.
       NOTES: release-notes.md
@@ -283,9 +283,9 @@ jobs:
           action() { if [[ "$1" == "true" ]]; then echo "exists, kept as it is"; else echo "create"; fi; }
           {
             if [[ "${DRY_RUN}" == "true" ]]; then
-              echo "## dialwarden-app Release ${STABLE}: DRY RUN (no tag, image tag or release is changed)"
+              echo "## dialwarden Release ${STABLE}: DRY RUN (no tag, image tag or release is changed)"
             else
-              echo "## dialwarden-app Release ${STABLE}: plan"
+              echo "## dialwarden Release ${STABLE}: plan"
             fi
             echo
             echo "- What Stage runs: commit \`${COMMIT}\` (stage branch head), image \`${IMAGE}@${DIGEST}\` (cosign signature verified)"
@@ -389,7 +389,7 @@ jobs:
           set -euo pipefail
           {
             echo
-            echo "## dialwarden-app ${STABLE} released"
+            echo "## dialwarden ${STABLE} released"
             echo
             echo "- Commit: \`${COMMIT}\`; image \`${IMAGE}@${DIGEST}\` (tags \`${VERSION}\` and \`latest\`), not rebuilt"
             echo "- Release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${STABLE}"

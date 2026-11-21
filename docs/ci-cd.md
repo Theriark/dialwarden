@@ -1,7 +1,7 @@
-# CI/CD for dialwarden-app
+# CI/CD for dialwarden
 
-Dialwarden is a single-image product. One repository (`Theriark/dialwarden-app`,
-public, FCL-1.0-MIT), one image (`ghcr.io/theriark/dialwarden-app`, linux/amd64 and
+Dialwarden is a single-image product. One repository (`Theriark/dialwarden`,
+public, FCL-1.0-MIT), one image (`ghcr.io/theriark/dialwarden`, linux/amd64 and
 linux/arm64), the Free and Paid plans in the same build. Paid is unlocked by an
 offline Ed25519-signed licence key verified inside the image. There is no CE/EE
 split and no second image.
@@ -15,7 +15,7 @@ Promote - Stage. No other major or minor number is invented
 ## Branches
 
 - `development`: all work enters here through reviewed pull requests from
-  `feat/dialwarden-app-the-<n>` branches. The only direct commit is the initial
+  `feat/dialwarden-the-<n>` branches. The only direct commit is the initial
   repository setup.
 - `stage`: moved only by the Gate 2 script (fast-forward to the candidate tag).
 - `main`: moved only by the Gate 3 script (merge of stage).
@@ -28,7 +28,7 @@ Promote - Stage. No other major or minor number is invented
 | `promote-stage.yml` (Promote - Stage) | Gate 2 approval, on development, no inputs | Verifies what Development runs, tests it, tags `v27.x.y-rc.N`, tags the same digest in GHCR, deploys it to Stage |
 | `release.yml` (Release) | Gate 3 approval, on development, no inputs | Releases what Stage runs: GHCR `27.x.y` and `latest`, tag `v27.x.y`, GitHub Release with the SBOM |
 
-All three share the concurrency group `dialwarden-app-delivery`: no two delivery
+All three share the concurrency group `dialwarden-delivery`: no two delivery
 runs overlap and a live deployment is never cancelled. Promote - Stage and Release
 also have `dry_run=true`, which checks everything and writes nothing.
 
@@ -117,7 +117,7 @@ The image is built once, on the merge to development, by the job
   `stage`; Release adds `27.x.y` and `latest`. Every tag is a carbon copy of the
   same multi-arch index digest.
 - The digest is signed with cosign keyless (GitHub OIDC). The signing identity is
-  `https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development`;
+  `https://github.com/Theriark/dialwarden/.github/workflows/ci.yml@refs/heads/development`;
   Promote - Stage and Release refuse a digest without that signature.
 - The SPDX SBOM is attached to the digest as a cosign attestation, kept as a CI
   artefact for 90 days, and attached to the GitHub Release.
@@ -125,9 +125,9 @@ The image is built once, on the merge to development, by the job
 Verify an image yourself:
 
 ```
-cosign verify ghcr.io/theriark/dialwarden-app:27.0.0 \
+cosign verify ghcr.io/theriark/dialwarden:27.0.0 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development
+  --certificate-identity https://github.com/Theriark/dialwarden/.github/workflows/ci.yml@refs/heads/development
 ```
 
 ## Licence keys
@@ -165,8 +165,9 @@ container log at every start until an owner exists) in the header
 open; a fresh Stage starts closed and the operator seeds it with
 `tools/seed --env stage --setup-token` after Gate 2 (R&D decision THE-2141).
 
-Domains: Development `app-dev-dialwarden.theriark.dev`, Stage
-`app-stg-dialwarden.theriark.dev`. Production stays empty until a release is
+Dokploy project `Dialwarden`, applications `Dialwarden Development`
+(`dev-dialwarden.theriark.dev`) and `Dialwarden Stage`
+(`stg-dialwarden.theriark.dev`). Production stays empty until a release is
 approved. The Dokploy application ids are filled into `ci.yml`,
 `promote-stage.yml` and `release.yml` from the setup broker registration; every
 deploying job refuses while they are empty.
