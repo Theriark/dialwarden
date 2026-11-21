@@ -1,0 +1,397 @@
+name: Release
+
+# One button (release standard): Gate 3 approval dispatches this workflow on
+# development with no inputs. It releases exactly what Stage runs and never rebuilds:
+# the stage branch head, the multi-arch digest the Stage application runs and the
+# release candidate tag that seals both. It verifies the cosign signature CI made
+# for that digest, then in this order makes (or finds, when a re-run meets them
+# already there) the GHCR tags <version> and latest on the same digest, the
+# annotated stable tag v<version> (the candidate tag without -rc.N) and the GitHub
+# Release with notes from the pull requests merged since the last stable release and
+# the SPDX SBOM of the released digest attached. Free and Paid ship in this one
+# image. This workflow deploys nothing to Production; Production stays empty until a
+# release is approved and is a separate step. A re-run when everything exists
+# succeeds and changes nothing.
+#
+# It never moves the stage or main branch: the Actions token may not move a branch to
+# a commit that changes workflow files. The gate script merges stage into main with
+# the operator token right before it dispatches this workflow, so a real run refuses,
+# before any write, when main lacks the stage head (a dry run only reports it). main
+# is never merged into development.
+#
+# dry_run=true checks every precondition, prints the version, commit, digest and
+# notes, and creates no tag, image tag or release. See docs/ci-cd.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check everything and print the release, but create no tag, image tag or release."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# One delivery run at a time per repository (shared with CI on development and
+# Promote - Stage); a live run is never cancelled.
+concurrency:
+  group: dialwarden-app-delivery
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release what Stage runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only to read the Stage application from Dokploy; nothing is deployed.
+    environment: stage
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    env:
+      IMAGE: ghcr.io/theriark/dialwarden-app
+      SIGNER: https://github.com/Theriark/dialwarden-app/.github/workflows/ci.yml@refs/heads/development
+      OIDC_ISSUER: https://token.actions.githubusercontent.com
+      # Registered for this product by the setup broker (github_repo_status).
+      STAGE_APPLICATION_ID: ""
+      STAGE_HOST: app-stg-dialwarden.theriark.dev
+      DRY_RUN_INPUT: ${{ inputs.dry_run }}
+      # In the workspace: runner.temp is not available at job level.
+      NOTES: release-notes.md
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the run mode and the execution ref
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${DRY_RUN_INPUT}" in
+            true | false) ;;
+            *) echo "::error::dry_run must be true or false, got '${DRY_RUN_INPUT}'"; exit 1 ;;
+          esac
+          [[ "${GITHUB_REF}" == "refs/heads/development" ]] || {
+            echo "::error::Release runs from development, got ${GITHUB_REF}"
+            exit 1
+          }
+          [[ "${STAGE_APPLICATION_ID}" =~ ^[A-Za-z0-9_-]{8,64}$ ]] || {
+            echo "::error::STAGE_APPLICATION_ID is not set in release.yml (registered by the setup broker)"
+            exit 1
+          }
+          echo "dry_run=${DRY_RUN_INPUT}" >> "${GITHUB_OUTPUT}"
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Read what Stage runs
+        id: stage
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          for required in DOKPLOY_URL DOKPLOY_API_KEY CF_ID CF_SECRET; do
+            [[ -n "${!required}" ]] || { echo "::error::${required} is missing from the stage environment"; exit 1; }
+          done
+          git fetch origin +refs/heads/stage:refs/remotes/origin/stage +refs/heads/main:refs/remotes/origin/main
+          commit="$(git rev-parse refs/remotes/origin/stage)"
+          running="$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+            --header "CF-Access-Client-Id: ${CF_ID}" \
+            --header "CF-Access-Client-Secret: ${CF_SECRET}" \
+            --header "x-api-key: ${DOKPLOY_API_KEY}" \
+            --get "${DOKPLOY_URL%/}/api/application.one" \
+            --data-urlencode "applicationId=${STAGE_APPLICATION_ID}" | jq -r '.dockerImage // empty')"
+          digest="${running#"${IMAGE}@"}"
+          [[ "${running}" == "${IMAGE}@${digest}" && "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::Stage runs '${running}', not an immutable ${IMAGE}@sha256 digest"
+            exit 1
+          }
+          curl --fail --silent --show-error --max-time 15 "https://${STAGE_HOST}/healthz" >/dev/null
+          # The digest is the one CI built once for the stage head, and the image
+          # says so itself.
+          published="$(docker buildx imagetools inspect "${IMAGE}:sha-${commit}" --format '{{.Manifest.Digest}}')"
+          [[ "${published}" == "${digest}" ]] || {
+            echo "::error::${IMAGE}:sha-${commit} is ${published}, but Stage runs ${digest}; stage and the Stage application disagree"
+            exit 1
+          }
+          revision="$(docker buildx imagetools inspect "${IMAGE}@${digest}" --format '{{json .Image}}' | jq -r '
+              (if has("config") then .config else ([.[]] | first | .config) end)
+              | .Labels["org.opencontainers.image.revision"] // empty')"
+          [[ "${revision}" == "${commit}" ]] || { echo "::error::the Stage image revision is '${revision}', not ${commit}"; exit 1; }
+          # CI signed exactly that digest from development (keyless, GitHub OIDC).
+          cosign verify "${IMAGE}@${digest}" --certificate-oidc-issuer "${OIDC_ISSUER}" --certificate-identity "${SIGNER}" >/dev/null || {
+            echo "::error::${IMAGE}@${digest} has no valid cosign signature from ${SIGNER}"
+            exit 1
+          }
+          # The gate merges stage into main right before a real run, and this workflow
+          # never does. A real run refuses here, before any write, if main lacks the
+          # stage head; a dry run (before Gate 3, so before that merge) only reports it.
+          in_main=false
+          if git merge-base --is-ancestor "${commit}" refs/remotes/origin/main; then in_main=true; fi
+          if [[ "${in_main}" != "true" && "${DRY_RUN}" == "false" ]]; then
+            echo "::error::main ($(git rev-parse refs/remotes/origin/main)) does not contain the stage head ${commit}. The gate script merges stage into main before it runs this workflow; this workflow never moves main. Nothing was written."
+            exit 1
+          fi
+          {
+            echo "commit=${commit}"
+            echo "digest=${digest}"
+            echo "main_sha=$(git rev-parse refs/remotes/origin/main)"
+            echo "in_main=${in_main}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Stage runs ${IMAGE}@${digest} = ${commit}; in main: ${in_main}"
+
+      - name: Find the candidate and the stable release
+        id: rel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.stage.outputs.commit }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          bash .github/scripts/release_tags.sh current "${COMMIT}" "${DIGEST}" > rc.env
+          # shellcheck disable=SC1091
+          source rc.env
+          rm -f rc.env
+          stable="v${version}"
+          tag_exists=false
+          if git rev-parse -q --verify "refs/tags/${stable}" >/dev/null; then
+            [[ "$(git cat-file -t "refs/tags/${stable}")" == "tag" ]] || { echo "::error::${stable} exists but is not an annotated tag"; exit 1; }
+            [[ "$(git rev-parse "refs/tags/${stable}^{commit}")" == "${COMMIT}" ]] || {
+              echo "::error::${stable} already exists on another commit; refusing"
+              exit 1
+            }
+            tag_exists=true
+          fi
+          image_exists=false
+          if existing="$(docker buildx imagetools inspect "${IMAGE}:${version}" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            [[ "${existing}" == "${DIGEST}" ]] || { echo "::error::${IMAGE}:${version} already points at ${existing}, not ${DIGEST}"; exit 1; }
+            image_exists=true
+          fi
+          release_exists=false
+          if state="$(gh release view "${stable}" --json isDraft,isPrerelease --jq '[.isDraft, .isPrerelease] | map(tostring) | join(",")' 2>"${RUNNER_TEMP}/release.err")"; then
+            [[ "${state}" == "false,false" ]] || { echo "::error::release ${stable} exists but is a draft or a prerelease (${state}); refusing to change it"; exit 1; }
+            [[ "${tag_exists}" == "true" ]] || { echo "::error::release ${stable} exists without its tag"; exit 1; }
+            release_exists=true
+          else
+            grep -qi 'not found' "${RUNNER_TEMP}/release.err" || { echo "::error::could not read release ${stable}"; exit 1; }
+          fi
+          {
+            echo "version=${version}"
+            echo "rc_tag=${tag}"
+            echo "stable=${stable}"
+            echo "tag_exists=${tag_exists}"
+            echo "image_exists=${image_exists}"
+            echo "release_exists=${release_exists}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: SBOM of the released digest
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.stage.outputs.digest }}
+          format: spdx-json
+          output-file: dialwarden-${{ steps.rel.outputs.stable }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Write the release notes
+        id: notes
+        shell: bash
+        env:
+          COMMIT: ${{ steps.stage.outputs.commit }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          STABLE: ${{ steps.rel.outputs.stable }}
+          RC_TAG: ${{ steps.rel.outputs.rc_tag }}
+        run: |
+          set -euo pipefail
+          # The last stable release before this one that the commit contains.
+          previous=""
+          while IFS= read -r tag; do
+            [[ "${tag}" != "${STABLE}" ]] || continue
+            if git merge-base --is-ancestor "refs/tags/${tag}" "${COMMIT}"; then
+              previous="${tag}"
+            fi
+          done < <(git tag -l 'v27.*' | grep -E '^v27\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V || true)
+          range="${COMMIT}"
+          [[ -z "${previous}" ]] || range="refs/tags/${previous}..${COMMIT}"
+          # Pull requests on development's first-parent line: squash merges
+          # "<title> (#<n>)" and older merge commits "Merge pull request #<n> from ..."
+          # whose first body line is the title. Direct commits are not listed.
+          merge_re='^Merge pull request #([0-9]+) from'
+          squash_re='\(#[0-9]+\)$'
+          prs=""
+          while IFS= read -r sha; do
+            subject="$(git log -1 --format='%s' "${sha}")"
+            if [[ "${subject}" =~ ${merge_re} ]]; then
+              number="${BASH_REMATCH[1]}"
+              title="$(git log -1 --format='%b' "${sha}" | awk 'NF && !seen { print; seen = 1 }')"
+              prs+="- ${title:-${subject}} (#${number})"$'\n'
+            elif [[ "${subject}" =~ ${squash_re} ]]; then
+              prs+="- ${subject}"$'\n'
+            fi
+          done < <(git log --first-parent --format='%H' "${range}")
+          prs="${prs%$'\n'}"
+          {
+            echo "Dialwarden ${STABLE}, released from the release candidate ${RC_TAG} that Stage runs, without a rebuild. Free and Paid plans in one image; Paid is unlocked by a licence key."
+            echo
+            echo "- Source commit: ${COMMIT}"
+            echo "- Image: ${IMAGE}@${DIGEST} (also tagged ${STABLE#v} and latest; linux/amd64 and linux/arm64)"
+            echo "- Signature: cosign keyless, identity ${SIGNER}"
+            echo "- SBOM: dialwarden-${STABLE}.spdx.json (attached)"
+            echo
+            if [[ -n "${previous}" ]]; then
+              echo "## Pull requests merged since ${previous}"
+            else
+              echo "## Pull requests merged since the start of the project"
+            fi
+            echo
+            echo "${prs:-- none}"
+          } > "${NOTES}"
+          echo "previous=${previous:-none}" >> "${GITHUB_OUTPUT}"
+
+      - name: Summary of what this run does
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          COMMIT: ${{ steps.stage.outputs.commit }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          MAIN_SHA: ${{ steps.stage.outputs.main_sha }}
+          IN_MAIN: ${{ steps.stage.outputs.in_main }}
+          VERSION: ${{ steps.rel.outputs.version }}
+          RC_TAG: ${{ steps.rel.outputs.rc_tag }}
+          STABLE: ${{ steps.rel.outputs.stable }}
+          TAG_EXISTS: ${{ steps.rel.outputs.tag_exists }}
+          IMAGE_EXISTS: ${{ steps.rel.outputs.image_exists }}
+          RELEASE_EXISTS: ${{ steps.rel.outputs.release_exists }}
+        run: |
+          set -euo pipefail
+          action() { if [[ "$1" == "true" ]]; then echo "exists, kept as it is"; else echo "create"; fi; }
+          {
+            if [[ "${DRY_RUN}" == "true" ]]; then
+              echo "## dialwarden-app Release ${STABLE}: DRY RUN (no tag, image tag or release is changed)"
+            else
+              echo "## dialwarden-app Release ${STABLE}: plan"
+            fi
+            echo
+            echo "- What Stage runs: commit \`${COMMIT}\` (stage branch head), image \`${IMAGE}@${DIGEST}\` (cosign signature verified)"
+            echo "- Candidate: \`${RC_TAG}\`; version \`${VERSION}\`; no rebuild"
+            echo "- 1. GHCR tags \`${IMAGE}:${VERSION}\` and \`latest\` on that digest: $(action "${IMAGE_EXISTS}")"
+            echo "- 2. Annotated tag \`${STABLE}\` on \`${COMMIT}\`: $(action "${TAG_EXISTS}")"
+            echo "- 3. GitHub Release \`${STABLE}\` with the SBOM attached: $(action "${RELEASE_EXISTS}")"
+            echo "- Branches: this workflow moves none. main \`${MAIN_SHA}\` contains the stage head: ${IN_MAIN} (the gate merges stage into main before a real run)"
+            echo "- No Production deployment in this workflow. development is not touched."
+            echo
+            echo "### Release notes"
+            echo
+            cat "${NOTES}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Every step below writes a tag, an image tag or a release. Each is skipped in a
+      # dry run; the first refuses again itself. A re-run skips whatever already exists.
+
+      - name: Refuse to write in a dry run and re-check stage
+        if: steps.mode.outputs.dry_run == 'false'
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.stage.outputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "${DRY_RUN}" == "false" ]] || { echo "::error::dry run: no step may write"; exit 1; }
+          now="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/stage" --jq '.object.sha')"
+          [[ "${now}" == "${COMMIT}" ]] || { echo "::error::stage moved to ${now} during the run"; exit 1; }
+          # main must still contain the stage head (read only; the gate merged it).
+          status="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${COMMIT}...main" --jq '.status')"
+          [[ "${status}" == "identical" || "${status}" == "ahead" ]] || {
+            echo "::error::main no longer contains the stage head ${COMMIT} (compare: ${status}); nothing was written"
+            exit 1
+          }
+
+      - name: Tag the image with the version and latest
+        if: steps.mode.outputs.dry_run == 'false'
+        shell: bash
+        env:
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          VERSION: ${{ steps.rel.outputs.version }}
+          IMAGE_EXISTS: ${{ steps.rel.outputs.image_exists }}
+        run: |
+          set -euo pipefail
+          tags=(latest)
+          [[ "${IMAGE_EXISTS}" == "true" ]] || tags=("${VERSION}" latest)
+          for t in "${tags[@]}"; do
+            docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${t}" "${IMAGE}@${DIGEST}"
+            tagged="$(docker buildx imagetools inspect "${IMAGE}:${t}" --format '{{.Manifest.Digest}}')"
+            [[ "${tagged}" == "${DIGEST}" ]] || { echo "::error::${IMAGE}:${t} is ${tagged}, not ${DIGEST}"; exit 1; }
+          done
+
+      - name: Create the annotated stable tag
+        if: steps.mode.outputs.dry_run == 'false' && steps.rel.outputs.tag_exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.stage.outputs.commit }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          RC_TAG: ${{ steps.rel.outputs.rc_tag }}
+          STABLE: ${{ steps.rel.outputs.stable }}
+        run: |
+          set -euo pipefail
+          message="$(jq -cn --arg c "${COMMIT}" --arg d "${DIGEST}" --arg rc "${RC_TAG}" --argjson run "${GITHUB_RUN_ID}" \
+            '{sourceCommit: $c, imageDigest: $d, rcTag: $rc, workflowRunId: $run}')"
+          tag_sha="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="${STABLE}" -f message="${message}" -f object="${COMMIT}" -f type=commit --jq '.sha')"
+          [[ "${tag_sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::the tag object was not created"; exit 1; }
+          if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${STABLE}" -f sha="${tag_sha}" >/dev/null; then
+            # Uncertain result: read the ref back, never create twice.
+            existing="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${STABLE}" --jq '.object.sha' || true)"
+            [[ "${existing}" == "${tag_sha}" ]] || { echo "::error::could not create ${STABLE}"; exit 1; }
+          fi
+          jq -e --arg t "${STABLE}" --arg c "${COMMIT}" '.tag == $t and .object.sha == $c' \
+            <<<"$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}")" >/dev/null || { echo "::error::${STABLE} did not read back"; exit 1; }
+
+      - name: Create the GitHub Release
+        if: steps.mode.outputs.dry_run == 'false' && steps.rel.outputs.release_exists == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STABLE: ${{ steps.rel.outputs.stable }}
+        run: |
+          set -euo pipefail
+          gh release create "${STABLE}" --verify-tag --title "Dialwarden ${STABLE}" --notes-file "${NOTES}" \
+            "dialwarden-${STABLE}.spdx.json"
+          state="$(gh release view "${STABLE}" --json isDraft,isPrerelease --jq '[.isDraft, .isPrerelease] | map(tostring) | join(",")')"
+          [[ "${state}" == "false,false" ]] || { echo "::error::release ${STABLE} is not a published stable release (${state})"; exit 1; }
+
+      - name: Record the release
+        if: steps.mode.outputs.dry_run == 'false'
+        shell: bash
+        env:
+          COMMIT: ${{ steps.stage.outputs.commit }}
+          DIGEST: ${{ steps.stage.outputs.digest }}
+          VERSION: ${{ steps.rel.outputs.version }}
+          STABLE: ${{ steps.rel.outputs.stable }}
+        run: |
+          set -euo pipefail
+          {
+            echo
+            echo "## dialwarden-app ${STABLE} released"
+            echo
+            echo "- Commit: \`${COMMIT}\`; image \`${IMAGE}@${DIGEST}\` (tags \`${VERSION}\` and \`latest\`), not rebuilt"
+            echo "- Release: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/tag/${STABLE}"
+            echo "- No branch moved by this run; development untouched; no Production deployment"
+          } >> "${GITHUB_STEP_SUMMARY}"
