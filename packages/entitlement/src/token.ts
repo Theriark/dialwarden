@@ -10,7 +10,8 @@ export const TOKEN_PREFIX = "DW1";
 export const MAX_TOKEN_LENGTH = 4096;
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/;
-const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
+const ISO_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d|\.\d\d|\.\d\d\d)?Z$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
 
