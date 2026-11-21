@@ -35,6 +35,8 @@ const SECRET_FIELDS = [
   "appKey",
   "appSecretKey",
   "sessionSecret",
+  "setupToken",
+  "DEV_SEED_OWNER_PASSWORD",
   "key",
 ];
 
@@ -43,6 +45,7 @@ export const REDACT_PATHS = [
   "req.headers.cookie",
   'req.headers["x-csrf-token"]',
   'req.headers["x-dialwarden-passphrase"]',
+  'req.headers["x-dialwarden-setup-token"]',
   'res.headers["set-cookie"]',
   ...SECRET_FIELDS,
   ...SECRET_FIELDS.map((field) => `*.${field}`),

@@ -9,6 +9,7 @@ import type {
 } from "@dialwarden/entitlement";
 import type { ActivityService } from "../activity/service.js";
 import type { AuthService } from "../auth/service.js";
+import type { SetupToken } from "../auth/first-run.js";
 import type { ActiveSession, SessionService } from "../auth/sessions.js";
 import type { BackupService } from "../backup/service.js";
 import type { AppConfig } from "../config.js";
@@ -35,6 +36,8 @@ export interface AppContext {
   editable: EditableServers;
   sessions: SessionService;
   auth: AuthService;
+  /** The one-time first-run setup token (DATA_DIR/setup-token). */
+  setupToken: SetupToken;
   backups: BackupService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;

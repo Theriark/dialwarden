@@ -24,6 +24,18 @@ When a licence ends nothing is deleted and game servers are never touched.
 In development. The first release will be `27.0.0`. Run instructions, the Docker
 Compose file and the documentation arrive with the application.
 
+## First run
+
+A fresh instance has no account. The first person to open it creates the owner
+on the setup page, which asks for the one-time setup token: it is printed to the
+container log at every start until the owner exists (with a link to the setup
+page) and stored in `setup-token` in the data folder. The token is deleted once
+the owner exists. Importing an app backup on the setup page needs the same token.
+
+For unattended test and automation setups, `DEV_SEED_OWNER_EMAIL` and
+`DEV_SEED_OWNER_PASSWORD` create the owner at first start instead. Remove them
+after the first start.
+
 ## Licence
 
 Source available under the [Fair Core License, Version 1.0, MIT Future License](LICENSE)

@@ -10,6 +10,8 @@ export const SETTING_KEYS = {
   editableServers: "plan.editable_servers",
   /** The owner confirmed the generated app-secret.key is backed up. */
   appKeyBackedUp: "app_secret.backup_acknowledged",
+  /** When the owner was created from DEV_SEED_OWNER_* (first start). */
+  devSeedOwner: "dev_seed.owner",
 } as const;
 
 export class Settings {

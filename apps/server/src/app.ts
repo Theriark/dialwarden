@@ -15,6 +15,8 @@ import {
 } from "@dialwarden/entitlement";
 import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
+import { bootstrapOwner, openFirstRunSetup } from "./auth/bootstrap.js";
+import { SetupToken } from "./auth/first-run.js";
 import { AuthService } from "./auth/service.js";
 import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
@@ -60,6 +62,8 @@ export interface BuildOptions {
   extend?: (app: FastifyInstance) => void;
   /** The build information file read in production (tests pass their own). */
   buildInfoFile?: string;
+  /** Where the first-run setup line goes (default standard output). */
+  out?: NodeJS.WritableStream;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -149,6 +153,7 @@ export async function buildApp(
     editable,
     sessions: new SessionService(store, now),
     auth: new AuthService({ store, aead, activity, now }),
+    setupToken: new SetupToken(config.dataDir),
     backups: new BackupService({
       store,
       activity,
@@ -164,6 +169,10 @@ export async function buildApp(
     routes: [],
   };
   app.decorate("ctx", ctx);
+  // Before the server listens: the owner from DEV_SEED_OWNER_*, then the
+  // setup token while no owner exists (R&D decision THE-2141).
+  await bootstrapOwner(ctx, env, app.log, now);
+  openFirstRunSetup(ctx, options.out ?? process.stdout);
   app.addHook("onRoute", (route) => {
     const methods = Array.isArray(route.method) ? route.method : [route.method];
     for (const method of methods) {

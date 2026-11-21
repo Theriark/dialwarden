@@ -7,6 +7,11 @@
     {"name": "BASE_URL", "kind": "base_url"},
     {"name": "DEMO_SEED", "kind": "literal", "value": "true"},
     {"name": "TRUSTED_PROXIES", "kind": "literal", "value": "172.31.1.0/24,172.17.0.1"},
-    {"name": "LOG_LEVEL", "kind": "literal", "value": "info"}
+    {"name": "LOG_LEVEL", "kind": "literal", "value": "info"},
+    {"name": "DEV_SEED_OWNER_EMAIL", "kind": "literal", "value": "owner@dialwarden.test"},
+    {"name": "DEV_SEED_OWNER_PASSWORD", "kind": "token24"}
+  ],
+  "browserAccounts": [
+    {"email": "owner@dialwarden.test", "label": "owner", "passwordEnv": "DEV_SEED_OWNER_PASSWORD"}
   ]
 }
