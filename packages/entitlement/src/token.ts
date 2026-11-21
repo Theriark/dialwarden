@@ -78,9 +78,17 @@ export interface ParsedToken {
   signature: Buffer;
 }
 
-export type ParseResult =
-  | { ok: true; token: ParsedToken }
-  | { ok: false; reason: string };
+export interface ParseSuccess {
+  ok: true;
+  token: ParsedToken;
+}
+
+export interface ParseFailure {
+  ok: false;
+  reason: string;
+}
+
+export type ParseResult = ParseSuccess | ParseFailure;
 
 /** Strict base64url: the text must re-encode to itself (no padding, no slack bits). */
 function decodeBase64Url(part: string): Buffer | null {

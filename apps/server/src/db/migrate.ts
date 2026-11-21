@@ -115,9 +115,7 @@ export async function migrate(
   };
 }
 
-export function latestMigration(
-  sqlite: BetterSqlite3.Database,
-): string | null {
+export function latestMigration(sqlite: BetterSqlite3.Database): string | null {
   const select = sqlite.prepare(
     "SELECT id FROM schema_migrations ORDER BY id DESC LIMIT 1",
   );

@@ -17,7 +17,10 @@ const TAG_LENGTH = 16;
 const KEY_ID = /^[0-9a-f]{8}$/;
 
 export class KeyMismatchError extends Error {
-  constructor(readonly expected: string, readonly found: string) {
+  constructor(
+    readonly expected: string,
+    readonly found: string,
+  ) {
     super(`value was encrypted with key ${found}, not ${expected}`);
     this.name = "KeyMismatchError";
   }

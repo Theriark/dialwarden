@@ -86,7 +86,9 @@ export const activityEvents = sqliteTable(
     serverId: text("server_id"),
     at: text("at").notNull(),
     actor: text("actor").notNull(),
-    data: text("data").notNull().default(sql`'{}'`),
+    data: text("data")
+      .notNull()
+      .default(sql`'{}'`),
   },
   (table) => [
     index("activity_events_type").on(table.type, table.id),
