@@ -23,9 +23,12 @@ export const OWNER: SignedIn = {
   },
 };
 
+// gcTime stays Infinity: with 0, the session seeded by withSession has no
+// observer yet and is collected before a component that mounts later (after
+// another query resolves) reads it, so the page sees nobody signed in.
 export function testQueryClient(): QueryClient {
   return new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
 }
 
