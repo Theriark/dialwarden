@@ -7,6 +7,7 @@ import {
   headersOf,
   randomPassword,
   sessionCookie,
+  setupHeaders,
   setupOwner,
   testApp,
   type TestApp,
@@ -147,6 +148,7 @@ describe("first-run setup", () => {
       app.inject({
         method: "POST",
         url: "/api/v1/setup",
+        headers: setupHeaders(app),
         payload: { email, password: randomPassword(), name: "Owner" },
       });
     const results = await Promise.all([
@@ -162,6 +164,7 @@ describe("first-run setup", () => {
     const res = await current.app.inject({
       method: "POST",
       url: "/api/v1/setup",
+      headers: setupHeaders(current.app),
       payload: {
         email: "owner@dialwarden.test",
         password: "short-pw",
@@ -178,6 +181,7 @@ describe("session cookie and CSRF", () => {
     const res = await current.app.inject({
       method: "POST",
       url: "/api/v1/setup",
+      headers: setupHeaders(current.app),
       payload: {
         email: "owner@dialwarden.test",
         password: randomPassword(),
