@@ -18,8 +18,7 @@ const SHELL_MESSAGE =
 
 /** Values by setting key; a plain object from JSON or a Map. */
 export type Values =
-  | ReadonlyMap<string, JsonValue>
-  | { readonly [key: string]: JsonValue };
+  ReadonlyMap<string, JsonValue> | { readonly [key: string]: JsonValue };
 
 export function valueMap(values: Values): Map<string, JsonValue> {
   if (values instanceof Map) return new Map(values);
