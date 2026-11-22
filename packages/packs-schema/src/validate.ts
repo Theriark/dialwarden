@@ -13,8 +13,18 @@ export const SHELL_ADAPTERS: ReadonlySet<string> = new Set(SHELL_ADAPTER_IDS);
  */
 const SHELL_CHARACTERS = /[;&|`$()<>\\\n\r]/;
 
+/**
+ * Plain $NAME and ${NAME} references, the grammar the P2 shellvar adapter
+ * keeps live. A reference runs no command itself: it inserts another
+ * variable, one LinuxGSM sets (such as port) or one of the same file, which
+ * this check covers too. The LinuxGSM default startparameters use them, as
+ * in -port=${port}. $(...), $((...)), $1, ${NAME:-...} and the other braced
+ * forms with operators stay refused (code reviewer finding M1, THE-2333).
+ */
+const VARIABLE_REFERENCE = /\$\{[A-Za-z_]\w*\}|\$[A-Za-z_]\w*/g;
+
 const SHELL_MESSAGE =
-  "Must not contain ; & | ` $ ( ) < > \\ or a line break: the server start script passes this value to a shell.";
+  "Must not contain ; & | ` ( ) < > \\, a line break or a $ other than a plain $NAME or ${NAME} reference: the server start script passes this value to a shell.";
 
 /** Values by setting key; a plain object from JSON or a Map. */
 export type Values =
@@ -130,10 +140,13 @@ function strings(value: JsonValue): string[] {
 
 /**
  * True when a value holds a character a shell would act on. Ordinary
- * arguments pass: dash flags, numbers, and names in quotes with spaces.
+ * arguments pass: dash flags, numbers, names in quotes with spaces, and plain
+ * $NAME or ${NAME} references.
  */
 export function hasShellCharacters(value: JsonValue): boolean {
-  return strings(value).some((text) => SHELL_CHARACTERS.test(text));
+  return strings(value).some((text) => {
+    return SHELL_CHARACTERS.test(text.replace(VARIABLE_REFERENCE, ""));
+  });
 }
 
 /** The settings of a pack by key. */

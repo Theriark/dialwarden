@@ -2,7 +2,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Pack, Setting } from "../src/types.js";
+import type {
+  JsonValue,
+  Pack,
+  Setting,
+  ValidationIssue,
+} from "../src/types.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- the package's own test files and temporary test folders */
 
@@ -36,6 +41,45 @@ export function withSetting(
   });
   return { ...pack, settings };
 }
+
+/**
+ * Values of the test pack and the issues validate gives for them, written
+ * out once: the server test (node) and the browser test (jsdom) both compare
+ * with this list, so the two give the same result.
+ */
+export const GOLDEN_VALUES: { readonly [key: string]: JsonValue } = {
+  Unknown: true,
+  MaxPlayers: 0,
+  Difficulty: 1.25,
+  Mode: "Hardcore",
+  StartParameters: "-port=${port} -log; reboot",
+  "Options.ExpRate": 12,
+};
+
+const HARDCORE = "Hardcore mode is meant to be played with player combat on.";
+
+export const GOLDEN_ISSUES: readonly ValidationIssue[] = [
+  { key: "Unknown", severity: "error", message: "Unknown setting." },
+  { key: "MaxPlayers", severity: "error", message: "Must be at least 1." },
+  {
+    key: "Difficulty",
+    severity: "error",
+    message: "Must be a multiple of 0.5.",
+  },
+  {
+    key: "StartParameters",
+    severity: "error",
+    message:
+      "Must not contain ; & | ` ( ) < > \\, a line break or a $ other than a plain $NAME or ${NAME} reference: the server start script passes this value to a shell.",
+  },
+  { key: "Mode", severity: "warning", message: HARDCORE },
+  { key: "PvP", severity: "warning", message: HARDCORE },
+  {
+    key: "Options.ExpRate",
+    severity: "warning",
+    message: "An experience rate above 10 skips most of the synthetic game.",
+  },
+];
 
 /** A synthetic ACF fixture (fixtures/acf). */
 export function acf(name: string): Uint8Array {

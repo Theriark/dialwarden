@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { settingOf, testPack, withSetting } from "../test/kit.js";
-import type { JsonValue, Pack } from "./types.js";
+import {
+  GOLDEN_ISSUES,
+  GOLDEN_VALUES,
+  settingOf,
+  testPack,
+  withSetting,
+} from "../test/kit.js";
+import type { JsonValue, Pack, PackFile } from "./types.js";
 import {
   checkValue,
   effectiveValues,
@@ -9,6 +15,9 @@ import {
 } from "./validate.js";
 
 const pack = testPack();
+
+const SHELL_MESSAGE =
+  "Must not contain ; & | ` ( ) < > \\, a line break or a $ other than a plain $NAME or ${NAME} reference: the server start script passes this value to a shell.";
 
 /** The messages validate gives one setting for one value. */
 function messagesFor(key: string, value: JsonValue, target: Pack = pack) {
@@ -94,6 +103,10 @@ describe("validate(pack, values): types and ranges", () => {
       "PvP",
     ]);
   });
+
+  it("matches the written-out golden issues", () => {
+    expect(validate(pack, GOLDEN_VALUES)).toEqual(GOLDEN_ISSUES);
+  });
 });
 
 describe("validate(pack, values): rules", () => {
@@ -124,7 +137,17 @@ describe("validate(pack, values): shell characters (X1)", () => {
     "-name x | nc host 1",
     "-name `id`",
     "-name $(id)",
-    "-name ${HOME}",
+    "-name $((1+1))",
+    "-port ${port:-2456}",
+    "-port ${port:=$(id)}",
+    "-port ${#port}",
+    "-port ${port/2/3}",
+    "-port ${port%6}",
+    "-port ${port",
+    "-port $1",
+    "-pid $$",
+    "-name $",
+    "-port $port;reboot",
     "-log > /tmp/out",
     "-log < /etc/hosts",
     "-name x\nreboot",
@@ -133,34 +156,69 @@ describe("validate(pack, values): shell characters (X1)", () => {
     "(subshell)",
   ];
 
+  const ordinary = [
+    "-port=7777 -log",
+    "-port 2456 -public 1",
+    "-name 'Quarry Lane Survivors' -world Dedicated",
+    '-name "Synthetic Server" -players 16',
+    "+maxplayers 16 +hostname Example",
+    "TheIsland?listen?SessionName=Synthetic",
+    "-world Dedicated -nosteam -crossplay",
+    "-servername='${servername}' -port='${port}' -queryport='${steamport}'",
+    "-port=$port -log -players=${maxplayers}",
+  ];
+
+  // The test pack's lgsm file uses the shellvar adapter; the same check must
+  // hold for a text setting of the launch file and for shellvar-systemd.
+  const launchText = withSetting(pack, "StartParameters", {
+    file: "launch",
+    locator: { kind: "launch", flag: "-extra" },
+  });
+  const systemd: Pack = {
+    ...pack,
+    files: pack.files.map((file): PackFile => {
+      if (file.id !== "lgsm") return file;
+      return { ...file, adapter: "shellvar-systemd" };
+    }),
+  };
+  const shellPacks: [string, Pack][] = [
+    ["shellvar", pack],
+    ["launch", launchText],
+    ["shellvar-systemd", systemd],
+  ];
+
   it("refuses values a shell would act on in launch and shellvar files", () => {
-    for (const value of refused) {
-      expect(messagesFor("StartParameters", value), value).toHaveLength(1);
-      expect(messagesFor("LgsmName", value), value).toHaveLength(1);
+    for (const [adapter, target] of shellPacks) {
+      for (const value of refused) {
+        const label = `${adapter}: ${value}`;
+        const messages = messagesFor("StartParameters", value, target);
+        expect(messages, label).toEqual([SHELL_MESSAGE]);
+        const named = messagesFor("LgsmName", value, target);
+        expect(named, label).toEqual([SHELL_MESSAGE]);
+      }
     }
-    expect(messagesFor("StartParameters", "-port 1; x")).toEqual([
-      "Must not contain ; & | ` $ ( ) < > \\ or a line break: the server start script passes this value to a shell.",
-    ]);
   });
 
-  it("lets ordinary arguments through", () => {
-    const ordinary = [
-      "-port=7777 -log",
-      "-port 2456 -public 1",
-      "-name 'Quarry Lane Survivors' -world Dedicated",
-      '-name "Synthetic Server" -players 16',
-      "+maxplayers 16 +hostname Example",
-      "TheIsland?listen?SessionName=Synthetic",
-      "-world Dedicated -nosteam -crossplay",
-    ];
-    for (const value of ordinary) {
-      expect(messagesFor("StartParameters", value), value).toEqual([]);
+  it("refuses shell characters in each list item", () => {
+    const list = withSetting(launchText, "StartParameters", { type: "list" });
+    const bad = ["-log", "-port 1;"];
+    expect(messagesFor("StartParameters", bad, list)).toEqual([SHELL_MESSAGE]);
+    expect(messagesFor("StartParameters", ["-log"], list)).toEqual([]);
+  });
+
+  it("lets ordinary arguments and plain variable references through", () => {
+    for (const [adapter, target] of shellPacks) {
+      for (const value of ordinary) {
+        const messages = messagesFor("StartParameters", value, target);
+        expect(messages, `${adapter}: ${value}`).toEqual([]);
+      }
     }
   });
 
   it("checks every text inside lists and groups", () => {
     expect(hasShellCharacters(["-log", "-port 1;"])).toBe(true);
-    expect(hasShellCharacters({ a: { b: "$x" } })).toBe(true);
+    expect(hasShellCharacters({ a: { b: "$(x)" } })).toBe(true);
+    expect(hasShellCharacters({ a: { b: "${x}" } })).toBe(false);
     expect(hasShellCharacters({ a: ["-log", 1, true, null] })).toBe(false);
   });
 
