@@ -1,0 +1,1461 @@
+{
+  "id": "enshrouded",
+  "version": "1.0.0",
+  "displayName": "Enshrouded",
+  "steamAppId": 2278520,
+  "builds": {
+    "from": 0,
+    "to": null
+  },
+  "os": ["windows", "linux"],
+  "detection": {
+    "markers": [
+      {
+        "path": "enshrouded_server.exe"
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "server",
+      "paths": {
+        "linux": ["enshrouded_server.json"],
+        "windows": ["enshrouded_server.json"]
+      },
+      "adapter": "json",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    }
+  ],
+  "settings": [
+    {
+      "key": "name",
+      "label": "Server name",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/name"
+      },
+      "type": "string",
+      "default": "Enshrouded Server",
+      "min": 1,
+      "max": 64,
+      "group": "Server",
+      "description": "Name players see in the in-game server browser. Docker images often overwrite it from an environment variable at start.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "saveDirectory",
+      "label": "Save folder",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/saveDirectory"
+      },
+      "type": "string",
+      "default": "./savegame",
+      "group": "Server",
+      "description": "Folder for the world saves, relative to the server folder or absolute. Since version 1.0 it also holds backup subfolders.",
+      "restartRequired": true
+    },
+    {
+      "key": "logDirectory",
+      "label": "Log folder",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/logDirectory"
+      },
+      "type": "string",
+      "default": "./logs",
+      "group": "Server",
+      "description": "Folder the server writes its log file to. A relative path starts from the working folder of the server.",
+      "restartRequired": true
+    },
+    {
+      "key": "tags",
+      "label": "Browser tags",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/tags"
+      },
+      "type": "list",
+      "default": [],
+      "min": 0,
+      "max": 19,
+      "group": "Server",
+      "description": "Labels for the server browser filter. Only the game's fixed words are accepted (languages, LookingForPlayers, BaseBuilding, Exploration, Roleplay); any other word stops the server at start.",
+      "restartRequired": true
+    },
+    {
+      "key": "ip",
+      "label": "Bind address",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/ip"
+      },
+      "type": "string",
+      "default": "0.0.0.0",
+      "group": "Network",
+      "description": "IPv4 address the server listens on. Keep 0.0.0.0 inside containers unless one specific interface is needed.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "queryPort",
+      "label": "Query port",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/queryPort"
+      },
+      "type": "int",
+      "default": 15637,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "description": "UDP port for Steam queries and for joining. Open it in the firewall and keep it in step with any container port mapping.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "slotCount",
+      "label": "Player slots",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/slotCount"
+      },
+      "type": "int",
+      "default": 16,
+      "min": 1,
+      "max": 16,
+      "unit": "players",
+      "group": "Network",
+      "description": "Most players allowed online at once. The game caps it at sixteen, and seats reserved for roles come out of this total.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "voiceChatMode",
+      "label": "Voice chat range",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/voiceChatMode"
+      },
+      "type": "enum",
+      "default": "Proximity",
+      "enum": [
+        { "value": "Proximity", "label": "Nearby players only" },
+        { "value": "Global", "label": "Everyone on the server" }
+      ],
+      "group": "Chat",
+      "description": "Whether a voice is heard only near the speaker or by everyone on the server. The value is case-sensitive.",
+      "restartRequired": true
+    },
+    {
+      "key": "enableVoiceChat",
+      "label": "Voice chat",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/enableVoiceChat"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Chat",
+      "description": "Turns the built-in voice chat on or off for the whole server. While it is off, the voice range does nothing.",
+      "restartRequired": true
+    },
+    {
+      "key": "enableTextChat",
+      "label": "Text chat",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/enableTextChat"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Chat",
+      "description": "Turns the in-game text chat window on or off for every player who joins this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "gameSettingsPreset",
+      "label": "Difficulty preset",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettingsPreset"
+      },
+      "type": "enum",
+      "default": "Default",
+      "enum": [
+        { "value": "Default", "label": "Default" },
+        { "value": "Relaxed", "label": "Relaxed" },
+        { "value": "Hard", "label": "Hard" },
+        { "value": "Survival", "label": "Survival" },
+        { "value": "Custom", "label": "Custom" }
+      ],
+      "group": "Difficulty preset",
+      "description": "Picks a built-in difficulty profile. The custom difficulty values below take effect only when this is set to Custom.",
+      "restartRequired": true
+    },
+    {
+      "key": "gameSettings.playerHealthFactor",
+      "label": "Player health",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/playerHealthFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Custom difficulty: player",
+      "description": "Multiplies the maximum health of every character. The game shows it as a percentage, where 1 is the normal amount.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.playerManaFactor",
+      "label": "Player mana",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/playerManaFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Custom difficulty: player",
+      "description": "Multiplies maximum mana, so higher values allow more spells before players must wait for mana to return.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.playerStaminaFactor",
+      "label": "Player stamina",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/playerStaminaFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Custom difficulty: player",
+      "description": "Multiplies the stamina pool used for sprinting, dodging, climbing and weapon swings.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.playerBodyHeatFactor",
+      "label": "Body heat",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/playerBodyHeatFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: player",
+      "description": "Scales the body heat reserve. Higher values let players stay longer in freezing areas before the cold starts to hurt.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.playerDivingTimeFactor",
+      "label": "Diving time",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/playerDivingTimeFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: player",
+      "description": "Scales the starting air supply, which decides how long a character can stay underwater before drowning.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enableDurability",
+      "label": "Weapon durability",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enableDurability"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Custom difficulty: survival",
+      "description": "When on, weapons wear down with use and need repair. Turn it off so gear never wears out.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enableStarvingDebuff",
+      "label": "Hunger and starving",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enableStarvingDebuff"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Custom difficulty: survival",
+      "description": "Turns on hunger. Players who go too long without food or drink start starving and lose health until they eat.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.foodBuffDurationFactor",
+      "label": "Food bonus duration",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/foodBuffDurationFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: survival",
+      "description": "Multiplies how long the bonuses from eating and drinking last before players need another meal.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.fromHungerToStarving",
+      "label": "Hungry to starving time",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/fromHungerToStarving"
+      },
+      "type": "duration",
+      "default": 600000000000,
+      "min": 300000000000,
+      "max": 1200000000000,
+      "unit": "nanoseconds",
+      "group": "Custom difficulty: survival",
+      "description": "Time from becoming hungry to starving, stored in nanoseconds: 5 to 20 minutes, 10 by default. Only used while hunger is on.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.shroudTimeFactor",
+      "label": "Time in the Shroud",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/shroudTimeFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: survival",
+      "description": "Scales the time a player can spend in the Shroud before its harm begins. Values above 1 extend that grace period; below 1 the fog hurts sooner.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.tombstoneMode",
+      "label": "Items lost on death",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/tombstoneMode"
+      },
+      "type": "enum",
+      "default": "AddBackpackMaterials",
+      "enum": [
+        { "value": "AddBackpackMaterials", "label": "Materials only" },
+        { "value": "Everything", "label": "Every item" },
+        { "value": "NoTombstone", "label": "Nothing, no grave" }
+      ],
+      "group": "Custom difficulty: survival",
+      "description": "What a dead player leaves in a grave to recover later: only materials, every item, or no grave and nothing lost.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.curseModifier",
+      "label": "Curse chance",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/curseModifier"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "Easy", "label": "Easy (no curses)" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Hard", "label": "Hard" }
+      ],
+      "group": "Custom difficulty: survival",
+      "description": "Sets how often enemy hits apply a curse. Normal keeps the usual odds, Hard makes curses more frequent, and the Easy step removes curses from the game entirely.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.dayTimeDuration",
+      "label": "Day length",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/dayTimeDuration"
+      },
+      "type": "duration",
+      "default": 1800000000000,
+      "min": 120000000000,
+      "max": 3600000000000,
+      "unit": "nanoseconds",
+      "group": "Custom difficulty: world",
+      "description": "Length of daylight in nanoseconds, from 2 to 60 minutes. The default is 30 minutes of day.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.nightTimeDuration",
+      "label": "Night length",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/nightTimeDuration"
+      },
+      "type": "duration",
+      "default": 720000000000,
+      "min": 120000000000,
+      "max": 3600000000000,
+      "unit": "nanoseconds",
+      "group": "Custom difficulty: world",
+      "description": "Length of the night in nanoseconds, from 2 to 60 minutes. The default is 12 minutes of night.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.weatherFrequency",
+      "label": "Weather events",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/weatherFrequency"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "Disabled", "label": "Disabled" },
+        { "value": "Rare", "label": "Rare" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Often", "label": "Often" }
+      ],
+      "group": "Custom difficulty: world",
+      "description": "How often weather events such as storms show up in the world. Disabled turns them off.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enableGliderTurbulences",
+      "label": "Glider turbulence",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enableGliderTurbulences"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Custom difficulty: world",
+      "description": "When on, air turbulence pushes gliders around. Off gives the calm gliding of older game versions.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.tamingStartleRepercussion",
+      "label": "Startled while taming",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/tamingStartleRepercussion"
+      },
+      "type": "enum",
+      "default": "LoseSomeProgress",
+      "enum": [
+        { "value": "KeepProgress", "label": "Keep progress" },
+        { "value": "LoseSomeProgress", "label": "Lose some progress" },
+        { "value": "LoseAllProgress", "label": "Lose all progress" }
+      ],
+      "group": "Custom difficulty: world",
+      "description": "How much taming progress is lost when a player scares the animal being tamed.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.fishingDifficulty",
+      "label": "Fishing difficulty",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/fishingDifficulty"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "VeryEasy", "label": "Very easy" },
+        { "value": "Easy", "label": "Easy" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Hard", "label": "Hard" },
+        { "value": "VeryHard", "label": "Very hard" }
+      ],
+      "group": "Custom difficulty: world",
+      "description": "How hard the fish fight on the line. Every step up makes the catch struggle longer before it gives in; the easiest steps suit new anglers.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.flameLevelFogRemoval",
+      "label": "Flame level for Shroud altars",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/flameLevelFogRemoval"
+      },
+      "type": "int",
+      "default": 11,
+      "min": 0,
+      "max": 20,
+      "unit": "level",
+      "group": "Custom difficulty: world",
+      "description": "Sets which Flame Level a player must reach before altars may go up inside the Shroud. A higher number keeps that locked behind more progress.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.miningDamageFactor",
+      "label": "Mining damage",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/miningDamageFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: resources",
+      "description": "Multiplies mining damage. Higher values dig away more terrain and give more resources with each hit.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.plantGrowthSpeedFactor",
+      "label": "Plant growth speed",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/plantGrowthSpeedFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: resources",
+      "description": "Multiplies how fast crops and other planted seeds grow before they can be harvested.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.resourceDropStackAmountFactor",
+      "label": "Loot stack size",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/resourceDropStackAmountFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: resources",
+      "description": "Multiplies how many materials each loot stack holds, whether it comes from a chest or a defeated enemy.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.factoryProductionSpeedFactor",
+      "label": "Workshop speed",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/factoryProductionSpeedFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: resources",
+      "description": "Multiplies how fast crafting stations produce items. Higher values mean shorter crafting times.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.experienceCombatFactor",
+      "label": "Combat experience",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/experienceCombatFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: progression",
+      "description": "Multiplies the experience points players earn by defeating enemies.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.experienceMiningFactor",
+      "label": "Mining experience",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/experienceMiningFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: progression",
+      "description": "Multiplies experience from mining. Zero is allowed and means mining gives no experience at all.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.experienceExplorationQuestsFactor",
+      "label": "Exploration and quest experience",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/experienceExplorationQuestsFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: progression",
+      "description": "Multiplies the experience earned by discovering places and finishing quests.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.perkCostFactor",
+      "label": "Weapon upgrade cost",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/perkCostFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: progression",
+      "description": "Multiplies how many Runes each weapon upgrade costs. Lower values make upgrades cheaper.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.perkUpgradeRecyclingFactor",
+      "label": "Runes back from salvage",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/perkUpgradeRecyclingFactor"
+      },
+      "type": "float",
+      "default": 0.5,
+      "min": 0,
+      "max": 1,
+      "unit": "share",
+      "group": "Custom difficulty: progression",
+      "description": "Portion of the Runes a player gets back after scrapping an upgraded weapon. The default, 0.5, refunds half; 1 refunds every Rune.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.randomSpawnerAmount",
+      "label": "Enemy numbers",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/randomSpawnerAmount"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "Few", "label": "Few" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Automatic", "label": "Automatic" },
+        { "value": "Many", "label": "Many" },
+        { "value": "Extreme", "label": "Extreme" }
+      ],
+      "group": "Custom difficulty: enemies",
+      "description": "How many enemies populate the world. Automatic adjusts the number to the size of the group nearby.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.aggroPoolAmount",
+      "label": "Enemies attacking at once",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/aggroPoolAmount"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "Few", "label": "Few" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Many", "label": "Many" },
+        { "value": "Extreme", "label": "Extreme" }
+      ],
+      "group": "Custom difficulty: enemies",
+      "description": "Cap on how many enemies may attack one group at the same time. It is a step on a scale, not a percentage.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enemyDamageFactor",
+      "label": "Enemy damage",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enemyDamageFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies the damage regular enemies deal. Bosses use their own damage setting.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enemyHealthFactor",
+      "label": "Enemy health",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enemyHealthFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies the hit points of regular enemies. Bosses are scaled by their own health setting.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enemyStaminaFactor",
+      "label": "Enemy stamina",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enemyStaminaFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies regular enemy stamina; higher values make enemies harder to stun. Bosses are not affected.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.enemyPerceptionRangeFactor",
+      "label": "Enemy perception range",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/enemyPerceptionRangeFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 2,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Scales the senses of regular enemies. Above 1 they notice players sooner and from farther away; below 1 they must come closer first. Bosses ignore this one.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.bossDamageFactor",
+      "label": "Boss damage",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/bossDamageFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.2,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies the damage of boss attacks. Its lowest value, 0.2, sits a little below the one for regular enemies.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.bossHealthFactor",
+      "label": "Boss health",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/bossHealthFactor"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.2,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies boss hit points, which makes boss fights shorter or longer.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.threatBonus",
+      "label": "Enemy aggression",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/threatBonus"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.25,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Custom difficulty: enemies",
+      "description": "Multiplies how often regular enemies start an attack. Higher values give fiercer fights; bosses are not affected.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "gameSettings.pacifyAllEnemies",
+      "label": "Passive enemies",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/gameSettings/pacifyAllEnemies"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Custom difficulty: enemies",
+      "description": "When on, regular enemies stay passive until a player hits them first. Bosses still attack.",
+      "restartRequired": true,
+      "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
+    },
+    {
+      "key": "userGroups.slot1.name",
+      "label": "Role 1 name",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/0/name"
+      },
+      "type": "string",
+      "default": "Admin",
+      "min": 1,
+      "max": 32,
+      "group": "Roles",
+      "description": "Name of the first role in the file. A file the game writes lists Admin here; roles are told apart by name, so each must be unique.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot1.password",
+      "label": "Role 1 password",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/0/password"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Roles",
+      "description": "Password that gives a joining player the first role in the file (Admin in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
+      "restartRequired": true,
+      "secret": true
+    },
+    {
+      "key": "userGroups.slot1.reservedSlots",
+      "label": "Role 1 reserved seats",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/0/reservedSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 16,
+      "unit": "players",
+      "group": "Roles",
+      "description": "Player seats held free for the first role. Reserved seats of all roles together must fit within the player slots.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot2.name",
+      "label": "Role 2 name",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/1/name"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 32,
+      "group": "Roles",
+      "description": "Name of the second role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot2.password",
+      "label": "Role 2 password",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/1/password"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Roles",
+      "description": "Password that gives a joining player the second role in the file (Friend in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
+      "restartRequired": true,
+      "secret": true
+    },
+    {
+      "key": "userGroups.slot2.reservedSlots",
+      "label": "Role 2 reserved seats",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/1/reservedSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 16,
+      "unit": "players",
+      "group": "Roles",
+      "description": "Player seats held free for the second role. Reserved seats of all roles together must fit within the player slots.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot3.name",
+      "label": "Role 3 name",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/2/name"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 32,
+      "group": "Roles",
+      "description": "Name of the third role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot3.password",
+      "label": "Role 3 password",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/2/password"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Roles",
+      "description": "Password that gives a joining player the third role in the file (Guest in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
+      "restartRequired": true,
+      "secret": true
+    },
+    {
+      "key": "userGroups.slot3.reservedSlots",
+      "label": "Role 3 reserved seats",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/2/reservedSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 16,
+      "unit": "players",
+      "group": "Roles",
+      "description": "Player seats held free for the third role. Reserved seats of all roles together must fit within the player slots.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot4.name",
+      "label": "Role 4 name",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/3/name"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 32,
+      "group": "Roles",
+      "description": "Name of the fourth role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
+      "restartRequired": true
+    },
+    {
+      "key": "userGroups.slot4.password",
+      "label": "Role 4 password",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/3/password"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Roles",
+      "description": "Password that gives a joining player the fourth role in the file (Visitor in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
+      "restartRequired": true,
+      "secret": true
+    },
+    {
+      "key": "userGroups.slot4.reservedSlots",
+      "label": "Role 4 reserved seats",
+      "file": "server",
+      "locator": {
+        "kind": "json",
+        "pointer": "/userGroups/3/reservedSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 16,
+      "unit": "players",
+      "group": "Roles",
+      "description": "Player seats held free for the fourth role. Reserved seats of all roles together must fit within the player slots.",
+      "restartRequired": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "custom-values-need-custom-preset",
+      "severity": "warning",
+      "message": "Custom difficulty values were changed, but the game uses them only when the difficulty preset is Custom. Switch the preset to Custom or these changes have no effect.",
+      "settings": ["gameSettingsPreset"],
+      "when": {
+        "and": [
+          { "!=": [{ "var": "gameSettingsPreset" }, "Custom"] },
+          {
+            "or": [
+              { "!=": [{ "var": "gameSettings.playerHealthFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.playerManaFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.playerStaminaFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.playerBodyHeatFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.playerDivingTimeFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.enableDurability" }, true] },
+              { "!=": [{ "var": "gameSettings.enableStarvingDebuff" }, false] },
+              { "!=": [{ "var": "gameSettings.foodBuffDurationFactor" }, 1] },
+              {
+                "!=": [
+                  { "var": "gameSettings.fromHungerToStarving" },
+                  600000000000
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.shroudTimeFactor" }, 1] },
+              {
+                "!=": [
+                  { "var": "gameSettings.tombstoneMode" },
+                  "AddBackpackMaterials"
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.curseModifier" }, "Normal"] },
+              {
+                "!=": [{ "var": "gameSettings.dayTimeDuration" }, 1800000000000]
+              },
+              {
+                "!=": [
+                  { "var": "gameSettings.nightTimeDuration" },
+                  720000000000
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.weatherFrequency" }, "Normal"] },
+              {
+                "!=": [{ "var": "gameSettings.enableGliderTurbulences" }, true]
+              },
+              {
+                "!=": [
+                  { "var": "gameSettings.tamingStartleRepercussion" },
+                  "LoseSomeProgress"
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.fishingDifficulty" }, "Normal"] },
+              { "!=": [{ "var": "gameSettings.flameLevelFogRemoval" }, 11] },
+              { "!=": [{ "var": "gameSettings.miningDamageFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.plantGrowthSpeedFactor" }, 1] },
+              {
+                "!=": [
+                  { "var": "gameSettings.resourceDropStackAmountFactor" },
+                  1
+                ]
+              },
+              {
+                "!=": [
+                  { "var": "gameSettings.factoryProductionSpeedFactor" },
+                  1
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.experienceCombatFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.experienceMiningFactor" }, 1] },
+              {
+                "!=": [
+                  { "var": "gameSettings.experienceExplorationQuestsFactor" },
+                  1
+                ]
+              },
+              { "!=": [{ "var": "gameSettings.perkCostFactor" }, 1] },
+              {
+                "!=": [
+                  { "var": "gameSettings.perkUpgradeRecyclingFactor" },
+                  0.5
+                ]
+              },
+              {
+                "!=": [{ "var": "gameSettings.randomSpawnerAmount" }, "Normal"]
+              },
+              { "!=": [{ "var": "gameSettings.aggroPoolAmount" }, "Normal"] },
+              { "!=": [{ "var": "gameSettings.enemyDamageFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.enemyHealthFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.enemyStaminaFactor" }, 1] },
+              {
+                "!=": [{ "var": "gameSettings.enemyPerceptionRangeFactor" }, 1]
+              },
+              { "!=": [{ "var": "gameSettings.bossDamageFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.bossHealthFactor" }, 1] },
+              { "!=": [{ "var": "gameSettings.threatBonus" }, 1] },
+              { "!=": [{ "var": "gameSettings.pacifyAllEnemies" }, false] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "role-without-password",
+      "severity": "warning",
+      "message": "A role has an empty password, so anyone could join with that role.",
+      "settings": [
+        "userGroups.slot1.password",
+        "userGroups.slot2.password",
+        "userGroups.slot3.password",
+        "userGroups.slot4.password"
+      ],
+      "when": {
+        "or": [
+          { "==": [{ "var": "userGroups.slot1.password" }, ""] },
+          { "==": [{ "var": "userGroups.slot2.password" }, ""] },
+          { "==": [{ "var": "userGroups.slot3.password" }, ""] },
+          { "==": [{ "var": "userGroups.slot4.password" }, ""] }
+        ]
+      }
+    },
+    {
+      "id": "role-names-repeat",
+      "severity": "error",
+      "message": "Two roles have the same name. The game tells roles apart by name, so each name must be unique.",
+      "settings": [
+        "userGroups.slot1.name",
+        "userGroups.slot2.name",
+        "userGroups.slot3.name",
+        "userGroups.slot4.name"
+      ],
+      "when": {
+        "or": [
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot2.name" }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot3.name" }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot2.name" },
+                  { "var": "userGroups.slot3.name" }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot2.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot3.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "reserved-seats-over-slots",
+      "severity": "error",
+      "message": "The seats reserved for roles add up to more than the player slots, so some roles could never get the seats held for them.",
+      "settings": [
+        "userGroups.slot1.reservedSlots",
+        "userGroups.slot2.reservedSlots",
+        "userGroups.slot3.reservedSlots",
+        "userGroups.slot4.reservedSlots",
+        "slotCount"
+      ],
+      "when": {
+        ">": [
+          {
+            "+": [
+              { "var": "userGroups.slot1.reservedSlots" },
+              { "var": "userGroups.slot2.reservedSlots" },
+              { "var": "userGroups.slot3.reservedSlots" },
+              { "var": "userGroups.slot4.reservedSlots" }
+            ]
+          },
+          { "var": "slotCount" }
+        ]
+      }
+    },
+    {
+      "id": "voice-range-without-voice",
+      "severity": "info",
+      "message": "A voice chat range is chosen but voice chat is off, so the range does nothing until voice chat is turned on.",
+      "settings": ["voiceChatMode"],
+      "when": {
+        "and": [
+          { "!": [{ "var": "enableVoiceChat" }] },
+          { "==": [{ "var": "voiceChatMode" }, "Global"] }
+        ]
+      }
+    },
+    {
+      "id": "starving-time-without-hunger",
+      "severity": "info",
+      "message": "The hungry to starving time is changed, but hunger is off, so the value has no effect.",
+      "settings": ["gameSettings.fromHungerToStarving"],
+      "when": {
+        "and": [
+          { "!": [{ "var": "gameSettings.enableStarvingDebuff" }] },
+          {
+            "!=": [{ "var": "gameSettings.fromHungerToStarving" }, 600000000000]
+          }
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "default",
+      "label": "Default",
+      "description": "Switches to the game's Default difficulty preset and puts every custom difficulty value back to what the game starts with.",
+      "values": {
+        "gameSettingsPreset": "Default",
+        "gameSettings.playerHealthFactor": 1,
+        "gameSettings.playerManaFactor": 1,
+        "gameSettings.playerStaminaFactor": 1,
+        "gameSettings.playerBodyHeatFactor": 1,
+        "gameSettings.playerDivingTimeFactor": 1,
+        "gameSettings.enableDurability": true,
+        "gameSettings.enableStarvingDebuff": false,
+        "gameSettings.foodBuffDurationFactor": 1,
+        "gameSettings.fromHungerToStarving": 600000000000,
+        "gameSettings.shroudTimeFactor": 1,
+        "gameSettings.tombstoneMode": "AddBackpackMaterials",
+        "gameSettings.curseModifier": "Normal",
+        "gameSettings.dayTimeDuration": 1800000000000,
+        "gameSettings.nightTimeDuration": 720000000000,
+        "gameSettings.weatherFrequency": "Normal",
+        "gameSettings.enableGliderTurbulences": true,
+        "gameSettings.tamingStartleRepercussion": "LoseSomeProgress",
+        "gameSettings.fishingDifficulty": "Normal",
+        "gameSettings.flameLevelFogRemoval": 11,
+        "gameSettings.miningDamageFactor": 1,
+        "gameSettings.plantGrowthSpeedFactor": 1,
+        "gameSettings.resourceDropStackAmountFactor": 1,
+        "gameSettings.factoryProductionSpeedFactor": 1,
+        "gameSettings.experienceCombatFactor": 1,
+        "gameSettings.experienceMiningFactor": 1,
+        "gameSettings.experienceExplorationQuestsFactor": 1,
+        "gameSettings.perkCostFactor": 1,
+        "gameSettings.perkUpgradeRecyclingFactor": 0.5,
+        "gameSettings.randomSpawnerAmount": "Normal",
+        "gameSettings.aggroPoolAmount": "Normal",
+        "gameSettings.enemyDamageFactor": 1,
+        "gameSettings.enemyHealthFactor": 1,
+        "gameSettings.enemyStaminaFactor": 1,
+        "gameSettings.enemyPerceptionRangeFactor": 1,
+        "gameSettings.bossDamageFactor": 1,
+        "gameSettings.bossHealthFactor": 1,
+        "gameSettings.threatBonus": 1,
+        "gameSettings.pacifyAllEnemies": false
+      }
+    },
+    {
+      "id": "relaxed-friends",
+      "label": "Relaxed friends",
+      "description": "A Custom difficulty for small friendly groups: tougher players, softer enemies, no lost items and quicker crafting.",
+      "values": {
+        "gameSettingsPreset": "Custom",
+        "gameSettings.playerHealthFactor": 1.5,
+        "gameSettings.playerStaminaFactor": 1.5,
+        "gameSettings.playerManaFactor": 1.5,
+        "gameSettings.enemyDamageFactor": 0.75,
+        "gameSettings.bossDamageFactor": 0.75,
+        "gameSettings.aggroPoolAmount": "Few",
+        "gameSettings.tombstoneMode": "NoTombstone",
+        "gameSettings.enableDurability": false,
+        "gameSettings.curseModifier": "Easy",
+        "gameSettings.weatherFrequency": "Rare",
+        "gameSettings.factoryProductionSpeedFactor": 1.5,
+        "gameSettings.plantGrowthSpeedFactor": 1.5,
+        "gameSettings.resourceDropStackAmountFactor": 1.25,
+        "gameSettings.perkUpgradeRecyclingFactor": 1,
+        "gameSettings.nightTimeDuration": 600000000000,
+        "enableTextChat": true,
+        "enableVoiceChat": true
+      }
+    },
+    {
+      "id": "hard-survival",
+      "label": "Hard survival",
+      "description": "A Custom difficulty with hunger on, fiercer enemies, every item lost on death and longer nights.",
+      "values": {
+        "gameSettingsPreset": "Custom",
+        "gameSettings.enableStarvingDebuff": true,
+        "gameSettings.fromHungerToStarving": 450000000000,
+        "gameSettings.playerHealthFactor": 0.75,
+        "gameSettings.playerBodyHeatFactor": 0.75,
+        "gameSettings.foodBuffDurationFactor": 0.75,
+        "gameSettings.enemyDamageFactor": 1.5,
+        "gameSettings.threatBonus": 1.5,
+        "gameSettings.randomSpawnerAmount": "Many",
+        "gameSettings.bossHealthFactor": 1.5,
+        "gameSettings.tombstoneMode": "Everything",
+        "gameSettings.weatherFrequency": "Often",
+        "gameSettings.curseModifier": "Hard",
+        "gameSettings.fishingDifficulty": "Hard",
+        "gameSettings.experienceCombatFactor": 0.75,
+        "gameSettings.experienceMiningFactor": 0.5,
+        "gameSettings.perkUpgradeRecyclingFactor": 0.3,
+        "gameSettings.nightTimeDuration": 1200000000000
+      }
+    }
+  ],
+  "probes": [],
+  "hooksSupported": [],
+  "sources": [
+    "https://github.com/mornedhels/enshrouded-server/blob/main/README.md",
+    "https://github.com/mornedhels/enshrouded-server/blob/main/docs/SERVER_DIFFICULTY.md",
+    "https://github.com/mornedhels/enshrouded-server/blob/main/docs/SERVER_ROLES.md",
+    "https://github.com/lehmanrd/flamekeeper/blob/main/docs/game-server-behavior.md",
+    "https://github.com/lehmanrd/flamekeeper/blob/main/backend/app/resources/settings-schema.json",
+    "https://github.com/jsknnr/enshrouded-server/blob/main/container/enshrouded_server_example.json",
+    "https://github.com/jsknnr/enshrouded-server/blob/main/container/entrypoint.sh"
+  ]
+}

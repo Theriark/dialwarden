@@ -1,0 +1,2585 @@
+{
+  "id": "palworld",
+  "version": "1.0.0",
+  "displayName": "Palworld",
+  "steamAppId": 2394010,
+  "builds": {
+    "from": 0,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "PalServer.sh",
+        "os": ["linux"]
+      },
+      {
+        "path": "PalServer.exe",
+        "os": ["windows"]
+      }
+    ],
+    "warnings": [
+      {
+        "path": "Pal/Saved/SaveGames/0/*/WorldOption.sav",
+        "message": "A WorldOption.sav file sits in the world save folder. The game reads it instead of most PalWorldSettings.ini values, so edits to those values may have no effect until it is removed."
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "settings",
+      "paths": {
+        "linux": ["Pal/Saved/Config/LinuxServer/PalWorldSettings.ini"],
+        "windows": ["Pal/Saved/Config/WindowsServer/PalWorldSettings.ini"]
+      },
+      "adapter": "ueini",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    }
+  ],
+  "settings": [
+    {
+      "key": "ServerName",
+      "label": "Server name",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ServerName"
+      },
+      "type": "string",
+      "group": "Server",
+      "description": "Name players see in the server browser and the community list. The file always stores it in double quotes, so the name itself cannot hold a double quote.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "ServerDescription",
+      "label": "Server description",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ServerDescription"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Server",
+      "description": "Short text shown under the server name in the browser. It is stored in quotes and may be left empty.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Region",
+      "label": "Region tag",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "Region"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Server",
+      "description": "Free-text region label sent to the server list. It only labels the server; it does not move the host anywhere.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowClientMod",
+      "label": "Allow modded clients",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowClientMod"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Server",
+      "description": "Lets players who run client-side mods join. Turn it off to turn modded clients away.",
+      "restartRequired": true
+    },
+    {
+      "key": "LogFormatType",
+      "label": "Log format",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "LogFormatType"
+      },
+      "type": "enum",
+      "default": "Text",
+      "enum": [
+        { "value": "Text", "label": "Plain text" },
+        { "value": "Json", "label": "JSON lines" }
+      ],
+      "group": "Server",
+      "description": "Format of the server log stream. JSON lines suit log shippers and parsers; plain text suits people reading the console.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsShowJoinLeftMessage",
+      "label": "Join and leave messages",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsShowJoinLeftMessage"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Server",
+      "description": "Posts a chat line in game every time a player joins or leaves the world.",
+      "restartRequired": true
+    },
+    {
+      "key": "bShowPlayerList",
+      "label": "Show player list",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bShowPlayerList"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Server",
+      "description": "Shows the list of connected players in the in-game pause menu to everyone online.",
+      "restartRequired": true
+    },
+    {
+      "key": "ChatPostLimitPerMinute",
+      "label": "Chat messages per minute",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ChatPostLimitPerMinute"
+      },
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 100,
+      "unit": "messages",
+      "group": "Server",
+      "description": "Caps how many chat messages one player may send per minute, a simple guard against spam.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerPlayerMaxNum",
+      "label": "Player slots",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ServerPlayerMaxNum"
+      },
+      "type": "int",
+      "default": 32,
+      "min": 1,
+      "max": 128,
+      "unit": "players",
+      "group": "Network",
+      "description": "Most players allowed online at once. Start scripts and panels often pass -players as well; keep both numbers equal.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "CoopPlayerMaxNum",
+      "label": "Co-op party size",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "CoopPlayerMaxNum"
+      },
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 4,
+      "unit": "players",
+      "group": "Network",
+      "description": "Party size for co-op sessions hosted from a game client. A dedicated server mostly ignores it.",
+      "restartRequired": true
+    },
+    {
+      "key": "PublicPort",
+      "label": "Advertised port",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PublicPort"
+      },
+      "type": "int",
+      "default": 8211,
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "description": "Port announced to the community list. Changing it does not change the port the server binds; that comes from -port.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "PublicIP",
+      "label": "Advertised address",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PublicIP"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Network",
+      "description": "Address announced to the community list. Leave it empty and the server works the address out by itself.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "CrossplayPlatforms",
+      "label": "Allowed platforms",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "CrossplayPlatforms"
+      },
+      "type": "list",
+      "default": ["Steam", "Xbox", "PS5", "Mac"],
+      "min": 1,
+      "max": 4,
+      "group": "Network",
+      "description": "Client platforms that may join, written as a list in parentheses. Known entries are Steam, Xbox, PS5 and Mac.",
+      "restartRequired": true
+    },
+    {
+      "key": "bUseAuth",
+      "label": "Player authentication",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bUseAuth"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "description": "Checks player accounts when they connect. Turning it off is meant for testing only.",
+      "restartRequired": true
+    },
+    {
+      "key": "BanListURL",
+      "label": "Shared ban list address",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BanListURL"
+      },
+      "type": "string",
+      "default": "https://b.palworldgame.com/api/banlist.txt",
+      "group": "Network",
+      "description": "Web address of the shared ban list the server downloads. Keep the default unless you host a list of your own.",
+      "restartRequired": true
+    },
+    {
+      "key": "AdminPassword",
+      "label": "Admin password",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AdminPassword"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Admin and REST API",
+      "description": "Unlocks admin chat commands and is the password of the HTTP admin API. When it is empty, both stay locked.",
+      "restartRequired": true,
+      "secret": true,
+      "panelManaged": true
+    },
+    {
+      "key": "ServerPassword",
+      "label": "Join password",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ServerPassword"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Admin and REST API",
+      "description": "Password players must enter to join. Leave it empty to run an open server.",
+      "restartRequired": true,
+      "secret": true,
+      "panelManaged": true
+    },
+    {
+      "key": "RESTAPIEnabled",
+      "label": "HTTP admin API",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RESTAPIEnabled"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Admin and REST API",
+      "description": "Turns on the HTTP admin API for server info, players, announcements, saves and shutdown. Keep it reachable from the host only.",
+      "restartRequired": true
+    },
+    {
+      "key": "RESTAPIPort",
+      "label": "HTTP admin API port",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RESTAPIPort"
+      },
+      "type": "int",
+      "default": 8212,
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Admin and REST API",
+      "description": "TCP port of the HTTP admin API. Never forward it to the public internet.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "RCONEnabled",
+      "label": "Legacy RCON",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RCONEnabled"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Admin and REST API",
+      "description": "Turns on the older RCON listener. The game has deprecated it in favour of the HTTP admin API.",
+      "restartRequired": true
+    },
+    {
+      "key": "RCONPort",
+      "label": "Legacy RCON port",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RCONPort"
+      },
+      "type": "int",
+      "default": 25575,
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Admin and REST API",
+      "description": "TCP port of the legacy RCON listener. It must not share a port with the game or the HTTP admin API.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "ExpRate",
+      "label": "Experience rate",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ExpRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 20,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the experience players and Pals earn. 2.0 roughly halves the levelling grind.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalCaptureRate",
+      "label": "Capture rate",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalCaptureRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the chance that a thrown sphere catches a wild Pal.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalSpawnNumRate",
+      "label": "Wild Pal numbers",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalSpawnNumRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales how many wild Pals appear. Higher values add noticeable CPU load on the server.",
+      "restartRequired": true
+    },
+    {
+      "key": "CollectionDropRate",
+      "label": "Gathering yield",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "CollectionDropRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales what players get from gathering nodes such as trees, ore veins and stone.",
+      "restartRequired": true
+    },
+    {
+      "key": "CollectionObjectHpRate",
+      "label": "Gathering node toughness",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "CollectionObjectHpRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 3,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the hit points of gathering nodes. Higher values mean more swings before a node breaks.",
+      "restartRequired": true
+    },
+    {
+      "key": "CollectionObjectRespawnSpeedRate",
+      "label": "Gathering node regrowth",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "CollectionObjectRespawnSpeedRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the wait before broken nodes grow back. Smaller values bring them back sooner.",
+      "restartRequired": true
+    },
+    {
+      "key": "EnemyDropItemRate",
+      "label": "Enemy loot",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "EnemyDropItemRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the loot that defeated enemies and wild Pals leave behind.",
+      "restartRequired": true
+    },
+    {
+      "key": "WorkSpeedRate",
+      "label": "Base work speed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "WorkSpeedRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales how fast Pals work at bases: crafting, mining, farming and the other base jobs.",
+      "restartRequired": true
+    },
+    {
+      "key": "MonsterFarmActionSpeedRate",
+      "label": "Ranch speed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "MonsterFarmActionSpeedRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales how quickly Pals assigned to a ranch produce their items.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalEggDefaultHatchingTime",
+      "label": "Egg hatching time",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalEggDefaultHatchingTime"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 240,
+      "unit": "hours",
+      "group": "Rates",
+      "description": "Base incubation time of the largest eggs; smaller eggs scale from it. 0 makes eggs hatch at once.",
+      "restartRequired": true
+    },
+    {
+      "key": "ItemWeightRate",
+      "label": "Item weight",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ItemWeightRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales the weight of carried items. Lower values let players haul far more at once.",
+      "restartRequired": true
+    },
+    {
+      "key": "EquipmentDurabilityDamageRate",
+      "label": "Equipment wear",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "EquipmentDurabilityDamageRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales how fast weapons and armour lose durability while in use.",
+      "restartRequired": true
+    },
+    {
+      "key": "ItemCorruptionMultiplier",
+      "label": "Food spoilage",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ItemCorruptionMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Rates",
+      "description": "Scales how fast food spoils. Lower values keep stored food fresh for longer.",
+      "restartRequired": true
+    },
+    {
+      "key": "Difficulty",
+      "label": "Difficulty label",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "Difficulty"
+      },
+      "type": "enum",
+      "default": "None",
+      "enum": [
+        { "value": "None", "label": "None (rates decide)" },
+        { "value": "Easy", "label": "Easy" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Hard", "label": "Hard" },
+        { "value": "Hardcore", "label": "Hardcore" },
+        { "value": "Custom", "label": "Custom" }
+      ],
+      "group": "Difficulty",
+      "description": "Overall difficulty label of the world. With None, every rate and multiplier in this file decides on its own.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalDamageRateAttack",
+      "label": "Pal attack damage",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalDamageRateAttack"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the damage Pals deal, for your own team and for wild ones alike.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalDamageRateDefense",
+      "label": "Damage taken by Pals",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalDamageRateDefense"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the damage Pals receive. Values above 1.0 make every Pal more fragile.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerDamageRateAttack",
+      "label": "Player attack damage",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerDamageRateAttack"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the damage players deal to enemies, Pals and objects.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerDamageRateDefense",
+      "label": "Damage taken by players",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerDamageRateDefense"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the damage players receive. Values above 1.0 make players more fragile.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerStomachDecreaceRate",
+      "label": "Player hunger drain",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerStomachDecreaceRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast player hunger goes down. The key keeps the game's own spelling, Decreace.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerStaminaDecreaceRate",
+      "label": "Player stamina use",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerStaminaDecreaceRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the stamina players spend sprinting, climbing, swimming and gliding.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerAutoHPRegeneRate",
+      "label": "Player health regeneration",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerAutoHPRegeneRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast an awake player gets health back without food or items.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerAutoHpRegeneRateInSleep",
+      "label": "Player health while sleeping",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerAutoHpRegeneRateInSleep"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast a sleeping player gets health back. Note the key spells Hp, not HP.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalStomachDecreaceRate",
+      "label": "Pal hunger drain",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalStomachDecreaceRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast Pal hunger goes down. The key keeps the game's own spelling, Decreace.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalStaminaDecreaceRate",
+      "label": "Pal stamina use",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalStaminaDecreaceRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales the stamina Pals spend while ridden, flying or doing heavy base work.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalAutoHPRegeneRate",
+      "label": "Pal health regeneration",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalAutoHPRegeneRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast Pals out in the world get health back by themselves.",
+      "restartRequired": true
+    },
+    {
+      "key": "PalAutoHpRegeneRateInSleep",
+      "label": "Pal health while resting",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PalAutoHpRegeneRateInSleep"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Difficulty",
+      "description": "Scales how fast Pals get health back while resting or kept in the Palbox.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableInvaderEnemy",
+      "label": "Base raids",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableInvaderEnemy"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Lets raiding parties attack player bases. Turn it off to remove base invasions.",
+      "restartRequired": true
+    },
+    {
+      "key": "EnablePredatorBossPal",
+      "label": "Predator bosses",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "EnablePredatorBossPal"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Lets roaming predator boss Pals appear. Unlike most switches, this key has no b prefix.",
+      "restartRequired": true
+    },
+    {
+      "key": "RandomizerType",
+      "label": "Spawn randomizer",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RandomizerType"
+      },
+      "type": "enum",
+      "default": "None",
+      "enum": [
+        { "value": "None", "label": "Off" },
+        { "value": "Region", "label": "Shuffle within each region" },
+        { "value": "All", "label": "Shuffle across the whole map" }
+      ],
+      "group": "Difficulty",
+      "description": "Shuffles which wild Pals spawn in each area of the map, either inside each region or across the whole map.",
+      "restartRequired": true
+    },
+    {
+      "key": "RandomizerSeed",
+      "label": "Randomizer seed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RandomizerSeed"
+      },
+      "type": "string",
+      "default": "",
+      "group": "Difficulty",
+      "description": "Seed text for the spawn randomizer. The same seed gives the same shuffled layout again.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsRandomizerPalLevelRandom",
+      "label": "Random wild Pal levels",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsRandomizerPalLevelRandom"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Difficulty",
+      "description": "When on, wild Pal levels are fully random instead of following the level band of each area.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowEnhanceStat_Health",
+      "label": "Stat points: health",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowEnhanceStat_Health"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Allows players to spend stat points on health. Off locks that stat for everyone.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowEnhanceStat_Attack",
+      "label": "Stat points: attack",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowEnhanceStat_Attack"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Allows players to spend stat points on attack. Off locks that stat for everyone.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowEnhanceStat_Stamina",
+      "label": "Stat points: stamina",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowEnhanceStat_Stamina"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Allows players to spend stat points on stamina. Off locks that stat for everyone.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowEnhanceStat_Weight",
+      "label": "Stat points: carry weight",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowEnhanceStat_Weight"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Allows players to spend stat points on carry weight. Off locks it for everyone.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowEnhanceStat_WorkSpeed",
+      "label": "Stat points: work speed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowEnhanceStat_WorkSpeed"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Difficulty",
+      "description": "Allows players to spend stat points on work speed. Off locks it for everyone.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsPvP",
+      "label": "PvP mode",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsPvP"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Main PvP switch. A full PvP server also needs player damage and the defence of other guilds turned on.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnablePlayerToPlayerDamage",
+      "label": "Player damage to players",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnablePlayerToPlayerDamage"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Lets players hurt each other. On its own it does not make a complete PvP server.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableFriendlyFire",
+      "label": "Friendly fire",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableFriendlyFire"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Lets members of one guild damage each other and each other's Pals.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableDefenseOtherGuildPlayer",
+      "label": "Bases defend against other guilds",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableDefenseOtherGuildPlayer"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Base Pals and defences attack intruders from other guilds. One of the three switches a PvP server needs.",
+      "restartRequired": true
+    },
+    {
+      "key": "bCanPickupOtherGuildDeathPenaltyDrop",
+      "label": "Loot other guilds' death bags",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bCanPickupOtherGuildDeathPenaltyDrop"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Lets other guilds pick up the bag a player leaves behind after dying.",
+      "restartRequired": true
+    },
+    {
+      "key": "bInvisibleOtherGuildBaseCampAreaFX",
+      "label": "Hide other guilds' base borders",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bInvisibleOtherGuildBaseCampAreaFX"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "When on, the border effect drawn around bases of other guilds is hidden.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableAimAssistPad",
+      "label": "Aim assist for controllers",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableAimAssistPad"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Player versus player",
+      "description": "Gives controller players aim assist. Competitive servers often turn it off.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableAimAssistKeyboard",
+      "label": "Aim assist for keyboard and mouse",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableAimAssistKeyboard"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "Gives mouse and keyboard players aim assist. It is off unless you turn it on.",
+      "restartRequired": true
+    },
+    {
+      "key": "bDisplayPvPItemNumOnWorldMap_BaseCamp",
+      "label": "Map: PvP items per base",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bDisplayPvPItemNumOnWorldMap_BaseCamp"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "In PvP, shows on the world map how many PvP items each base holds.",
+      "restartRequired": true
+    },
+    {
+      "key": "bDisplayPvPItemNumOnWorldMap_Player",
+      "label": "Map: PvP items per player",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bDisplayPvPItemNumOnWorldMap_Player"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "In PvP, shows player positions and the PvP items they carry on the world map.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAdditionalDropItemWhenPlayerKillingInPvPMode",
+      "label": "Extra drop on PvP kills",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAdditionalDropItemWhenPlayerKillingInPvPMode"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Player versus player",
+      "description": "In PvP, a player who is killed drops an extra item for the killer, set by the two settings below.",
+      "restartRequired": true
+    },
+    {
+      "key": "AdditionalDropItemWhenPlayerKillingInPvPMode",
+      "label": "Extra drop item",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AdditionalDropItemWhenPlayerKillingInPvPMode"
+      },
+      "type": "string",
+      "default": "PlayerDropItem",
+      "group": "Player versus player",
+      "description": "Item id dropped on PvP kills while the extra-drop switch is on. The file keeps it in quotes.",
+      "restartRequired": true
+    },
+    {
+      "key": "AdditionalDropItemNumWhenPlayerKillingInPvPMode",
+      "label": "Extra drop count",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AdditionalDropItemNumWhenPlayerKillingInPvPMode"
+      },
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "items",
+      "group": "Player versus player",
+      "description": "How many of the extra item drop per PvP kill while the extra-drop switch is on.",
+      "restartRequired": true
+    },
+    {
+      "key": "DeathPenalty",
+      "label": "Death penalty",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DeathPenalty"
+      },
+      "type": "enum",
+      "default": "Item",
+      "enum": [
+        { "value": "None", "label": "Keep everything" },
+        { "value": "Item", "label": "Drop items" },
+        { "value": "ItemAndEquipment", "label": "Drop items and equipment" },
+        { "value": "All", "label": "Drop everything and party Pals" }
+      ],
+      "group": "Death penalty",
+      "description": "What a player leaves behind on death, from nothing up to items, equipment and the Pals in the party.",
+      "restartRequired": true
+    },
+    {
+      "key": "bHardcore",
+      "label": "Hardcore characters",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bHardcore"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Death penalty",
+      "description": "Hardcore mode: a character that dies cannot respawn and is lost for good.",
+      "restartRequired": true
+    },
+    {
+      "key": "bPalLost",
+      "label": "Permanent Pal death",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bPalLost"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Death penalty",
+      "description": "Pals that die are gone for good instead of recovering after a while.",
+      "restartRequired": true
+    },
+    {
+      "key": "bCharacterRecreateInHardcore",
+      "label": "New character after hardcore death",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bCharacterRecreateInHardcore"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Death penalty",
+      "description": "In hardcore mode, lets a player whose character died start again with a fresh one.",
+      "restartRequired": true
+    },
+    {
+      "key": "BlockRespawnTime",
+      "label": "Respawn wait",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BlockRespawnTime"
+      },
+      "type": "float",
+      "default": 5,
+      "min": 0,
+      "max": 60,
+      "unit": "seconds",
+      "group": "Death penalty",
+      "description": "Base time a dead player waits before being allowed to respawn.",
+      "restartRequired": true
+    },
+    {
+      "key": "RespawnPenaltyDurationThreshold",
+      "label": "Respawn penalty window",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RespawnPenaltyDurationThreshold"
+      },
+      "type": "float",
+      "default": 0,
+      "min": 0,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Death penalty",
+      "description": "Survival time after which the respawn wait goes back to normal. Dying again sooner makes the wait longer.",
+      "restartRequired": true
+    },
+    {
+      "key": "RespawnPenaltyTimeScale",
+      "label": "Respawn penalty factor",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "RespawnPenaltyTimeScale"
+      },
+      "type": "float",
+      "default": 2,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Death penalty",
+      "description": "Factor applied to the respawn wait for each death that falls inside the penalty window.",
+      "restartRequired": true
+    },
+    {
+      "key": "BaseCampMaxNum",
+      "label": "Bases on the server",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BaseCampMaxNum"
+      },
+      "type": "int",
+      "default": 128,
+      "min": 1,
+      "max": 10240,
+      "unit": "bases",
+      "group": "Guilds and bases",
+      "description": "Total number of bases allowed on the whole server, all guilds together.",
+      "restartRequired": true
+    },
+    {
+      "key": "BaseCampMaxNumInGuild",
+      "label": "Bases per guild",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BaseCampMaxNumInGuild"
+      },
+      "type": "int",
+      "default": 4,
+      "min": 1,
+      "max": 10,
+      "unit": "bases",
+      "group": "Guilds and bases",
+      "description": "How many bases one guild may own. Values above the default add server load.",
+      "restartRequired": true
+    },
+    {
+      "key": "BaseCampWorkerMaxNum",
+      "label": "Working Pals per base",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BaseCampWorkerMaxNum"
+      },
+      "type": "int",
+      "default": 15,
+      "min": 1,
+      "max": 50,
+      "unit": "Pals",
+      "group": "Guilds and bases",
+      "description": "How many Pals may work at one base. Higher counts cost noticeably more CPU.",
+      "restartRequired": true
+    },
+    {
+      "key": "GuildPlayerMaxNum",
+      "label": "Guild size",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "GuildPlayerMaxNum"
+      },
+      "type": "int",
+      "default": 20,
+      "min": 1,
+      "max": 100,
+      "unit": "players",
+      "group": "Guilds and bases",
+      "description": "Most members one guild may have at the same time.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAutoResetGuildNoOnlinePlayers",
+      "label": "Reset abandoned guilds",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAutoResetGuildNoOnlinePlayers"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Guilds and bases",
+      "description": "Removes the buildings and base Pals of a guild whose members have all been offline for too long.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoResetGuildTimeNoOnlinePlayers",
+      "label": "Abandoned guild time",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AutoResetGuildTimeNoOnlinePlayers"
+      },
+      "type": "float",
+      "default": 72,
+      "min": 0,
+      "max": 720,
+      "unit": "hours",
+      "group": "Guilds and bases",
+      "description": "How long every member of a guild must stay offline before the guild reset removes its bases.",
+      "restartRequired": true
+    },
+    {
+      "key": "GuildRejoinCooldownMinutes",
+      "label": "Guild rejoin wait",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "GuildRejoinCooldownMinutes"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1440,
+      "unit": "minutes",
+      "group": "Guilds and bases",
+      "description": "Wait after leaving a guild before a player can join another one. 0 means no wait.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoTransferMasterThresholdDays",
+      "label": "Inactive guild master days",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AutoTransferMasterThresholdDays"
+      },
+      "type": "int",
+      "default": 14,
+      "min": 1,
+      "max": 365,
+      "unit": "days",
+      "group": "Guilds and bases",
+      "description": "Days a guild master may stay offline before leadership passes to another member.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoTransferMasterCheckIntervalSeconds",
+      "label": "Guild master check interval",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AutoTransferMasterCheckIntervalSeconds"
+      },
+      "type": "float",
+      "default": 3600,
+      "min": 60,
+      "max": 86400,
+      "unit": "seconds",
+      "group": "Guilds and bases",
+      "description": "How often the server looks for guilds whose master has been away too long.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxBuildingLimitNum",
+      "label": "Structure cap",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "MaxBuildingLimitNum"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "unit": "structures",
+      "group": "Guilds and bases",
+      "description": "Cap on placed structures; 0 means no cap. Check in game whether your build counts it per base or per player.",
+      "restartRequired": true
+    },
+    {
+      "key": "bBuildAreaLimit",
+      "label": "Protected build areas",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bBuildAreaLimit"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Guilds and bases",
+      "description": "Stops players from building close to fast-travel points and similar protected spots.",
+      "restartRequired": true
+    },
+    {
+      "key": "BuildObjectHpRate",
+      "label": "Structure hit points",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BuildObjectHpRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Guilds and bases",
+      "description": "Scales the hit points of placed structures. Server owners report that it may have no effect in current builds.",
+      "restartRequired": true
+    },
+    {
+      "key": "BuildObjectDamageRate",
+      "label": "Damage to structures",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BuildObjectDamageRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 3,
+      "unit": "multiplier",
+      "group": "Guilds and bases",
+      "description": "Scales the damage structures take from attacks and raids.",
+      "restartRequired": true
+    },
+    {
+      "key": "BuildObjectDeteriorationDamageRate",
+      "label": "Structure decay",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BuildObjectDeteriorationDamageRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Guilds and bases",
+      "description": "Scales the natural decay of structures over time. 0 stops decay entirely.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableBuildingPlayerUIdDisplay",
+      "label": "Show who placed a structure",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableBuildingPlayerUIdDisplay"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Guilds and bases",
+      "description": "Shows the id of the player who placed each structure, which helps moderators track griefing.",
+      "restartRequired": true
+    },
+    {
+      "key": "BuildingNameDisplayCacheTTLSeconds",
+      "label": "Builder name refresh",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "BuildingNameDisplayCacheTTLSeconds"
+      },
+      "type": "int",
+      "default": 60,
+      "min": 1,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Guilds and bases",
+      "description": "How long the names of structure owners stay cached before the display looks them up again.",
+      "restartRequired": true
+    },
+    {
+      "key": "DayTimeSpeedRate",
+      "label": "Day speed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DayTimeSpeedRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "World",
+      "description": "How fast daytime passes. Larger numbers make each day shorter.",
+      "restartRequired": true
+    },
+    {
+      "key": "NightTimeSpeedRate",
+      "label": "Night speed",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "NightTimeSpeedRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "World",
+      "description": "How fast nighttime passes. Larger numbers make each night shorter.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableFastTravel",
+      "label": "Fast travel",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableFastTravel"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "World",
+      "description": "Turns fast travel on or off for every player on the server.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableFastTravelOnlyBaseCamp",
+      "label": "Fast travel between bases only",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableFastTravelOnlyBaseCamp"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Limits fast travel to hops between Palboxes, so the statues on the map stop working.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsStartLocationSelectByMap",
+      "label": "Choose start location",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsStartLocationSelectByMap"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Lets new players pick their starting point on the map the first time they spawn.",
+      "restartRequired": true
+    },
+    {
+      "key": "bExistPlayerAfterLogout",
+      "label": "Keep body after logout",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bExistPlayerAfterLogout"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Leaves a sleeping player body in the world after the player logs out.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableNonLoginPenalty",
+      "label": "Absence penalty",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableNonLoginPenalty"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "World",
+      "description": "Applies a penalty to players who stay away for a long time. The game does not document the exact effect.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsMultiplay",
+      "label": "Co-op multiplayer flag",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsMultiplay"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Multiplayer flag for co-op worlds hosted from a client. It has little or no effect on a dedicated server.",
+      "restartRequired": true
+    },
+    {
+      "key": "bActiveUNKO",
+      "label": "Dormant dropping mechanic",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bActiveUNKO"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Switches on a dormant mechanic in which Pals leave droppings. Leave it off unless you are testing.",
+      "restartRequired": true
+    },
+    {
+      "key": "DropItemMaxNum",
+      "label": "Dropped items in the world",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DropItemMaxNum"
+      },
+      "type": "int",
+      "default": 3000,
+      "min": 0,
+      "max": 10000,
+      "unit": "items",
+      "group": "World",
+      "description": "Cap on loose items lying in the world at the same time.",
+      "restartRequired": true
+    },
+    {
+      "key": "DropItemMaxNum_UNKO",
+      "label": "Dropping cap",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DropItemMaxNum_UNKO"
+      },
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 5000,
+      "unit": "items",
+      "group": "World",
+      "description": "Separate item cap for the dormant dropping mechanic. Keep the default.",
+      "restartRequired": true
+    },
+    {
+      "key": "PhysicsActiveDropItemMaxNum",
+      "label": "Dropped items with physics",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PhysicsActiveDropItemMaxNum"
+      },
+      "type": "int",
+      "default": -1,
+      "min": -1,
+      "max": 10000,
+      "unit": "items",
+      "group": "World",
+      "description": "Cap on dropped items that run physics at the same time. -1 leaves it without a cap.",
+      "restartRequired": true
+    },
+    {
+      "key": "DropItemAliveMaxHours",
+      "label": "Dropped item lifetime",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DropItemAliveMaxHours"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 240,
+      "unit": "hours",
+      "group": "World",
+      "description": "How long a dropped item stays on the ground before it disappears.",
+      "restartRequired": true
+    },
+    {
+      "key": "SupplyDropSpan",
+      "label": "Supply drop interval",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "SupplyDropSpan"
+      },
+      "type": "int",
+      "default": 180,
+      "min": 1,
+      "max": 1000,
+      "unit": "minutes",
+      "group": "World",
+      "description": "Time between meteorite and supply drop events across the map.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoSaveSpan",
+      "label": "Autosave interval",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "AutoSaveSpan"
+      },
+      "type": "float",
+      "default": 30,
+      "min": 30,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "World",
+      "description": "Time between automatic world saves. Shorter is safer after a crash but writes to disk more often.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIsUseBackupSaveData",
+      "label": "Rolling world backups",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bIsUseBackupSaveData"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "World",
+      "description": "Keeps rolling backups of the world in a folder next to the save. It adds some disk load.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowGlobalPalboxExport",
+      "label": "Export to the global Palbox",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowGlobalPalboxExport"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "World",
+      "description": "Lets players store Pals in the global Palbox that travels with them between worlds.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowGlobalPalboxImport",
+      "label": "Import from the global Palbox",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bAllowGlobalPalboxImport"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Lets players bring Pals from the global Palbox into this world.",
+      "restartRequired": true
+    },
+    {
+      "key": "bEnableVoiceChat",
+      "label": "Voice chat",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "bEnableVoiceChat"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Turns on proximity voice chat in game for everyone connected.",
+      "restartRequired": true
+    },
+    {
+      "key": "VoiceChatMaxVolumeDistance",
+      "label": "Voice full-volume range",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "VoiceChatMaxVolumeDistance"
+      },
+      "type": "float",
+      "default": 3000,
+      "min": 100,
+      "max": 50000,
+      "unit": "cm",
+      "group": "World",
+      "description": "Distance in engine units (centimetres) up to which a voice stays at full volume.",
+      "restartRequired": true
+    },
+    {
+      "key": "VoiceChatZeroVolumeDistance",
+      "label": "Voice silence range",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "VoiceChatZeroVolumeDistance"
+      },
+      "type": "float",
+      "default": 15000,
+      "min": 100,
+      "max": 50000,
+      "unit": "cm",
+      "group": "World",
+      "description": "Distance in engine units (centimetres) at which a voice has faded to silence.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerReplicatePawnCullDistance",
+      "label": "Pal sync distance",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ServerReplicatePawnCullDistance"
+      },
+      "type": "float",
+      "default": 15000,
+      "min": 5000,
+      "max": 15000,
+      "unit": "cm",
+      "group": "Performance",
+      "description": "Range in engine units (centimetres) within which Pals are synced to a player. Lower values save bandwidth.",
+      "restartRequired": true
+    },
+    {
+      "key": "ItemContainerForceMarkDirtyInterval",
+      "label": "Container resync interval",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ItemContainerForceMarkDirtyInterval"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 10,
+      "unit": "seconds",
+      "group": "Performance",
+      "description": "How often the contents of open containers are sent again. Lower values cost more traffic.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerDataPalStorageUpdateCheckTickInterval",
+      "label": "Pal storage check interval",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "PlayerDataPalStorageUpdateCheckTickInterval"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 60,
+      "unit": "seconds",
+      "group": "Performance",
+      "description": "How often the server checks player Pal storage for changes. An internal tuning value; keep the default.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxGuildsPerFrame",
+      "label": "Guilds per server tick",
+      "file": "settings",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "MaxGuildsPerFrame"
+      },
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "unit": "guilds",
+      "group": "Performance",
+      "description": "How many guilds the server processes in each tick. A scheduling value that is best left alone.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.Port",
+      "label": "Game port (-port)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-port"
+      },
+      "type": "int",
+      "default": 8211,
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Launch flags",
+      "description": "UDP port the server binds for players. It must match the firewall rules and any container or panel port mapping.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Launch.Players",
+      "label": "Player slots (-players)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-players"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 128,
+      "unit": "players",
+      "group": "Launch flags",
+      "description": "Player cap passed at launch by some start scripts. Keep it equal to the ServerPlayerMaxNum setting so the two never disagree.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Launch.PublicLobby",
+      "label": "Community server (-publiclobby)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-publiclobby"
+      },
+      "type": "bool",
+      "group": "Launch flags",
+      "description": "Lists the server in the community server list. Players on consoles need it to find the server at all.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.PublicIp",
+      "label": "Announced address (-publicip)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-publicip"
+      },
+      "type": "string",
+      "group": "Launch flags",
+      "description": "Address announced to the community list, for hosts where automatic detection picks the wrong one.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Launch.PublicPort",
+      "label": "Announced port (-publicport)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-publicport"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Launch flags",
+      "description": "Port announced to the community list, for hosts behind NAT or a port remap.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Launch.QueryPort",
+      "label": "Steam query port (-queryport)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-queryport"
+      },
+      "type": "int",
+      "default": 27015,
+      "min": 1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Launch flags",
+      "description": "Port the server answers Steam queries on. Some guides say the game ignores a change, so test the query after moving it.",
+      "restartRequired": true,
+      "panelManaged": true
+    },
+    {
+      "key": "Launch.UsePerfThreads",
+      "label": "Performance threads (-useperfthreads)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-useperfthreads"
+      },
+      "type": "bool",
+      "group": "Launch flags",
+      "description": "Thread tuning flag. Start scripts usually pass it together with the two threading flags below.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.NoAsyncLoadingThread",
+      "label": "No async loading thread",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-NoAsyncLoadingThread"
+      },
+      "type": "bool",
+      "group": "Launch flags",
+      "description": "Turns off the separate thread for asynchronous loading. Part of the usual trio of threading flags.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.UseMultithreadForDS",
+      "label": "Multithreaded server",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-UseMultithreadForDS"
+      },
+      "type": "bool",
+      "group": "Launch flags",
+      "description": "Lets the dedicated server spread work over several threads. Part of the usual trio of threading flags.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.WorkerThreads",
+      "label": "Worker threads",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-NumberOfWorkerThreadsServer"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 64,
+      "unit": "threads",
+      "group": "Launch flags",
+      "description": "Number of worker threads for the server process. Hosts usually set it to the number of CPU cores.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.LogFormat",
+      "label": "Log format (-logformat)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-logformat"
+      },
+      "type": "enum",
+      "default": "text",
+      "enum": [
+        { "value": "text", "label": "Plain text" },
+        { "value": "json", "label": "JSON lines" }
+      ],
+      "group": "Launch flags",
+      "description": "Log output style chosen at launch. It mirrors the LogFormatType setting of the settings file.",
+      "restartRequired": true
+    },
+    {
+      "key": "Launch.ServerName",
+      "label": "Server name (-servername)",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-servername"
+      },
+      "type": "string",
+      "group": "Launch flags",
+      "description": "Server name that start scripts such as LinuxGSM pass at launch. ServerName in the settings file is the usual place for it.",
+      "restartRequired": true,
+      "panelManaged": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "rest-without-admin-password",
+      "severity": "error",
+      "message": "The HTTP admin API is on but the admin password is empty, so the API cannot let anyone in.",
+      "settings": ["RESTAPIEnabled", "AdminPassword"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RESTAPIEnabled" }, true] },
+          { "==": [{ "var": "AdminPassword" }, ""] }
+        ]
+      }
+    },
+    {
+      "id": "rcon-without-admin-password",
+      "severity": "warning",
+      "message": "Legacy RCON is on but the admin password is empty.",
+      "settings": ["RCONEnabled", "AdminPassword"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RCONEnabled" }, true] },
+          { "==": [{ "var": "AdminPassword" }, ""] }
+        ]
+      }
+    },
+    {
+      "id": "rest-port-is-game-port",
+      "severity": "warning",
+      "message": "The HTTP admin API port number matches the game port. That can work, because the game port is UDP and the API listens on TCP; change it only where a firewall or container mapping cannot tell the two apart.",
+      "settings": ["RESTAPIPort", "Launch.Port"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RESTAPIEnabled" }, true] },
+          { "==": [{ "var": "RESTAPIPort" }, { "var": "Launch.Port" }] }
+        ]
+      }
+    },
+    {
+      "id": "rcon-port-is-game-port",
+      "severity": "warning",
+      "message": "The legacy RCON port number matches the game port. That can work, because the game port is UDP and RCON listens on TCP; change it only where a firewall or container mapping cannot tell the two apart.",
+      "settings": ["RCONPort", "Launch.Port"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RCONEnabled" }, true] },
+          { "==": [{ "var": "RCONPort" }, { "var": "Launch.Port" }] }
+        ]
+      }
+    },
+    {
+      "id": "rest-port-is-rcon-port",
+      "severity": "error",
+      "message": "The HTTP admin API and legacy RCON use the same port.",
+      "settings": ["RESTAPIPort", "RCONPort"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RESTAPIEnabled" }, true] },
+          { "==": [{ "var": "RCONEnabled" }, true] },
+          { "==": [{ "var": "RESTAPIPort" }, { "var": "RCONPort" }] }
+        ]
+      }
+    },
+    {
+      "id": "players-mismatch",
+      "severity": "warning",
+      "message": "The -players launch value and ServerPlayerMaxNum differ; set both to the same number.",
+      "settings": ["Launch.Players", "ServerPlayerMaxNum"],
+      "when": {
+        "and": [
+          { "!!": [{ "var": "Launch.Players" }] },
+          {
+            "!=": [{ "var": "Launch.Players" }, { "var": "ServerPlayerMaxNum" }]
+          }
+        ]
+      }
+    },
+    {
+      "id": "pvp-options-without-pvp",
+      "severity": "info",
+      "message": "PvP options are on while PvP mode is off, so most of them do nothing.",
+      "settings": ["bIsPvP"],
+      "when": {
+        "and": [
+          { "!": [{ "var": "bIsPvP" }] },
+          {
+            "or": [
+              { "var": "bEnablePlayerToPlayerDamage" },
+              { "var": "bEnableDefenseOtherGuildPlayer" },
+              { "var": "bAdditionalDropItemWhenPlayerKillingInPvPMode" },
+              { "var": "bDisplayPvPItemNumOnWorldMap_BaseCamp" },
+              { "var": "bDisplayPvPItemNumOnWorldMap_Player" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "pvp-incomplete",
+      "severity": "warning",
+      "message": "Full PvP needs PvP mode, player damage to players and the defence of other guilds all on.",
+      "settings": [
+        "bIsPvP",
+        "bEnablePlayerToPlayerDamage",
+        "bEnableDefenseOtherGuildPlayer"
+      ],
+      "when": {
+        "and": [
+          { "var": "bIsPvP" },
+          {
+            "or": [
+              { "!": [{ "var": "bEnablePlayerToPlayerDamage" }] },
+              { "!": [{ "var": "bEnableDefenseOtherGuildPlayer" }] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rcon-deprecated",
+      "severity": "info",
+      "message": "Legacy RCON is deprecated by the game; move scripts to the HTTP admin API.",
+      "settings": ["RCONEnabled"],
+      "when": { "==": [{ "var": "RCONEnabled" }, true] }
+    },
+    {
+      "id": "recreate-without-hardcore",
+      "severity": "info",
+      "message": "Making a new character after death only matters when hardcore characters are on.",
+      "settings": ["bCharacterRecreateInHardcore"],
+      "when": {
+        "and": [
+          { "var": "bCharacterRecreateInHardcore" },
+          { "!": [{ "var": "bHardcore" }] }
+        ]
+      }
+    },
+    {
+      "id": "base-travel-without-travel",
+      "severity": "info",
+      "message": "Fast travel between bases only has no effect while fast travel is off.",
+      "settings": ["bEnableFastTravelOnlyBaseCamp"],
+      "when": {
+        "and": [
+          { "var": "bEnableFastTravelOnlyBaseCamp" },
+          { "!": [{ "var": "bEnableFastTravel" }] }
+        ]
+      }
+    },
+    {
+      "id": "voice-distance-order",
+      "severity": "warning",
+      "message": "The full-volume range should be smaller than the silence range.",
+      "settings": ["VoiceChatMaxVolumeDistance", "VoiceChatZeroVolumeDistance"],
+      "when": {
+        "and": [
+          { "var": "bEnableVoiceChat" },
+          {
+            ">=": [
+              { "var": "VoiceChatMaxVolumeDistance" },
+              { "var": "VoiceChatZeroVolumeDistance" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "console-players-not-listed",
+      "severity": "info",
+      "message": "Xbox and PS5 players usually find a server only when the -publiclobby flag is set.",
+      "settings": ["CrossplayPlatforms", "Launch.PublicLobby"],
+      "when": {
+        "and": [
+          {
+            "or": [
+              { "in": ["Xbox", { "var": "CrossplayPlatforms" }] },
+              { "in": ["PS5", { "var": "CrossplayPlatforms" }] }
+            ]
+          },
+          { "!": [{ "var": "Launch.PublicLobby" }] }
+        ]
+      }
+    },
+    {
+      "id": "quote-in-text",
+      "severity": "error",
+      "message": "The settings file has no way to store a double quote inside a quoted value; one would break the whole OptionSettings line.",
+      "settings": [
+        "ServerName",
+        "ServerDescription",
+        "Region",
+        "PublicIP",
+        "AdminPassword",
+        "ServerPassword",
+        "RandomizerSeed"
+      ],
+      "when": {
+        "or": [
+          { "in": ["\"", { "var": "ServerName" }] },
+          { "in": ["\"", { "var": "ServerDescription" }] },
+          { "in": ["\"", { "var": "Region" }] },
+          { "in": ["\"", { "var": "PublicIP" }] },
+          { "in": ["\"", { "var": "AdminPassword" }] },
+          { "in": ["\"", { "var": "ServerPassword" }] },
+          { "in": ["\"", { "var": "RandomizerSeed" }] }
+        ]
+      }
+    },
+    {
+      "id": "seed-without-randomizer",
+      "severity": "info",
+      "message": "The randomizer seed is ignored while the spawn randomizer is off.",
+      "settings": ["RandomizerSeed"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "RandomizerType" }, "None"] },
+          { "!=": [{ "var": "RandomizerSeed" }, ""] }
+        ]
+      }
+    },
+    {
+      "id": "guild-reset-time-unused",
+      "severity": "info",
+      "message": "The abandoned guild time is changed but the guild reset itself is off.",
+      "settings": ["AutoResetGuildTimeNoOnlinePlayers"],
+      "when": {
+        "and": [
+          { "!": [{ "var": "bAutoResetGuildNoOnlinePlayers" }] },
+          { "!=": [{ "var": "AutoResetGuildTimeNoOnlinePlayers" }, 72] }
+        ]
+      }
+    },
+    {
+      "id": "public-port-differs",
+      "severity": "info",
+      "message": "The advertised port differs from the game port. That is right only behind a port remap.",
+      "settings": ["PublicPort"],
+      "when": {
+        "and": [
+          { "var": "Launch.PublicLobby" },
+          { "!=": [{ "var": "PublicPort" }, { "var": "Launch.Port" }] }
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "casual",
+      "label": "Casual",
+      "description": "Faster progress, gentler survival needs and no item loss on death, for relaxed groups of friends.",
+      "values": {
+        "ExpRate": 2,
+        "PalCaptureRate": 1.5,
+        "CollectionDropRate": 2,
+        "EnemyDropItemRate": 1.5,
+        "WorkSpeedRate": 1.5,
+        "DeathPenalty": "None",
+        "PlayerStomachDecreaceRate": 0.5,
+        "PalStomachDecreaceRate": 0.5,
+        "PlayerStaminaDecreaceRate": 0.75,
+        "ItemWeightRate": 0.5,
+        "EquipmentDurabilityDamageRate": 0.5,
+        "ItemCorruptionMultiplier": 0.5,
+        "BuildObjectDeteriorationDamageRate": 0.5,
+        "bEnableFastTravel": true,
+        "bHardcore": false,
+        "bPalLost": false,
+        "bIsPvP": false,
+        "bEnablePlayerToPlayerDamage": false
+      }
+    },
+    {
+      "id": "default",
+      "label": "Default",
+      "description": "Returns every setting the Casual and Hardcore presets change to the value the game starts with.",
+      "values": {
+        "ExpRate": 1,
+        "PalCaptureRate": 1,
+        "CollectionDropRate": 1,
+        "EnemyDropItemRate": 1,
+        "WorkSpeedRate": 1,
+        "ItemWeightRate": 1,
+        "EquipmentDurabilityDamageRate": 1,
+        "ItemCorruptionMultiplier": 1,
+        "Difficulty": "None",
+        "PalDamageRateDefense": 1,
+        "PlayerDamageRateDefense": 1,
+        "PlayerStomachDecreaceRate": 1,
+        "PlayerStaminaDecreaceRate": 1,
+        "PalStomachDecreaceRate": 1,
+        "bEnableInvaderEnemy": true,
+        "bIsPvP": false,
+        "bEnablePlayerToPlayerDamage": false,
+        "bEnableDefenseOtherGuildPlayer": false,
+        "DeathPenalty": "Item",
+        "bHardcore": false,
+        "bPalLost": false,
+        "bCharacterRecreateInHardcore": false,
+        "BlockRespawnTime": 5,
+        "BuildObjectDeteriorationDamageRate": 1,
+        "bEnableFastTravel": true,
+        "bEnableFastTravelOnlyBaseCamp": false
+      }
+    },
+    {
+      "id": "hardcore",
+      "label": "Hardcore",
+      "description": "Slower progress, harsher survival, permanent character and Pal death, and fast travel between bases only.",
+      "values": {
+        "ExpRate": 0.75,
+        "PalCaptureRate": 0.75,
+        "CollectionDropRate": 0.75,
+        "EnemyDropItemRate": 0.75,
+        "DeathPenalty": "All",
+        "PlayerDamageRateDefense": 1.5,
+        "PalDamageRateDefense": 1.25,
+        "PlayerStomachDecreaceRate": 1.5,
+        "PlayerStaminaDecreaceRate": 1.25,
+        "ItemWeightRate": 1.25,
+        "EquipmentDurabilityDamageRate": 1.5,
+        "ItemCorruptionMultiplier": 1.5,
+        "bHardcore": true,
+        "bPalLost": true,
+        "bCharacterRecreateInHardcore": true,
+        "bEnableFastTravelOnlyBaseCamp": true,
+        "bEnableInvaderEnemy": true
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "palworldRest",
+      "enabledSetting": "RESTAPIEnabled",
+      "portSetting": "RESTAPIPort",
+      "passwordSetting": "AdminPassword",
+      "user": "admin",
+      "host": "127.0.0.1",
+      "infoPath": "/v1/api/info"
+    }
+  ],
+  "hooksSupported": ["save", "stop"],
+  "sources": [
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/PalOptionWorldSettings.h",
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/EPalOptionWorldDifficulty.h",
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/EPalOptionWorldDeathPenalty.h",
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/EPalRandomizerType.h",
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/EPalLogFormatType.h",
+    "https://github.com/localcc/PalworldModdingKit/blob/main/Source/Pal/Public/EPalAllowConnectPlatform.h",
+    "https://github.com/waahhhh/palworld-server/blob/main/docs/DefaultPalWorldSettings.ini",
+    "https://github.com/Snail-one/palbox/blob/main/shared/domain/template.js",
+    "https://github.com/Snail-one/palbox/blob/main/docs/parameters.md",
+    "https://github.com/thijsvanloef/palworld-server-docker/blob/main/scripts/compile-settings.sh",
+    "https://github.com/thijsvanloef/palworld-server-docker/blob/main/docusaurus/docs/getting-started/configuration/game-settings.md",
+    "https://github.com/thijsvanloef/palworld-server-docker/blob/main/scripts/start.sh",
+    "https://github.com/thijsvanloef/palworld-server-docker/blob/main/scripts/rest_api.sh",
+    "https://github.com/jammsen/docker-palworld-dedicated-server/blob/develop/includes/server.sh",
+    "https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/config-default/config-lgsm/pwserver/_default.cfg",
+    "https://github.com/Bluefissure/pal-conf/blob/main/src/consts/entries.tsx"
+  ]
+}

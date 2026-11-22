@@ -1,0 +1,1 @@
+EpicApp=PalServer -port=8211 -players 32 -publiclobby -publicip=203.0.113.10 -publicport=8211 -queryport=27015 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS -NumberOfWorkerThreadsServer=4 -logformat=text -servername='Synthetic Lighthouse'

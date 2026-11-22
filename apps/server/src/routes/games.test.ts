@@ -1,5 +1,7 @@
 // GET /api/v1/games and GET /api/v1/games/ID/settings-meta (dev-work-plan P3-A
-// step 2), served from the synthetic test pack of packages/packs-schema.
+// step 2), served from the synthetic test pack of packages/packs-schema, and
+// from the game packs of the repository for the Palworld and Enshrouded
+// secrets (P3-B).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,6 +22,10 @@ import {
 const TEST_PACKS = fileURLToPath(
   new URL("../../../../packages/packs-schema/test/packs/", import.meta.url),
 );
+const REPO_PACKS = fileURLToPath(
+  new URL("../../../../packs/", import.meta.url),
+);
+const ROLE_PASSWORDS = [1, 2, 3, 4].map((n) => `userGroups.slot${n}.password`);
 const GAMES = "/api/v1/games";
 const META = "/api/v1/games/testpack/settings-meta";
 
@@ -34,6 +40,10 @@ async function signedIn(packsDir = TEST_PACKS) {
   current = await testApp({ config: { packsDir } });
   const owner = await setupOwner(current.app);
   return { app: current.app, headers: headersOf(owner) };
+}
+
+interface GameList {
+  items: { id: string; version: string }[];
 }
 
 interface SettingsMeta {
@@ -70,11 +80,50 @@ describe("game packs API", () => {
     expect(body.rules).toHaveLength(3);
     expect(body.files).toHaveLength(4);
     const secret = body.settings.find((s) => s.key === "AdminPassword");
-    expect(secret).toMatchObject({ secret: true, default: SECRET_MASK });
+    // The testpack's admin password default is empty, and an empty secret
+    // stays empty (it reveals nothing); the preset value stays masked.
+    expect(secret).toMatchObject({ secret: true, default: "" });
     const hardcore = body.presets.find((p) => p.id === "hardcore");
     expect(hardcore?.values["AdminPassword"]).toBe(SECRET_MASK);
     expect(response.body).not.toContain('"AdminPassword":"hardcore"');
     expect(response.body).not.toContain("detection");
+  });
+
+  it("shows the secrets of the Palworld and Enshrouded packs empty or masked", async () => {
+    const { app, headers } = await signedIn(REPO_PACKS);
+    const list = await app.inject({ url: GAMES, headers });
+    const ids = list.json<GameList>().items.map((game) => game.id);
+    expect(ids).toEqual(expect.arrayContaining(["enshrouded", "palworld"]));
+    const expected = new Map([
+      ["palworld", ["AdminPassword", "ServerPassword"]],
+      ["enshrouded", ROLE_PASSWORDS],
+    ]);
+    for (const [id, keys] of expected) {
+      const url = `/api/v1/games/${id}/settings-meta`;
+      const response = await app.inject({ url, headers });
+      expect(response.statusCode, id).toBe(200);
+      const body = response.json<SettingsMeta>();
+      const secrets = body.settings.filter((s) => s.secret === true);
+      expect(secrets.map((s) => s.key)).toEqual(keys);
+      // An empty secret stays empty (it reveals nothing), so the rules that
+      // read a password agree in the browser and on the server: Palworld's
+      // password defaults are empty, Enshrouded's are absent.
+      for (const key of keys) {
+        const secret = secrets.find((s) => s.key === key);
+        expect(secret?.default, `${id} ${key}`).toBe(
+          id === "palworld" ? "" : undefined,
+        );
+      }
+      // No preset of the repository packs may set a secret key; the masked
+      // preset value itself is covered by the testpack above.
+      for (const preset of body.presets) {
+        const secretKeys = Object.keys(preset.values).filter((key) =>
+          secrets.some((s) => s.key === key),
+        );
+        expect(secretKeys, `${id} ${preset.id}`).toEqual([]);
+      }
+      expect(response.body).not.toContain(`"${SECRET_MASK}"`);
+    }
   });
 
   it("answers 404 for an unknown pack and 400 for a bad id", async () => {
