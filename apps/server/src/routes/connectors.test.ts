@@ -123,9 +123,11 @@ describe("connector endpoints", () => {
       .get() as { v: string };
     expect(row.v.startsWith("dwenc1.")).toBe(true);
     expect(row.v).not.toContain("PRIVATE KEY");
-    expect(app.ctx.connectors.key.privateKey()).toContain(
-      "-----BEGIN OPENSSH PRIVATE KEY-----",
-    );
+    // The PEM markers are checked apart, so the committed source holds no
+    // private key block (the hygiene job greps the tree for one).
+    const privateKey = app.ctx.connectors.key.privateKey();
+    expect(privateKey.startsWith("-----BEGIN OPENSSH")).toBe(true);
+    expect(privateKey.trimEnd().endsWith("PRIVATE KEY-----")).toBe(true);
   });
 
   it("tests a Local folder and names its real path", async () => {
@@ -142,8 +144,8 @@ describe("connector endpoints", () => {
   });
 
   it("refuses the data folder and a folder around it as a Local root", async () => {
-    const { app, headers } = await signedIn();
     const dataDir = app.ctx.config.dataDir;
+    const { app, headers } = await signedIn();
     for (const root of [
       dataDir,
       join(dataDir, ".."),

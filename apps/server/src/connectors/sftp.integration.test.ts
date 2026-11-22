@@ -45,8 +45,8 @@ adduser -D -s /bin/sh ${USER}
 echo "${USER}:$DW_PASSWORD" | chpasswd
 mkdir -p /home/${USER}/.ssh ${ROOT}/Config ${ROOT}/Pal/Saved/SaveGames/0/${WORLD} /srv/outside
 cp /setup/authorized_keys /home/${USER}/.ssh/authorized_keys
-printf '[Game]\\nName=One\\n' > ${ROOT}/Config/game.ini
-printf '#!/bin/sh\\n' > ${ROOT}/PalServer.sh
+printf '[Game]\nName=One\n' > ${ROOT}/Config/game.ini
+printf '#!/bin/sh\n' > ${ROOT}/PalServer.sh
 echo outside > /srv/outside/secret.txt
 ln -s /srv/outside ${ROOT}/linked
 ln -s /srv/outside/secret.txt ${ROOT}/link.txt
@@ -363,8 +363,10 @@ describe.skipIf(!dockerAvailable)("SFTP connector against OpenSSH", () => {
   it("connects again after the server drops the connection", async () => {
     const sftp = connector();
     await sftp.read("Config/game.ini");
-    // Ends the per-login sshd processes, not the listener.
-    await shell(`pkill -f 'sshd: ${USER}' || true`);
+    // Ends the per-login sshd processes, not the listener. The pattern is
+    // written as a character class so the exec shell running pkill, whose
+    // own command line holds the pattern text, does not match itself.
+    await shell(`pkill -f 'sshd[: ] ${USER}' || true`);
     const deadline = Date.now() + 10_000;
     let read: string | null = null;
     while (read === null && Date.now() < deadline) {
