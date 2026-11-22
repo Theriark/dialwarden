@@ -33,6 +33,7 @@ export {
   RULE_OPERATORS,
   ruleData,
   ruleFires,
+  secretReads,
 } from "./rules.js";
 export type { LogicCheck, RuleData } from "./rules.js";
 export { schemaProblems } from "./schema.js";
@@ -43,7 +44,7 @@ export {
   SHELL_ADAPTERS,
   validate,
 } from "./validate.js";
-export type { Values } from "./validate.js";
+export type { ValidateOptions, Values } from "./validate.js";
 
 const PACK_ID = /^[a-z0-9][a-z0-9-]{1,39}$/;
 

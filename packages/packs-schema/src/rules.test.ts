@@ -6,6 +6,7 @@ import {
   RULE_OPERATORS,
   ruleData,
   ruleFires,
+  secretReads,
   type RuleData,
 } from "./rules.js";
 import type { JsonValue, Rule } from "./types.js";
@@ -81,6 +82,11 @@ describe("JSONLogic allow-list", () => {
     expect(checkLogic({ missing_some: ["1", ["Mode"]] }).problems).toEqual([
       "missing_some takes a count and a list of names",
     ]);
+    // json-logic-js evaluates a third argument too, so it must not get past.
+    const extra = { missing_some: [1, ["Mode"], { log: { var: "Mode" } }] };
+    expect(checkLogic(extra).problems).toEqual([
+      "missing_some takes a count and a list of names",
+    ]);
   });
 
   it("refuses a rule that is not one operation", () => {
@@ -122,6 +128,112 @@ describe("JSONLogic allow-list", () => {
       "rule probe: operator method is not allowed",
       "rule probe is listed twice",
     ]);
+  });
+});
+
+describe("rules that read secrets (THE-2361)", () => {
+  const secrets = new Set(["AdminPassword", "JoinPassword"]);
+  const admin = { var: "AdminPassword" };
+
+  it("lets a secret be compared with the empty text or tested for presence", () => {
+    const allowed: JsonValue[] = [
+      { "==": [admin, ""] },
+      { "===": ["", admin] },
+      { "!=": [{ var: ["AdminPassword"] }, ""] },
+      { "!==": [admin, ""] },
+      { missing: ["AdminPassword"] },
+      { missing_some: [1, ["AdminPassword", "JoinPassword"]] },
+      { and: [{ "==": [admin, ""] }, { "==": [{ var: "Mode" }, "Hard"] }] },
+      { in: ['"', { var: "ServerName" }] },
+    ];
+    for (const logic of allowed) {
+      expect(secretReads(logic, secrets), JSON.stringify(logic)).toEqual([]);
+    }
+  });
+
+  it("finds every other use of a secret value", () => {
+    const refused: JsonValue[] = [
+      { in: ['"', admin] },
+      { substr: [admin, 0, 1] },
+      { cat: [admin, "x"] },
+      { "==": [admin, { var: "JoinPassword" }] },
+      { "==": [admin, "hunter2"] },
+      { "==": [admin, 0] },
+      { "==": [admin, "", "extra"] },
+      { "+": [admin, 1] },
+      { "!": [admin] },
+      { "!!": [admin] },
+      { or: [admin, false] },
+      { if: [admin, 1, 2] },
+      { "==": [{ var: ["AdminPassword", "fallback"] }, ""] },
+      { var: ["Mode", { var: "AdminPassword" }] },
+      { "==": [{ cat: [admin] }, ""] },
+    ];
+    for (const logic of refused) {
+      const found = secretReads(logic, secrets);
+      expect(found, JSON.stringify(logic)).toContain("AdminPassword");
+    }
+    const both = { "!=": [admin, { var: "JoinPassword" }] };
+    expect(secretReads(both, secrets)).toEqual([
+      "AdminPassword",
+      "JoinPassword",
+    ]);
+    expect(secretReads({ "!": [admin] }, new Set())).toEqual([]);
+  });
+
+  it("finds a var default at the depth limit and fails closed past it", () => {
+    // 31 levels put the var at depth 31 and its default at 32, the deepest
+    // node checkLogic still accepts.
+    let atLimit: JsonValue = { var: ["Mode", admin] };
+    for (let i = 0; i < 31; i++) atLimit = { "!": atLimit };
+    expect(checkLogic(atLimit).problems).toEqual([]);
+    expect(secretReads(atLimit, secrets)).toEqual(["AdminPassword"]);
+
+    let tooDeep: JsonValue = { var: "Mode" };
+    for (let i = 0; i < 40; i++) tooDeep = { "!": tooDeep };
+    expect(secretReads(tooDeep, secrets)).toEqual([
+      "AdminPassword",
+      "JoinPassword",
+    ]);
+  });
+
+  it("refuses a missing_some that hides a read in a third argument", () => {
+    const pack = testPack();
+    const hidden: Rule = {
+      id: "hidden-log",
+      severity: "warning",
+      message: "A rule that tries to log a secret.",
+      settings: ["ServerName"],
+      when: {
+        missing_some: [1, ["ServerName"], { log: { var: "AdminPassword" } }],
+      },
+    };
+    expect(checkRules({ ...pack, rules: [hidden] })).toEqual([
+      "rule hidden-log: missing_some takes a count and a list of names",
+    ]);
+  });
+
+  it("refuses such a rule unless it is marked serverEvaluated", () => {
+    const pack = testPack();
+    const reads: Rule = {
+      id: "password-in-name",
+      severity: "warning",
+      message: "The admin password is part of the server name.",
+      settings: ["AdminPassword"],
+      when: { in: [{ var: "AdminPassword" }, { var: "ServerName" }] },
+    };
+    const empty: Rule = {
+      ...reads,
+      id: "no-password",
+      when: { "==": [{ var: "AdminPassword" }, ""] },
+    };
+    expect(checkRules({ ...pack, rules: [reads, empty] })).toEqual([
+      "rule password-in-name: reads the secret AdminPassword beyond an emptiness or presence test, so it must be marked serverEvaluated",
+    ]);
+    const marked = { ...reads, serverEvaluated: true };
+    expect(checkRules({ ...pack, rules: [marked, empty] })).toEqual([]);
+    const unmarked = { ...reads, serverEvaluated: false };
+    expect(checkRules({ ...pack, rules: [unmarked] })).toHaveLength(1);
   });
 });
 

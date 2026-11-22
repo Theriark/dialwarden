@@ -137,7 +137,11 @@ export function otherValue(setting: Setting, current: JsonValue): JsonValue {
       return current === "dialwarden-a" ? "dialwarden-b" : "dialwarden-a";
     case "list": {
       const items: JsonValue[] = Array.isArray(current) ? [...current] : [];
-      return items.length > 1 ? items.slice(0, 1) : [...items, "dialwarden-a"];
+      if (items.length > 1) return items.slice(0, 1);
+      // A list with item choices takes only those words.
+      const choices = (setting.itemEnum ?? []).map((option) => option.value);
+      const extra = choices.find((value) => !items.includes(value));
+      return [...items, extra ?? "dialwarden-a"];
     }
     case "struct":
       throw new Error(`${setting.key}: no struct setting in these packs`);

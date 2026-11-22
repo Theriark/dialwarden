@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { GOLDEN_ISSUES, GOLDEN_VALUES } from "../test/golden.js";
+import {
+  GOLDEN_BROWSER_ISSUES,
+  GOLDEN_ISSUES,
+  GOLDEN_SERVER_RULE,
+  GOLDEN_VALUES,
+  goldenPack,
+} from "../test/golden.js";
 import { settingOf, testPack, withSetting } from "../test/kit.js";
+import { SECRET_MASK } from "./mask.js";
 import type { JsonValue, Pack, PackFile } from "./types.js";
 import {
   checkValue,
@@ -100,7 +107,94 @@ describe("validate(pack, values): types and ranges", () => {
   });
 
   it("matches the written-out golden issues", () => {
-    expect(validate(pack, GOLDEN_VALUES)).toEqual(GOLDEN_ISSUES);
+    const golden = goldenPack(pack);
+    expect(validate(golden, GOLDEN_VALUES)).toEqual(GOLDEN_ISSUES);
+    const browser = { includeServerEvaluated: false };
+    expect(validate(golden, GOLDEN_VALUES, browser)).toEqual(
+      GOLDEN_BROWSER_ISSUES,
+    );
+  });
+});
+
+describe("validate(pack, values): list item choices", () => {
+  const choices = [
+    { value: "Steam", label: "Steam" },
+    { value: "Xbox", label: "Xbox" },
+    { value: 5, label: "Five" },
+  ];
+  const list = withSetting(pack, "ServerName", {
+    type: "list",
+    max: 2,
+    itemEnum: choices,
+  });
+
+  it("accepts lists of listed items, empty lists included", () => {
+    expect(messagesFor("ServerName", ["Steam", "Xbox"], list)).toEqual([]);
+    expect(messagesFor("ServerName", [5], list)).toEqual([]);
+    expect(messagesFor("ServerName", [], list)).toEqual([]);
+    expect(messagesFor("ServerName", null, list)).toEqual([]);
+  });
+
+  it("refuses an unknown item as an error", () => {
+    const message = "Every item must be one of the listed choices.";
+    expect(validate(list, { ServerName: ["Steam", "Switch"] })).toEqual([
+      { key: "ServerName", severity: "error", message },
+    ]);
+    // Exact values: the text "5" is not the number 5, and case counts.
+    expect(messagesFor("ServerName", ["5"], list)).toEqual([message]);
+    expect(messagesFor("ServerName", ["steam"], list)).toEqual([message]);
+  });
+
+  it("keeps the item count and the item type checks", () => {
+    expect(messagesFor("ServerName", ["Steam", "Xbox", 5], list)).toEqual([
+      "Allows at most 2 items.",
+    ]);
+    expect(messagesFor("ServerName", [["Steam"]], list)).toEqual([
+      "List items must be text, numbers or on/off values.",
+    ]);
+  });
+
+  it("leaves a list without item choices free", () => {
+    const free = withSetting(pack, "ServerName", { type: "list" });
+    expect(messagesFor("ServerName", ["anything", 7], free)).toEqual([]);
+  });
+});
+
+describe("validate(pack, values): server-evaluated rules", () => {
+  const golden = goldenPack(pack);
+  const values = { AdminPassword: "Synthetic" };
+  const keys = (issues: readonly { key: string }[]) => issues.map((i) => i.key);
+
+  it("runs every rule by default, as the server does", () => {
+    expect(keys(validate(golden, values))).toEqual([
+      "AdminPassword",
+      "ServerName",
+    ]);
+    const all = { includeServerEvaluated: true };
+    expect(validate(golden, values, all)).toEqual(validate(golden, values));
+  });
+
+  it("skips marked rules in the browser call, mask or no mask", () => {
+    const browser = { includeServerEvaluated: false };
+    expect(validate(golden, values, browser)).toEqual([]);
+    const masked = { AdminPassword: SECRET_MASK };
+    expect(validate(golden, masked, browser)).toEqual([]);
+  });
+
+  it("still runs unmarked rules and value checks in the browser call", () => {
+    const browser = { includeServerEvaluated: false };
+    const changes = { ...values, Mode: "Hardcore", MaxPlayers: 0 };
+    expect(keys(validate(golden, changes, browser))).toEqual([
+      "MaxPlayers",
+      "Mode",
+      "PvP",
+    ]);
+    const unmarked = { ...GOLDEN_SERVER_RULE, serverEvaluated: false };
+    const plain = { ...pack, rules: [unmarked] };
+    expect(keys(validate(plain, values, browser))).toEqual([
+      "AdminPassword",
+      "ServerName",
+    ]);
   });
 });
 

@@ -63,6 +63,13 @@ function settingProblems(pack: Pack, setting: Setting): string[] {
   for (const value of duplicates(values)) {
     problems.push(`${at}: choice ${value} is listed twice`);
   }
+  if (setting.itemEnum !== undefined && setting.type !== "list") {
+    problems.push(`${at}: only a list setting lists item choices`);
+  }
+  const items = (setting.itemEnum ?? []).map((option) => String(option.value));
+  for (const value of duplicates(items)) {
+    problems.push(`${at}: item choice ${value} is listed twice`);
+  }
   const { min, max } = setting;
   if (min !== undefined && max !== undefined && min > max) {
     problems.push(`${at}: min is greater than max`);
