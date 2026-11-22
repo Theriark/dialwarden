@@ -44,5 +44,17 @@ export default defineConfig({
     // argon2id and scrypt make some server tests slower than the default.
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    // CI measures the format engine (P2): below 90 percent line coverage of
+    // packages/formats the test run fails. Locally, add --coverage.
+    coverage: {
+      enabled: process.env.CI === "true",
+      provider: "v8",
+      include: ["packages/formats/src/**/*.ts"],
+      exclude: ["packages/formats/src/**/*.test.ts"],
+      reporter: ["text", "text-summary"],
+      thresholds: {
+        "packages/formats/src/**/*.ts": { lines: 90 },
+      },
+    },
   },
 });
