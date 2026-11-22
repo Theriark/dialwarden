@@ -33,11 +33,20 @@ import {
   passphraseProblem,
   passphraseReady,
 } from "../../lib/passphrase";
+import { useMediaQuery } from "../../lib/use-media-query";
 
 const APP_SECRET_TEXT =
   "This instance generated DATA_DIR/app-secret.key at first start. A backup restores only with the same key, so keep a copy outside this server.";
 const RETENTION_TEXT =
   "The last three days are kept, and never fewer than the last three good backups. Copies are local to this instance.";
+
+/**
+ * The six-column table needs about 680 px. Inside the settings layout (the
+ * navigation column, the section list and the card padding) that is a window
+ * of 1280 px or more; below it each backup is a stacked card, so nothing
+ * scrolls sideways at 768 or 390 (P1 walk, M2).
+ */
+export const TABLE_QUERY = "(min-width: 1280px)";
 
 function AppSecretBanner() {
   const client = useQueryClient();
@@ -99,6 +108,53 @@ function ScheduleCard() {
   );
 }
 
+/**
+ * The row counts check of the drill carries a JSON object of table counts
+ * (apps/server/src/backup/engine.ts): one word with no break opportunity,
+ * which overflowed the dialog (P1 walk, L2). Parsed into name and count
+ * pairs when it is one; null means the detail is shown as text.
+ */
+export function countPairs(detail: string): [string, string][] | null {
+  if (!detail.startsWith("{")) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(detail);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null;
+  }
+  const pairs: [string, string][] = [];
+  for (const [name, value] of Object.entries(parsed)) {
+    if (value !== null && typeof value !== "number") {
+      return null;
+    }
+    pairs.push([name, value === null ? "—" : String(value)]);
+  }
+  return pairs;
+}
+
+function CheckDetail({ detail }: { detail: string }) {
+  const pairs = countPairs(detail);
+  if (pairs === null) {
+    // break-words: a long detail (a message, a hash) wraps inside the dialog.
+    return <span className="block break-words text-fg-muted">{detail}</span>;
+  }
+  return (
+    <dl className="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-fg-muted tabular">
+      {pairs.map(([name, count]) => (
+        <div key={name} className="flex gap-1">
+          <dt>{name}</dt>
+          <dd className="text-fg">{count}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function DrillDialog({
   report,
   onClose,
@@ -128,9 +184,9 @@ function DrillDialog({
               <Badge kind={check.ok ? "success" : "error"}>
                 {check.ok ? "ok" : "failed"}
               </Badge>
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="font-medium text-fg">{check.name}</span>
-                <span className="block text-fg-muted">{check.detail}</span>
+                <CheckDetail detail={check.detail} />
               </span>
             </li>
           ))}
@@ -222,18 +278,40 @@ function ExportDialog({
   );
 }
 
-function BackupRow({
-  item,
-  onDrill,
-  drilling,
+function IntegrityBadge({
+  integrity,
+  className,
 }: {
+  integrity: BackupItem["integrity"];
+  className?: string | undefined;
+}) {
+  if (integrity === "ok") {
+    return (
+      <Badge kind="success" className={className}>
+        Verified
+      </Badge>
+    );
+  }
+  return (
+    <Badge kind="error" className={className}>
+      Incomplete
+    </Badge>
+  );
+}
+
+interface BackupRowProps {
   item: BackupItem;
   onDrill: (id: string) => void;
   drilling: boolean;
-}) {
+}
+
+/** One table row, from 1280 px up. */
+function BackupRow({ item, onDrill, drilling }: BackupRowProps) {
   return (
     <tr>
-      <Td mono>{formatDateTime(item.createdAt)}</Td>
+      <Td mono className="whitespace-nowrap">
+        {formatDateTime(item.createdAt)}
+      </Td>
       <Td align="right" mono>
         {formatBytes(item.sizeBytes)}
       </Td>
@@ -242,11 +320,7 @@ function BackupRow({
       </Td>
       <Td mono>{item.appVersion ?? "—"}</Td>
       <Td>
-        {item.integrity === "ok" ? (
-          <Badge kind="success">Verified</Badge>
-        ) : (
-          <Badge kind="error">Incomplete</Badge>
-        )}
+        <IntegrityBadge integrity={item.integrity} />
       </Td>
       <Td align="right">
         <Button
@@ -265,10 +339,62 @@ function BackupRow({
   );
 }
 
+/**
+ * One stacked card below 1280 px: the date and time on one line with the
+ * integrity badge, the size, files and version under it, and the drill button
+ * at least 44 px tall (min-h-11 wins over the button's h-8), full width on a
+ * phone.
+ */
+function BackupCard({ item, onDrill, drilling }: BackupRowProps) {
+  return (
+    <li className="flex flex-col gap-3 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="font-mono text-sm font-medium whitespace-nowrap text-fg tabular">
+            {formatDateTime(item.createdAt)}
+          </span>
+          <dl className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-fg-muted">
+            <div className="flex gap-1">
+              <dt>Size</dt>
+              <dd className="font-mono text-fg tabular">
+                {formatBytes(item.sizeBytes)}
+              </dd>
+            </div>
+            <div className="flex gap-1">
+              <dt>Files</dt>
+              <dd className="font-mono text-fg tabular">{item.blobCount}</dd>
+            </div>
+            <div className="flex gap-1">
+              <dt>Version</dt>
+              <dd className="font-mono text-fg tabular">
+                {item.appVersion ?? "—"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+        <IntegrityBadge integrity={item.integrity} className="shrink-0" />
+      </div>
+      <Button
+        size="md"
+        className="min-h-11 w-full sm:w-auto sm:self-end"
+        loading={drilling}
+        disabled={item.integrity !== "ok"}
+        onClick={() => {
+          onDrill(item.id);
+        }}
+        icon={<ShieldCheck className="size-4" aria-hidden="true" />}
+      >
+        Restore drill
+      </Button>
+    </li>
+  );
+}
+
 function BackupsCard() {
   const client = useQueryClient();
   const toast = useToast();
   const backups = useQuery(backupsQuery());
+  const table = useMediaQuery(TABLE_QUERY);
   const [exportOpen, setExportOpen] = useState(false);
   const [report, setReport] = useState<DrillReport | null>(null);
   const [drillingId, setDrillingId] = useState<string | null>(null);
@@ -360,7 +486,7 @@ function BackupsCard() {
         description="The first one runs on the schedule above, or now with Run now."
       />
     );
-  } else {
+  } else if (table) {
     body = (
       <Table label="Local backups">
         <thead>
@@ -386,6 +512,24 @@ function BackupsCard() {
           ))}
         </tbody>
       </Table>
+    );
+  } else {
+    body = (
+      <ul
+        aria-label="Local backups"
+        className="flex flex-col divide-y divide-border rounded-card border border-border bg-surface shadow-card"
+      >
+        {backups.data.items.map((item) => (
+          <BackupCard
+            key={item.id}
+            item={item}
+            drilling={drillingId === item.id}
+            onDrill={(id) => {
+              drill.mutate(id);
+            }}
+          />
+        ))}
+      </ul>
     );
   }
 
