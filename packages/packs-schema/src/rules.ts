@@ -95,8 +95,14 @@ export function checkLogic(logic: unknown): LogicCheck {
       if (list.length === 0) problems.add("missing needs a setting name");
       for (const item of list) name(item, operator);
     } else if (operator === "missing_some") {
+      // json-logic-js evaluates every argument, so a third one would run
+      // unchecked: the form is exactly a count and a list of names.
       const options = list.at(1);
-      if (typeof list.at(0) !== "number" || !Array.isArray(options)) {
+      if (
+        list.length !== 2 ||
+        typeof list.at(0) !== "number" ||
+        !Array.isArray(options)
+      ) {
         problems.add("missing_some takes a count and a list of names");
         return;
       }
@@ -154,7 +160,9 @@ function isEmptinessTest(node: object, secrets: ReadonlySet<string>): boolean {
  * secret is empty, so a secret may be compared with the literal "" (==, !=,
  * === and !==) or named in missing and missing_some; any other read (in,
  * substr, cat, a comparison with another value, arithmetic, truthiness or a
- * var default) gives the browser a different answer than the server.
+ * var default) gives the browser a different answer than the server. The walk
+ * keeps the depths of checkLogic and fails closed: a subtree past the depth
+ * limit counts as reading every secret.
  */
 export function secretReads(
   logic: unknown,
@@ -162,7 +170,10 @@ export function secretReads(
 ): string[] {
   const found = new Set<string>();
   const visit = (node: unknown, depth: number): void => {
-    if (depth > MAX_DEPTH) return;
+    if (depth > MAX_DEPTH) {
+      for (const secret of secrets) found.add(secret);
+      return;
+    }
     if (Array.isArray(node)) {
       for (const item of node as unknown[]) visit(item, depth + 1);
       return;
@@ -178,7 +189,7 @@ export function secretReads(
       const list: unknown[] = Array.isArray(args) ? args : [args];
       const name = list.at(0);
       if (typeof name === "string" && secrets.has(name)) found.add(name);
-      visit(list.slice(1), depth + 1);
+      for (const item of list.slice(1)) visit(item, depth + 1);
     }
   };
   visit(logic, 0);

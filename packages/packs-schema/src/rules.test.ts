@@ -82,6 +82,11 @@ describe("JSONLogic allow-list", () => {
     expect(checkLogic({ missing_some: ["1", ["Mode"]] }).problems).toEqual([
       "missing_some takes a count and a list of names",
     ]);
+    // json-logic-js evaluates a third argument too, so it must not get past.
+    const extra = { missing_some: [1, ["Mode"], { log: { var: "Mode" } }] };
+    expect(checkLogic(extra).problems).toEqual([
+      "missing_some takes a count and a list of names",
+    ]);
   });
 
   it("refuses a rule that is not one operation", () => {
@@ -174,6 +179,38 @@ describe("rules that read secrets (THE-2361)", () => {
       "JoinPassword",
     ]);
     expect(secretReads({ "!": [admin] }, new Set())).toEqual([]);
+  });
+
+  it("finds a var default at the depth limit and fails closed past it", () => {
+    // 31 levels put the var at depth 31 and its default at 32, the deepest
+    // node checkLogic still accepts.
+    let atLimit: JsonValue = { var: ["Mode", admin] };
+    for (let i = 0; i < 31; i++) atLimit = { "!": atLimit };
+    expect(checkLogic(atLimit).problems).toEqual([]);
+    expect(secretReads(atLimit, secrets)).toEqual(["AdminPassword"]);
+
+    let tooDeep: JsonValue = { var: "Mode" };
+    for (let i = 0; i < 40; i++) tooDeep = { "!": tooDeep };
+    expect(secretReads(tooDeep, secrets)).toEqual([
+      "AdminPassword",
+      "JoinPassword",
+    ]);
+  });
+
+  it("refuses a missing_some that hides a read in a third argument", () => {
+    const pack = testPack();
+    const hidden: Rule = {
+      id: "hidden-log",
+      severity: "warning",
+      message: "A rule that tries to log a secret.",
+      settings: ["ServerName"],
+      when: {
+        missing_some: [1, ["ServerName"], { log: { var: "AdminPassword" } }],
+      },
+    };
+    expect(checkRules({ ...pack, rules: [hidden] })).toEqual([
+      "rule hidden-log: missing_some takes a count and a list of names",
+    ]);
   });
 
   it("refuses such a rule unless it is marked serverEvaluated", () => {
