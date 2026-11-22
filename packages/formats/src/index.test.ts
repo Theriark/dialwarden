@@ -32,6 +32,9 @@ describe("formats package", () => {
     expect(sample).toContain("[Server]");
     expect(detectNewline(sample)).toBe("\n");
     expect(detectNewline(sample.replaceAll("\n", "\r\n"))).toBe("\r\n");
+    // Mixed endings follow the first line, as Source.newline does.
+    expect(detectNewline("a=1\nb=2\r\n")).toBe("\n");
+    expect(detectNewline("a=1\r\nb=2\n")).toBe("\r\n");
   });
 
   it("has an adapter for every adapter id", () => {

@@ -155,6 +155,73 @@ describe("JSON pointers, encodings and line endings", () => {
     expect(json.get(json.parse(bytes(added)), at("/extra"))).toBe(true);
   });
 
+  it("inserts and removes without touching the neighbouring lines", () => {
+    const data = fixture("json/crlf-bom.json");
+    const source = text(data);
+    const limits = '\t"limits": { "players": 10 }   \r\n';
+    const added = edited(json, data, (d) => json.insert(d, at("/extra"), true));
+    expect(added).toBe(
+      source.replace(
+        limits,
+        '\t"limits": { "players": 10 },   \r\n\t"extra": true\r\n',
+      ),
+    );
+    const title = '\t"title": "Synthetic fixture written by Theriark",\r\n';
+    const noTitle = edited(json, data, (d) => json.remove(d, at("/title")));
+    expect(noTitle).toBe(source.replace(title, ""));
+    const noLimits = edited(json, data, (d) => json.remove(d, at("/limits")));
+    expect(noLimits).toBe(source.replace(`],\r\n${limits}`, "]\r\n"));
+  });
+
+  it("keeps comments on their lines in JSON with comments", () => {
+    const input = '{\n  "a": 1, // first\n  "b": 2 // last\n}\n';
+    const added = edited(jsonc, input, (d) => jsonc.insert(d, at("/c"), 3));
+    expect(added).toBe(
+      '{\n  "a": 1, // first\n  "b": 2, // last\n  "c": 3\n}\n',
+    );
+    const noB = edited(jsonc, input, (d) => jsonc.remove(d, at("/b")));
+    expect(noB).toBe('{\n  "a": 1 // first\n}\n');
+    const noA = edited(jsonc, input, (d) => jsonc.remove(d, at("/a")));
+    expect(noA).toBe('{\n  "b": 2 // last\n}\n');
+  });
+
+  it("keeps one-line arrays and objects one line", () => {
+    const input = '{\n  "tags": ["north", "x"],\n  "n": 1\n}\n';
+    const added = edited(json, input, (d) => json.insert(d, at("/z"), [1, 2]));
+    expect(added).toBe(
+      '{\n  "tags": ["north", "x"],\n  "n": 1,\n  "z": [\n    1,\n    2\n  ]\n}\n',
+    );
+    const tag = edited(json, input, (d) => json.insert(d, at("/tags/-"), "y"));
+    expect(tag).toBe(input.replace('"x"]', '"x","y"]'));
+    const first = edited(json, input, (d) => json.insert(d, at("/tags/0"), 0));
+    expect(first).toBe(input.replace('["north"', '[0,"north"'));
+  });
+
+  it("removes the last item of a one-line array", () => {
+    expect(edited(json, "[1,2]", (d) => json.remove(d, at("/1")))).toBe("[1]");
+    expect(edited(json, "[1, 2]\n", (d) => json.remove(d, at("/1")))).toBe(
+      "[1]\n",
+    );
+    expect(edited(json, "[1, 2]\n", (d) => json.remove(d, at("/0")))).toBe(
+      "[2]\n",
+    );
+    expect(edited(json, "[1]", (d) => json.remove(d, at("/0")))).toBe("[]");
+    expect(edited(jsonc, "[1,]", (d) => jsonc.remove(d, at("/0")))).toBe("[]");
+  });
+
+  it("indents a new object to the array it joins", () => {
+    const data = fixture("json/enshrouded-like.json");
+    const out = edited(json, data, (d) =>
+      json.insert(d, at("/userGroups/-"), { name: "Scouts" }),
+    );
+    expect(out).toBe(
+      text(data).replace(
+        '      "reservedSlots": 0\n    }\n  ]',
+        '      "reservedSlots": 0\n    },\n    {\n      "name": "Scouts"\n    }\n  ]',
+      ),
+    );
+  });
+
   it("reports invalid UTF-8 and an empty file as errors", () => {
     const invalid = json.parse(new Uint8Array([123, 255, 125]));
     const codes = json.lint(invalid).map((i) => [i.code, i.severity]);

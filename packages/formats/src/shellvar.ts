@@ -2,7 +2,8 @@
 // .env files): NAME=value with an optional export, '...' literal, "..." with
 // \ escapes for \ " $ and `, and # comments. "shellvar-systemd" follows a
 // systemd EnvironmentFile: one NAME=value per line, # and ; comment lines,
-// and an unquoted value that runs to the end of the line.
+// and an unquoted value that runs to the end of the line, in which \ keeps
+// the next character (as systemd's env-file parser reads it).
 //
 // Nothing is expanded: a value with $NAME is read and written as text. As in
 // the shell, the last assignment wins: get and set use it, remove removes all.
@@ -222,7 +223,10 @@ interface Decoded {
 
 function systemdValue(raw: string, at: number): Decoded {
   const quote = raw.charAt(0);
-  if (quote !== '"' && quote !== "'") return { value: raw, style: "bare" };
+  if (quote !== '"' && quote !== "'") {
+    // As systemd reads an unquoted value: \ keeps the next character.
+    return { value: raw.replace(/\\([\s\S])/g, "$1"), style: "bare" };
+  }
   if (raw.length < 2 || !raw.endsWith(quote)) {
     throw new ParseFail(at, `the ${quote} must close at the line end`);
   }
@@ -278,14 +282,19 @@ function scalar(value: Value, previous: string | undefined): string {
   throw new FormatError("invalid-value", "use text, a number or a boolean");
 }
 
+/** A plain $NAME or ${NAME} reference, or one character that needs a \. */
+const DOUBLE_SPECIAL = /\$\{[A-Za-z_]\w*\}|\$[A-Za-z_]\w*|[\\"$`]/g;
+
 /**
- * A double-quoted shell value. $ and ` are escaped (kept as text) unless the
- * value being replaced already used expansions such as ${port}, so a value
- * read and written back keeps its meaning.
+ * A double-quoted shell value. $ and ` are escaped (kept as text). When the
+ * value being replaced already used references such as ${port}, plain $NAME
+ * and ${NAME} references stay unescaped so a value read and written back
+ * keeps its meaning; everything else stays escaped, so $(...), `...`, $((...))
+ * and ${NAME:-...} never run when LinuxGSM sources the file.
  */
 function doubleQuote(text: string, expands: boolean): string {
-  const special = expands ? /[\\"]/g : /[\\"$`]/g;
-  return `"${text.replace(special, (c) => `\\${c}`)}"`;
+  const quoted = (m: string) => (expands && m.length > 1 ? m : `\\${m}`);
+  return `"${text.replace(DOUBLE_SPECIAL, quoted)}"`;
 }
 
 function valueText(
@@ -299,8 +308,9 @@ function valueText(
   }
   if (style === "single" && !text.includes("'")) return `'${text}'`;
   if (dialect.systemd) {
+    // systemd reads \ in an unquoted value as an escape: quote such a value.
     const padded = text !== text.trim() || /^["']/.test(text);
-    if (style === "double" || padded) {
+    if (style === "double" || padded || text.includes("\\")) {
       return `"${text.replace(/[\\"]/g, (c) => `\\${c}`)}"`;
     }
     return text;

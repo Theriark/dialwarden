@@ -589,9 +589,15 @@ function locate(doc: LuaDoc, path: readonly Key[], write: boolean): Place {
 
 // Writing -------------------------------------------------------------------
 
+/**
+ * True when only blanks or a -- line comment follow up to the line end. A
+ * long --[[ comment may run past the line, so it does not count as blank.
+ */
 function restIsBlank(src: Source, from: number, to: number): boolean {
   const at = src.skipBlank(from, to);
-  return at >= to || src.text.startsWith("--", at);
+  if (at >= to) return true;
+  const text = src.text;
+  return text.startsWith("--", at) && longBracket(text, at + 2) === 0;
 }
 
 function fieldRange(src: Source, table: LuaTable, field: LuaField) {
@@ -631,24 +637,32 @@ function insertField(
   table: LuaTable,
   key: Key,
   value: Value,
-): Splice {
+): Splice[] {
   const field = keyPrefix(table, key) + literal(value);
   const last = table.fields.at(-1);
   if (last === undefined) {
     const empty = table.end - table.start === 2;
     const text = empty ? ` ${field} ` : ` ${field}`;
-    return { start: table.start + 1, end: table.start + 1, text };
+    return [{ start: table.start + 1, end: table.start + 1, text }];
   }
   const at = last.sep >= 0 ? last.sep + 1 : last.end;
   const multiline = src.lineIndex(table.start) !== src.lineIndex(last.start);
   if (multiline) {
     const indent = indentOf(src, src.lineAt(last.start));
     const line = src.newline + indent + field;
+    // The new field goes after the end of the line, so a comment and
+    // trailing spaces stay with the field they follow.
+    const end = src.lineAt(at - 1).end;
+    if (end > at && restIsBlank(src, at, end)) {
+      if (last.sep >= 0) return [{ start: end, end, text: `${line},` }];
+      const comma = { start: at, end: at, text: "," };
+      return [comma, { start: end, end, text: line }];
+    }
     const text = last.sep >= 0 ? `${line},` : `,${line}`;
-    return { start: at, end: at, text };
+    return [{ start: at, end: at, text }];
   }
   const text = last.sep >= 0 ? ` ${field},` : `, ${field}`;
-  return { start: at, end: at, text };
+  return [{ start: at, end: at, text }];
 }
 
 /** Lua table constructor adapter. */
@@ -695,8 +709,8 @@ export const luaAdapter: FormatAdapter<LuaLocator> = {
       throw new FormatError("exists", `${String(key)} already exists; use set`);
     }
     if (place.table) {
-      const splice = insertField(lua.source, place.table, key, value);
-      return verified(luaAdapter, lua, [splice]);
+      const splices = insertField(lua.source, place.table, key, value);
+      return verified(luaAdapter, lua, splices);
     }
     if (path.length > 1 || lua.returned || typeof key !== "string") {
       throw new FormatError("not-found", "the parent table does not exist");
