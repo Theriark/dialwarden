@@ -1,0 +1,2 @@
+# Synthetic fixture written by Theriark (see SYNTHETIC.md).
+./PalServer.sh -port=8211 -players=16 -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS EpicApp=PalServer

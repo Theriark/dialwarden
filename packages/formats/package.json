@@ -2,7 +2,7 @@
   "name": "@dialwarden/formats",
   "version": "27.0.0",
   "private": true,
-  "description": "Format engine (contract C2). P0: skeleton; the adapters arrive in P2.",
+  "description": "Format engine (contract C2): one byte-preserving adapter per configuration file format.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "exports": {
@@ -18,5 +18,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "fast-check": "^4.11.0"
   }
 }

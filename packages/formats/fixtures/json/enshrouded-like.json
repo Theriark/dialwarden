@@ -1,0 +1,24 @@
+{
+  "name": "Emberfall Watch",
+  "password": "",
+  "saveDirectory": "./savegame",
+  "logDirectory": "./logs",
+  "ip": "0.0.0.0",
+  "queryPort": 15637,
+  "slotCount": 8,
+  "gameSettingsPreset": "Custom",
+  "gameSettings": {
+    "playerHealthFactor": 1.25,
+    "enableDurability": true,
+    "dayTimeDuration": 1800000000000,
+    "note": "Synthetic fixture written by Theriark \/ é"
+  },
+  "userGroups": [
+    {
+      "name": "Wardens",
+      "password": "",
+      "canKickBan": true,
+      "reservedSlots": 0
+    }
+  ]
+}
