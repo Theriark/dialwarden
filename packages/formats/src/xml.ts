@@ -335,6 +335,19 @@ function indentUnit(src: Source): string {
   return tabbed ? "\t" : "  ";
 }
 
+/** True when text holds only spaces, tabs and complete comments. */
+function onlyComments(text: string): boolean {
+  let i = 0;
+  for (;;) {
+    while (text.charAt(i) === " " || text.charAt(i) === "\t") i++;
+    if (i >= text.length) return true;
+    if (!text.startsWith("<!--", i)) return false;
+    const close = text.indexOf("-->", i + 4);
+    if (close < 0) return false;
+    i = close + 3;
+  }
+}
+
 function insertProperty(doc: XmlDoc, name: string, value: Value): Splice {
   const src = doc.source;
   const anchor = doc.properties.at(-1)?.element;
@@ -346,7 +359,12 @@ function insertProperty(doc: XmlDoc, name: string, value: Value): Splice {
   if (anchor) {
     const indent = indentOf(src, src.lineAt(anchor.start));
     const text = src.newline + indent + element;
-    return { start: anchor.end, end: anchor.end, text };
+    // After the end of the anchor's line when only blanks and comments follow
+    // it there, so they stay with the property they follow.
+    const end = src.lineAt(anchor.end - 1).end;
+    const rest = src.text.slice(anchor.end, end);
+    const at = onlyComments(rest) ? end : anchor.end;
+    return { start: at, end: at, text };
   }
   const root = doc.root;
   if (root === undefined || root.endTag < 0) {

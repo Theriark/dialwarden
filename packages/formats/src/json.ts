@@ -1,7 +1,13 @@
-// JSON adapters built on jsonc-parser's edit operations (modify). "json" is
-// strict, as Enshrouded reads it: a comment or a trailing comma is an error,
-// so a file with one is never written. "jsonc" accepts both. Neither ever
-// writes a comment or a trailing comma: new values are JSON.stringify output.
+// JSON adapters built on jsonc-parser. "json" is strict, as Enshrouded reads
+// it: a comment or a trailing comma is an error, so a file with one is never
+// written. "jsonc" accepts both. Neither ever writes a comment or a trailing
+// comma: new values are JSON.stringify output.
+//
+// set uses jsonc-parser's modify. insert and remove build their own edits:
+// modify with formatting rewrites the whole lines around an insert or a
+// remove, which would drop trailing spaces, move comments and expand
+// one-line objects. A member on its own lines is added or removed as whole
+// lines; anything else is edited inline, next to its neighbour.
 //
 // jsonc-parser works on JavaScript strings, so the file is decoded as UTF-8
 // and every string offset is mapped back to a byte offset of the original.
@@ -198,17 +204,200 @@ function toSplices(doc: JsonDoc, edits: Edit[]): Splice[] {
   });
 }
 
-function edit(
-  doc: JsonDoc,
-  path: Segment[],
-  value: Value | undefined,
-  insertion: boolean,
-): Splice[] {
+function replaceValue(doc: JsonDoc, path: Segment[], value: Value): Splice[] {
   const formattingOptions = doc.formatting;
   const options: ModificationOptions = formattingOptions
-    ? { formattingOptions, isArrayInsertion: insertion }
-    : { isArrayInsertion: insertion };
+    ? { formattingOptions }
+    : {};
   return toSplices(doc, jsonc.modify(doc.text, path, value, options));
+}
+
+function lineStart(text: string, at: number): number {
+  return at === 0 ? 0 : text.lastIndexOf("\n", at - 1) + 1;
+}
+
+/** True when only spaces and tabs come before the offset on its line. */
+function startsLine(text: string, at: number): boolean {
+  return /^[ \t]*$/.test(text.slice(lineStart(text, at), at));
+}
+
+/** Skips whitespace and comments, line breaks included. */
+function skipTrivia(text: string, from: number): number {
+  let i = from;
+  for (;;) {
+    if (/[ \t\r\n]/.test(text.charAt(i))) {
+      i++;
+    } else if (text.startsWith("//", i)) {
+      const lf = text.indexOf("\n", i);
+      i = lf < 0 ? text.length : lf;
+    } else if (text.startsWith("/*", i)) {
+      const close = text.indexOf("*/", i + 2);
+      i = close < 0 ? text.length : close + 2;
+    } else {
+      return i;
+    }
+  }
+}
+
+/** Skips spaces, tabs and block comments that end on the same line. */
+function skipInline(text: string, from: number): number {
+  let i = from;
+  for (;;) {
+    if (/[ \t]/.test(text.charAt(i))) {
+      i++;
+      continue;
+    }
+    if (!text.startsWith("/*", i)) return i;
+    const close = text.indexOf("*/", i + 2);
+    if (close < 0 || /[\r\n]/.test(text.slice(i, close))) return i;
+    i = close + 2;
+  }
+}
+
+interface LineTail {
+  /** Offset of a comma after the member on its line. */
+  readonly comma: number | undefined;
+  /** Offset of the line break, or of the end of the text. */
+  readonly end: number;
+  /** Offset after the line break. */
+  readonly next: number;
+  /** The line break itself; empty on the last line of the file. */
+  readonly eol: string;
+}
+
+/**
+ * What follows a member on its line: an optional comma, then only blanks and
+ * comments up to the line break. undefined when anything else follows.
+ */
+function lineTail(text: string, from: number): LineTail | undefined {
+  let i = skipInline(text, from);
+  let comma: number | undefined;
+  if (text.charAt(i) === ",") {
+    comma = i;
+    i = skipInline(text, i + 1);
+  }
+  const lf = text.indexOf("\n", i);
+  const stop = lf < 0 ? text.length : lf;
+  const end = lf > 0 && text.charAt(lf - 1) === "\r" ? lf - 1 : stop;
+  if (i > end || (i < end && !text.startsWith("//", i))) return undefined;
+  const next = lf < 0 ? text.length : lf + 1;
+  return { comma, end, next, eol: text.slice(end, next) };
+}
+
+function indentUnit(doc: JsonDoc): string {
+  const f = doc.formatting;
+  if (f === undefined) return "  ";
+  return f.insertSpaces ? " ".repeat(f.tabSize) : "\t";
+}
+
+interface Layout {
+  readonly unit: string;
+  readonly indent: string;
+  readonly eol: string;
+}
+
+/** A new member as JSON.stringify output, indented to its line by a layout. */
+function memberText(
+  key: string | undefined,
+  value: Value,
+  layout?: Layout,
+): string {
+  let json = JSON.stringify(value);
+  if (layout) {
+    const lines = JSON.stringify(value, null, layout.unit);
+    json = lines.replaceAll("\n", layout.eol + layout.indent);
+  }
+  return key === undefined ? json : `${JSON.stringify(key)}: ${json}`;
+}
+
+function isMultiLine(text: string, node: JsonNode): boolean {
+  return text.slice(node.offset, node.offset + node.length).includes("\n");
+}
+
+/** Edits that insert a member (with a key in an object) at index k. */
+function insertMember(
+  doc: JsonDoc,
+  parent: JsonNode,
+  k: number,
+  key: string | undefined,
+  value: Value,
+): Edit[] {
+  const text = doc.text;
+  const children = parent.children ?? [];
+  const next = children.at(k);
+  const prev = k > 0 ? children.at(k - 1) : undefined;
+  const multi = isMultiLine(text, parent);
+  const unit = indentUnit(doc);
+  if (multi && next !== undefined && startsLine(text, next.offset)) {
+    // A new line before the member that is now at k.
+    const at = lineStart(text, next.offset);
+    const indent = text.slice(at, next.offset);
+    const eol = text.charAt(at - 2) === "\r" ? "\r\n" : "\n";
+    const member = memberText(key, value, { unit, indent, eol });
+    return [{ offset: at, length: 0, content: `${indent}${member},${eol}` }];
+  }
+  if (multi && next === undefined && prev !== undefined) {
+    // A new line after the last member, its comma and its comment.
+    const prevEnd = prev.offset + prev.length;
+    const tail = lineTail(text, prevEnd);
+    if (startsLine(text, prev.offset) && tail !== undefined && tail.eol) {
+      const indent = text.slice(lineStart(text, prev.offset), prev.offset);
+      const layout = { unit, indent, eol: tail.eol };
+      const line = `${tail.eol}${indent}${memberText(key, value, layout)}`;
+      if (tail.comma !== undefined) {
+        return [{ offset: tail.end, length: 0, content: line }];
+      }
+      if (tail.end === prevEnd) {
+        return [{ offset: prevEnd, length: 0, content: `,${line}` }];
+      }
+      return [
+        { offset: prevEnd, length: 0, content: "," },
+        { offset: tail.end, length: 0, content: line },
+      ];
+    }
+  }
+  const member = memberText(key, value);
+  if (prev !== undefined) {
+    const offset = prev.offset + prev.length;
+    return [{ offset, length: 0, content: `,${member}` }];
+  }
+  if (next !== undefined) {
+    return [{ offset: next.offset, length: 0, content: `${member},` }];
+  }
+  return [{ offset: parent.offset + 1, length: 0, content: member }];
+}
+
+/** Edits that remove a member: a property or an array item. */
+function removeMember(doc: JsonDoc, member: JsonNode): Edit[] {
+  const text = doc.text;
+  const children = member.parent?.children ?? [];
+  const k = children.indexOf(member);
+  const start = member.offset;
+  const end = member.offset + member.length;
+  const after = skipTrivia(text, end);
+  const hasComma = text.charAt(after) === ",";
+  const prev = k > 0 ? children.at(k - 1) : undefined;
+  const next = children.at(k + 1);
+  const tail = lineTail(text, end);
+  const commaOnLine = tail?.comma !== undefined;
+  if (startsLine(text, start) && tail?.eol && commaOnLine === hasComma) {
+    // The member has its own lines: remove them, its comment included.
+    const offset = lineStart(text, start);
+    const lines = { offset, length: tail.next - offset, content: "" };
+    if (hasComma || prev === undefined) return [lines];
+    // It was the last member: the comma before it goes too.
+    const comma = skipTrivia(text, prev.offset + prev.length);
+    return [{ offset: comma, length: 1, content: "" }, lines];
+  }
+  if (prev !== undefined) {
+    const offset = prev.offset + prev.length;
+    return [{ offset, length: end - offset, content: "" }];
+  }
+  if (next !== undefined) {
+    return [{ offset: start, length: next.offset - start, content: "" }];
+  }
+  const stop = hasComma ? after + 1 : end;
+  return [{ offset: start, length: stop - start, content: "" }];
 }
 
 function createJsonAdapter(options: JsonOptions): FormatAdapter<JsonLocator> {
@@ -229,20 +418,20 @@ function createJsonAdapter(options: JsonOptions): FormatAdapter<JsonLocator> {
     if (parts.length === 0 || node === undefined) {
       throw new FormatError("not-found", "the parent does not exist");
     }
+    const length = node.children?.length ?? 0;
     if (node.type === "object") {
       if (resolve(json, parts, true).node !== undefined) {
         throw new FormatError("exists", `${last} already exists; use set`);
       }
-      return edit(json, [...parent.path, last], value, false);
+      return toSplices(json, insertMember(json, node, length, last, value));
     }
-    const length = node.children?.length ?? 0;
     const index = last === "-" ? length : Number(last);
     const isIndex = last === "-" || INDEX.test(last);
     if (node.type !== "array" || !isIndex || index > length) {
       throw new FormatError("not-found", `cannot insert at ${last}`);
     }
-    const at = index === length ? -1 : index;
-    return edit(json, [...parent.path, at], value, true);
+    const edits = insertMember(json, node, index, undefined, value);
+    return toSplices(json, edits);
   }
 
   const adapter: FormatAdapter<JsonLocator> = {
@@ -259,7 +448,7 @@ function createJsonAdapter(options: JsonOptions): FormatAdapter<JsonLocator> {
       if (found.node === undefined) {
         throw new FormatError("not-found", `${locator.pointer} does not exist`);
       }
-      return verified(adapter, json, edit(json, found.path, value, false));
+      return verified(adapter, json, replaceValue(json, found.path, value));
     },
     insert(doc, locator, value) {
       const { json, parts } = locate(doc, locator, true);
@@ -271,8 +460,11 @@ function createJsonAdapter(options: JsonOptions): FormatAdapter<JsonLocator> {
       if (parts.length === 0) {
         throw new FormatError("invalid-locator", "the root cannot be removed");
       }
-      if (found.node === undefined) return [];
-      return verified(adapter, json, edit(json, found.path, undefined, false));
+      const node = found.node;
+      if (node === undefined) return [];
+      const member = node.parent?.type === "property" ? node.parent : node;
+      const splices = toSplices(json, removeMember(json, member));
+      return verified(adapter, json, splices);
     },
     lint: (doc) => sortedIssues(own<JsonDoc>(doc, id)),
     apply: (bytes, splices) => applySplices(bytes, splices),

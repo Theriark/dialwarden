@@ -79,7 +79,11 @@ export function getAdapter(id: string): FormatAdapter<Locator> | undefined {
   return ADAPTERS.get(id);
 }
 
-/** The line ending a file already uses, so a write keeps it unchanged. */
+/**
+ * The line ending a file already uses, so a write keeps it unchanged: that of
+ * its first line, the same rule the adapters use for new lines.
+ */
 export function detectNewline(text: string): "\r\n" | "\n" {
-  return text.includes("\r\n") ? "\r\n" : "\n";
+  const lf = text.indexOf("\n");
+  return lf > 0 && text.charAt(lf - 1) === "\r" ? "\r\n" : "\n";
 }
