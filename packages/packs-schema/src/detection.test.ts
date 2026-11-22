@@ -6,10 +6,12 @@ import {
   buildSupported,
   detectGames,
   MAX_ACF_BYTES,
+  MAX_WILDCARD_ENTRIES,
   parseAppManifest,
   parseKeyValues,
   type DetectionProbe,
 } from "./detection.js";
+import type { Pack } from "./types.js";
 
 const pack = testPack();
 const MANIFEST = appManifestPath(4000001);
@@ -26,6 +28,16 @@ function folder(files: Record<string, Uint8Array | string>): DetectionProbe {
       return new TextEncoder().encode(found);
     },
   };
+}
+
+/** A server folder whose probe can also list the entries of a folder. */
+function listing(
+  files: readonly string[],
+  folders: Record<string, readonly string[]>,
+): DetectionProbe {
+  const entries = new Map(Object.entries(folders));
+  const empty = Object.fromEntries(files.map((path) => [path, ""]));
+  return { ...folder(empty), list: async (path) => entries.get(path) ?? null };
 }
 
 function parseError(text: string): string {
@@ -141,5 +153,72 @@ describe("game detection", () => {
     expect(await detectGames([noMarkers], folder(files))).toEqual([]);
     const [linux] = await detectGames([pack], folder(files));
     expect(linux?.os).toBe("linux");
+  });
+});
+
+describe("detection warnings with a * part", () => {
+  const message = "An override save file exists in one of the world folders.";
+  const MARKER = "TestServer.sh";
+
+  /** The test pack with one detection warning at the given path. */
+  function warnAt(path: string): Pack {
+    const warnings = [{ path, message }];
+    return { ...pack, detection: { ...pack.detection, warnings } };
+  }
+
+  async function warnings(path: string, probe: DetectionProbe) {
+    const [found] = await detectGames([warnAt(path)], probe);
+    return found?.warnings;
+  }
+
+  const SAVE = "Saved/Worlds/*/override.sav";
+
+  it("matches any single folder entry for the *", async () => {
+    const files = [MARKER, "Saved/Worlds/B2C4/override.sav"];
+    const probe = listing(files, { "Saved/Worlds": ["A1F0", "B2C4"] });
+    expect(await warnings(SAVE, probe)).toEqual([message]);
+  });
+
+  it("matches nothing when no listed folder holds the file", async () => {
+    const files = [MARKER, "Saved/Worlds/A1F0/other.sav"];
+    const probe = listing(files, { "Saved/Worlds": ["A1F0"] });
+    expect(await warnings(SAVE, probe)).toEqual([]);
+    expect(await warnings(SAVE, listing([MARKER], {}))).toEqual([]);
+  });
+
+  it("needs a probe that can list folders", async () => {
+    const files = { [MARKER]: "", "Saved/Worlds/A1F0/override.sav": "" };
+    expect(await warnings(SAVE, folder(files))).toEqual([]);
+  });
+
+  it("skips entries that are not plain folder names", async () => {
+    const odd = ["..", ".", "", "a/b", "a\\b"];
+    const files = odd.map((name) => `Saved/Worlds/${name}/override.sav`);
+    const probe = listing([MARKER, ...files], { "Saved/Worlds": odd });
+    expect(await warnings(SAVE, probe)).toEqual([]);
+  });
+
+  it("never matches a path with two * parts", async () => {
+    const files = [MARKER, "Saved/Worlds/A1F0/override.sav"];
+    const folders = { Saved: ["Worlds"], "Saved/Worlds": ["A1F0"] };
+    const probe = listing(files, folders);
+    expect(await warnings("Saved/*/*/override.sav", probe)).toEqual([]);
+  });
+
+  it("looks at no more than MAX_WILDCARD_ENTRIES entries", async () => {
+    const count = MAX_WILDCARD_ENTRIES + 1;
+    const names = Array.from({ length: count }, (_, i) => `w${i}`);
+    const folders = { "Saved/Worlds": names };
+    const first = "Saved/Worlds/w0/override.sav";
+    const last = `Saved/Worlds/w${MAX_WILDCARD_ENTRIES}/override.sav`;
+    const early = listing([MARKER, first], folders);
+    expect(await warnings(SAVE, early)).toEqual([message]);
+    const late = listing([MARKER, last], folders);
+    expect(await warnings(SAVE, late)).toEqual([]);
+  });
+
+  it("lists the server root for a * in the first part", async () => {
+    const probe = listing([MARKER, "World1/override.sav"], { "": ["World1"] });
+    expect(await warnings("*/override.sav", probe)).toEqual([message]);
   });
 });

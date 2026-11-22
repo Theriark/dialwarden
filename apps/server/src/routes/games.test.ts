@@ -1,5 +1,7 @@
 // GET /api/v1/games and GET /api/v1/games/ID/settings-meta (dev-work-plan P3-A
-// step 2), served from the synthetic test pack of packages/packs-schema.
+// step 2), served from the synthetic test pack of packages/packs-schema, and
+// from the game packs of the repository for the Palworld and Enshrouded
+// secrets (P3-B).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -20,6 +22,10 @@ import {
 const TEST_PACKS = fileURLToPath(
   new URL("../../../../packages/packs-schema/test/packs/", import.meta.url),
 );
+const REPO_PACKS = fileURLToPath(
+  new URL("../../../../packs/", import.meta.url),
+);
+const ROLE_PASSWORDS = [1, 2, 3, 4].map((n) => `userGroups.slot${n}.password`);
 const GAMES = "/api/v1/games";
 const META = "/api/v1/games/testpack/settings-meta";
 
@@ -34,6 +40,10 @@ async function signedIn(packsDir = TEST_PACKS) {
   current = await testApp({ config: { packsDir } });
   const owner = await setupOwner(current.app);
   return { app: current.app, headers: headersOf(owner) };
+}
+
+interface GameList {
+  items: { id: string; version: string }[];
 }
 
 interface SettingsMeta {
@@ -75,6 +85,35 @@ describe("game packs API", () => {
     expect(hardcore?.values["AdminPassword"]).toBe(SECRET_MASK);
     expect(response.body).not.toContain('"AdminPassword":"hardcore"');
     expect(response.body).not.toContain("detection");
+  });
+
+  it("masks the secrets of the Palworld and Enshrouded packs", async () => {
+    const { app, headers } = await signedIn(REPO_PACKS);
+    const list = await app.inject({ url: GAMES, headers });
+    const ids = list.json<GameList>().items.map((game) => game.id);
+    expect(ids).toEqual(expect.arrayContaining(["enshrouded", "palworld"]));
+    const expected = new Map([
+      ["palworld", ["AdminPassword", "ServerPassword"]],
+      ["enshrouded", ROLE_PASSWORDS],
+    ]);
+    for (const [id, keys] of expected) {
+      const url = `/api/v1/games/${id}/settings-meta`;
+      const response = await app.inject({ url, headers });
+      expect(response.statusCode, id).toBe(200);
+      const body = response.json<SettingsMeta>();
+      const secrets = body.settings.filter((s) => s.secret === true);
+      expect(secrets.map((s) => s.key)).toEqual(keys);
+      // Palworld's passwords have a default (empty); Enshrouded's have none.
+      const defaults = secrets.filter((s) => s.default !== undefined);
+      expect(defaults.length, id).toBe(id === "palworld" ? 2 : 0);
+      for (const s of defaults) expect(s.default).toBe(SECRET_MASK);
+      for (const preset of body.presets) {
+        const values = new Map(Object.entries(preset.values));
+        const shown = secrets.filter((s) => values.has(s.key));
+        for (const s of shown) expect(values.get(s.key)).toBe(SECRET_MASK);
+      }
+      expect(response.body).not.toContain("synthetic-admin-pass");
+    }
   });
 
   it("answers 404 for an unknown pack and 400 for a bad id", async () => {

@@ -12,6 +12,9 @@ export type KeyValues = Map<string, string | KeyValues>;
 export const MAX_ACF_BYTES = 256 * 1024;
 const MAX_DEPTH = 16;
 
+/** The most folder entries a * part of a warning path looks at. */
+export const MAX_WILDCARD_ENTRIES = 64;
+
 export class AcfError extends Error {
   constructor(message: string) {
     super(message);
@@ -164,6 +167,12 @@ export interface DetectionProbe {
   exists(path: string): Promise<boolean>;
   /** The file's bytes, or null when it does not exist. */
   read(path: string): Promise<Uint8Array | null>;
+  /**
+   * The entry names of a folder ("" is the root), or null when the folder
+   * does not exist. Optional: without it, a warning path with a * part never
+   * matches.
+   */
+  list?(path: string): Promise<readonly string[] | null>;
 }
 
 export interface Detection {
@@ -202,6 +211,37 @@ async function markersMatch(
   return true;
 }
 
+/** A folder entry that names one child: no separator, not . or .. */
+function plainName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && !/[/\\]/.test(name);
+}
+
+/**
+ * True when the file of a detection warning exists. One part of its path may
+ * be exactly *, which stands for any single folder entry: the world id folder
+ * of a Palworld save, for example. The probe's list gives the entries, at
+ * most MAX_WILDCARD_ENTRIES of them; a path with two * parts never matches.
+ */
+async function warningPathExists(
+  probe: DetectionProbe,
+  path: string,
+): Promise<boolean> {
+  const parts = path.split("/");
+  const star = parts.indexOf("*");
+  if (star < 0) return probe.exists(path);
+  if (probe.list === undefined || parts.lastIndexOf("*") !== star) {
+    return false;
+  }
+  const folder = parts.slice(0, star).join("/");
+  const names = (await probe.list(folder)) ?? [];
+  for (const name of names.slice(0, MAX_WILDCARD_ENTRIES)) {
+    if (!plainName(name)) continue;
+    const found = [...parts.slice(0, star), name, ...parts.slice(star + 1)];
+    if (await probe.exists(found.join("/"))) return true;
+  }
+  return false;
+}
+
 async function warningsOf(
   pack: Pack,
   os: Os | null,
@@ -210,7 +250,9 @@ async function warningsOf(
   const out: string[] = [];
   for (const warning of pack.detection.warnings ?? []) {
     if (os !== null && !forOs(os, warning.os)) continue;
-    if (await probe.exists(warning.path)) out.push(warning.message);
+    if (await warningPathExists(probe, warning.path)) {
+      out.push(warning.message);
+    }
   }
   return out;
 }
