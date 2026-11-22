@@ -7,7 +7,7 @@ section 2).
 
 | File | What it reproduces |
 | --- | --- |
-| enshrouded-like.json | a strict JSON server file shaped like Enshrouded's: nested objects, an array of groups, large integers, a float, booleans and a \u escape |
+| enshrouded-like.json | a strict JSON server file shaped like Enshrouded's: nested objects, an array of groups, large integers, a float, booleans, a \/ escape and a non-ASCII character |
 | crlf-bom.json | CRLF line endings, a BOM, tab indentation, a one-line object, non-ASCII text and trailing spaces |
 | jsonc-comments.json | comments and trailing commas: accepted by the jsonc adapter, errors for the strict json adapter |
 | malformed-trailing-comma.json | malformed for strict JSON: a trailing comma before } |

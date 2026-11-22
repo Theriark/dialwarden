@@ -18,7 +18,7 @@ section 2).
 | ini/duplicates.ini | a key outside any section, a duplicate key and a repeated section |
 | ini/malformed-section.ini | malformed: a section header without ] |
 | json/SYNTHETIC.md | the list of the json fixtures |
-| json/enshrouded-like.json | a strict JSON server file shaped like Enshrouded's: nested objects, an array of groups, large integers, a float, booleans and a \u escape |
+| json/enshrouded-like.json | a strict JSON server file shaped like Enshrouded's: nested objects, an array of groups, large integers, a float, booleans, a \/ escape and a non-ASCII character |
 | json/crlf-bom.json | CRLF line endings, a BOM, tab indentation, a one-line object, non-ASCII text and trailing spaces |
 | json/jsonc-comments.json | comments and trailing commas: accepted by the jsonc adapter, errors for the strict json adapter |
 | json/malformed-trailing-comma.json | malformed for strict JSON: a trailing comma before } |
