@@ -287,7 +287,7 @@ function lineTail(text: string, from: number): LineTail | undefined {
 function indentUnit(doc: JsonDoc): string {
   const f = doc.formatting;
   if (f === undefined) return "  ";
-  return f.insertSpaces ? " ".repeat(f.tabSize) : "\t";
+  return f.insertSpaces ? " ".repeat(f.tabSize ?? 2) : "\t";
 }
 
 interface Layout {
