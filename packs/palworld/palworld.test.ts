@@ -95,6 +95,11 @@ const RULES: readonly (readonly [string, Changes, Changes])[] = [
     { ServerDescription: "Say hello" },
   ],
   [
+    "quote-in-text-secret",
+    { ServerPassword: 'join"me' },
+    { ServerPassword: "join-me" },
+  ],
+  [
     "seed-without-randomizer",
     { RandomizerSeed: "seed-1" },
     { RandomizerType: "Region" },
@@ -144,6 +149,40 @@ describe("Palworld pack", () => {
     ]);
     // The settings file is read by the game, not a shell: no X1 issue there.
     expect(issuesWith({ ServerName: value })).toEqual([]);
+  });
+
+  it("refuses a platform the game does not know as an error", () => {
+    expect(issuesWith({ CrossplayPlatforms: ["Steam", "Switch"] })).toEqual([
+      {
+        key: "CrossplayPlatforms",
+        severity: "error",
+        message: "Every item must be one of the listed choices.",
+      },
+    ]);
+  });
+
+  it("checks a quote in a password on the server only", () => {
+    // The browser sees the passwords masked, so only the server can look
+    // inside them; the public texts stay checked in the browser too.
+    const secret = ruleOf(pack, "quote-in-text-secret");
+    expect(secret.serverEvaluated).toBe(true);
+    expect(ruleOf(pack, "quote-in-text").serverEvaluated).toBeUndefined();
+    const values = new Map(fixture);
+    values.set("AdminPassword", 'admin"secret');
+    const issues = secret.settings.map((key) => {
+      return { key, severity: "error", message: secret.message };
+    });
+    expect(validate(pack, values)).toEqual(issues);
+    const browser = { includeServerEvaluated: false };
+    expect(validate(pack, values, browser)).toEqual([]);
+    values.set("ServerName", 'The "Lighthouse"');
+    expect(validate(pack, values, browser).map((i) => i.key)).toEqual([
+      "ServerName",
+      "ServerDescription",
+      "Region",
+      "PublicIP",
+      "RandomizerSeed",
+    ]);
   });
 
   it("has a fire and clear case for every rule", () => {

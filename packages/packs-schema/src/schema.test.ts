@@ -81,6 +81,49 @@ describe("pack.json schema (contract C3)", () => {
     );
   });
 
+  it("allows item choices on list settings only", () => {
+    const pack = testPack();
+    const itemEnum = [{ value: "Steam", label: "Steam" }];
+    const list = withSetting(pack, "ServerName", {
+      type: "list",
+      default: ["Steam"],
+      itemEnum,
+    });
+    expect(schemaProblems(list)).toEqual([]);
+    const text = withSetting(pack, "ServerName", { itemEnum });
+    expect(problemsOf(text)).toContain(
+      "/settings/4/type: must be equal to constant",
+    );
+    const empty = withSetting(pack, "ServerName", {
+      type: "list",
+      default: [],
+      itemEnum: [],
+    });
+    expect(problemsOf(empty)).toContain(
+      "/settings/4/itemEnum: must NOT have fewer than 1 items",
+    );
+    const unlabelled = withSetting(pack, "ServerName", {
+      type: "list",
+      default: [],
+      itemEnum: [{ value: "Steam" } as never],
+    });
+    expect(problemsOf(unlabelled)).toContain(
+      "/settings/4/itemEnum/0: must have required property 'label'",
+    );
+  });
+
+  it("takes serverEvaluated on a rule as a boolean only", () => {
+    const pack = testPack();
+    const [first, ...rest] = pack.rules;
+    if (first === undefined) throw new Error("no rule");
+    const marked = { ...first, serverEvaluated: true };
+    expect(schemaProblems({ ...pack, rules: [marked, ...rest] })).toEqual([]);
+    const text = { ...first, serverEvaluated: "yes" };
+    expect(problemsOf({ ...pack, rules: [text, ...rest] })).toContain(
+      "/rules/0/serverEvaluated: must be boolean",
+    );
+  });
+
   it("refuses paths that start at the root or use backslashes", () => {
     const pack = testPack();
     const files = pack.files.map((file) => ({

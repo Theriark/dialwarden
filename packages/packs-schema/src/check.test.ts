@@ -76,6 +76,39 @@ describe("pack checks beyond the schema", () => {
     ]);
   });
 
+  it("checks item choices of list settings and their defaults", () => {
+    const steam = { value: "Steam", label: "Steam" };
+    const xbox = { value: "Xbox", label: "Xbox" };
+    const list = { type: "list" as const, itemEnum: [steam, xbox] };
+    const ok = withSetting(pack, "ServerName", { ...list, default: ["Xbox"] });
+    expect(referenceProblems(ok)).toEqual([]);
+    let changed = withSetting(pack, "ServerName", {
+      ...list,
+      itemEnum: [steam, xbox, { value: "Steam", label: "Again" }],
+      default: ["Steam", "Switch"],
+    });
+    changed = withSetting(changed, "PvP", { itemEnum: [steam] });
+    expect(referenceProblems(changed)).toEqual([
+      "setting PvP: only a list setting lists item choices",
+      "setting ServerName: item choice Steam is listed twice",
+      "setting ServerName: the default is invalid: Every item must be one of the listed choices.",
+    ]);
+  });
+
+  it("refuses a preset item outside the item choices", () => {
+    const list = withSetting(pack, "ServerName", {
+      type: "list",
+      itemEnum: [{ value: "Steam", label: "Steam" }],
+      default: ["Steam"],
+    });
+    const presets = [
+      { id: "consoles", label: "Consoles", values: { ServerName: ["PS5"] } },
+    ];
+    expect(referenceProblems({ ...list, presets })).toEqual([
+      "preset consoles: ServerName: Every item must be one of the listed choices.",
+    ]);
+  });
+
   it("checks builds, operating systems, paths and markers", () => {
     const files = pack.files.map((file) => ({
       ...file,

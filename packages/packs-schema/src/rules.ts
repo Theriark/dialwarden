@@ -2,7 +2,8 @@
 // interprets the logic and never evaluates code, but it also has "log" and
 // "method" and lets any caller add operators. A pack may use only the
 // operators below; every var and missing names a setting of the pack as a
-// literal string, so a rule can read nothing but setting values.
+// literal string, so a rule can read nothing but setting values. A rule that
+// reads a secret beyond an emptiness test runs on the server only.
 import jsonLogic, { type RulesLogic } from "json-logic-js";
 import type { JsonValue, Pack, Rule } from "./types.js";
 
@@ -112,12 +113,88 @@ export function checkLogic(logic: unknown): LogicCheck {
   return { problems: [...problems], keys: [...keys] };
 }
 
+/** The comparisons a secret may take part in, against the literal "". */
+const EMPTINESS_TESTS = new Set(["==", "===", "!=", "!=="]);
+
+/** The name a plain var reads ({ var: "K" } or { var: ["K"] }), if any. */
+function plainVarName(node: unknown): string | undefined {
+  if (node === null || typeof node !== "object" || Array.isArray(node)) {
+    return undefined;
+  }
+  const entries = Object.entries(node);
+  const first = entries.at(0);
+  if (first === undefined || entries.length !== 1 || first[0] !== "var") {
+    return undefined;
+  }
+  const args: unknown = first[1];
+  const list: unknown[] = Array.isArray(args) ? args : [args];
+  const name = list.at(0);
+  return list.length === 1 && typeof name === "string" ? name : undefined;
+}
+
+/** True for a secret compared with "", as in { "==": [{ var: S }, ""] }. */
+function isEmptinessTest(node: object, secrets: ReadonlySet<string>): boolean {
+  const entries = Object.entries(node);
+  const first = entries.at(0);
+  if (first === undefined || entries.length !== 1) return false;
+  const [operator, args] = first;
+  if (!EMPTINESS_TESTS.has(operator) || !Array.isArray(args)) return false;
+  const list = args as unknown[];
+  if (list.length !== 2) return false;
+  const [a, b] = list;
+  let name: string | undefined;
+  if (a === "") name = plainVarName(b);
+  else if (b === "") name = plainVarName(a);
+  return name !== undefined && secrets.has(name);
+}
+
+/**
+ * The secret settings a JSONLogic expression reads beyond an emptiness or
+ * presence test (THE-2361). The masked browser view keeps only whether a
+ * secret is empty, so a secret may be compared with the literal "" (==, !=,
+ * === and !==) or named in missing and missing_some; any other read (in,
+ * substr, cat, a comparison with another value, arithmetic, truthiness or a
+ * var default) gives the browser a different answer than the server.
+ */
+export function secretReads(
+  logic: unknown,
+  secrets: ReadonlySet<string>,
+): string[] {
+  const found = new Set<string>();
+  const visit = (node: unknown, depth: number): void => {
+    if (depth > MAX_DEPTH) return;
+    if (Array.isArray(node)) {
+      for (const item of node as unknown[]) visit(item, depth + 1);
+      return;
+    }
+    if (node === null || typeof node !== "object") return;
+    if (isEmptinessTest(node, secrets)) return;
+    for (const [operator, args] of Object.entries(node)) {
+      if (operator === "missing" || operator === "missing_some") continue;
+      if (operator !== "var") {
+        visit(args, depth + 1);
+        continue;
+      }
+      const list: unknown[] = Array.isArray(args) ? args : [args];
+      const name = list.at(0);
+      if (typeof name === "string" && secrets.has(name)) found.add(name);
+      visit(list.slice(1), depth + 1);
+    }
+  };
+  visit(logic, 0);
+  return [...found];
+}
+
 /**
  * Problems of the rules of a pack: operators outside the allow-list, names
- * that are not settings of the pack, and duplicate rule ids.
+ * that are not settings of the pack, duplicate rule ids, and secrets read
+ * beyond an emptiness or presence test by a rule not marked serverEvaluated.
  */
 export function checkRules(pack: Pack): string[] {
   const known = new Set(pack.settings.map((setting) => setting.key));
+  const secrets = new Set(
+    pack.settings.filter((s) => s.secret === true).map((s) => s.key),
+  );
   const ids = new Set<string>();
   const problems: string[] = [];
   for (const rule of pack.rules) {
@@ -131,6 +208,12 @@ export function checkRules(pack: Pack): string[] {
       if (!known.has(key)) {
         problems.push(`rule ${rule.id}: ${key} is not a setting of the pack`);
       }
+    }
+    if (rule.serverEvaluated === true) continue;
+    for (const key of secretReads(rule.when, secrets)) {
+      problems.push(
+        `rule ${rule.id}: reads the secret ${key} beyond an emptiness or presence test, so it must be marked serverEvaluated`,
+      );
     }
   }
   return problems;

@@ -1,15 +1,21 @@
 // @vitest-environment jsdom
 // Contract C3: validate(pack, values) gives the same issues in the browser as
-// on the server. This file runs the package root under jsdom and compares
-// with the golden list that validate.test.ts also checks under node, and it
-// keeps Node built-ins and the node entry out of the root's import graph.
-// Under jsdom import.meta.url is no file URL, so files are found from the
-// path of this test file instead.
+// on the server for every rule not marked serverEvaluated, and the browser
+// call skips the marked ones. This file runs the package root under jsdom and
+// compares with the golden lists that validate.test.ts also checks under
+// node, and it keeps Node built-ins and the node entry out of the root's
+// import graph. Under jsdom import.meta.url is no file URL, so files are
+// found from the path of this test file instead.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GOLDEN_ISSUES, GOLDEN_VALUES } from "../test/golden.js";
-import { type Pack, validate } from "./index.js";
+import {
+  GOLDEN_BROWSER_ISSUES,
+  GOLDEN_ISSUES,
+  GOLDEN_VALUES,
+  goldenPack,
+} from "../test/golden.js";
+import { type Pack, SECRET_MASK, validate } from "./index.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- the package's own sources */
 
@@ -76,7 +82,20 @@ describe("packs-schema in the browser (jsdom)", () => {
   });
 
   it("gives the same issues as on the server", () => {
-    expect(validate(testPack(), GOLDEN_VALUES)).toEqual(GOLDEN_ISSUES);
+    expect(validate(goldenPack(testPack()), GOLDEN_VALUES)).toEqual(
+      GOLDEN_ISSUES,
+    );
+  });
+
+  it("skips server-evaluated rules in the browser call", () => {
+    const pack = goldenPack(testPack());
+    const browser = { includeServerEvaluated: false };
+    expect(validate(pack, GOLDEN_VALUES, browser)).toEqual(
+      GOLDEN_BROWSER_ISSUES,
+    );
+    // The browser holds the masked secret; the answer does not change.
+    const masked = { ...GOLDEN_VALUES, AdminPassword: SECRET_MASK };
+    expect(validate(pack, masked, browser)).toEqual(GOLDEN_BROWSER_ISSUES);
   });
 
   it("reaches no Node built-in and not the node entry", () => {

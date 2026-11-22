@@ -1,18 +1,25 @@
 // pnpm packs:check on the synthetic test pack (test/packs/testpack), so the
 // check runs before the first real packs arrive in P3-B, and on broken copies
 // of it, one problem at a time.
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  TEST_PACK_DIR,
   TEST_PACKS,
   testPack,
   withSetting,
   writeTestPack,
 } from "../test/kit.js";
 import { checkPacksFolder, fixtureName } from "./node.js";
-import type { Pack } from "./types.js";
+import type { Pack, Setting } from "./types.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
 
@@ -55,6 +62,88 @@ describe("pnpm packs:check", () => {
     expect(problemsOf({ ...pack, rules: [rule] })).toEqual([
       "rule calls-a-method: operator method is not allowed",
     ]);
+  });
+
+  it("fails a rule that reads a secret without serverEvaluated", () => {
+    const pack = testPack();
+    const rule = {
+      id: "password-in-name",
+      severity: "warning",
+      message: "The admin password is part of the server name.",
+      settings: ["AdminPassword", "ServerName"],
+      when: { in: [{ var: "AdminPassword" }, { var: "ServerName" }] },
+    };
+    expect(problemsOf({ ...pack, rules: [rule] })).toEqual([
+      "rule password-in-name: reads the secret AdminPassword beyond an emptiness or presence test, so it must be marked serverEvaluated",
+    ]);
+    const marked = { ...rule, serverEvaluated: true };
+    expect(problemsOf({ ...pack, rules: [marked] })).toEqual([]);
+    const empty = { ...rule, when: { "==": [{ var: "AdminPassword" }, ""] } };
+    expect(problemsOf({ ...pack, rules: [empty] })).toEqual([]);
+  });
+
+  describe("a list setting with item choices", () => {
+    // A Platforms list in the struct line of the Game.ini fixture.
+    const GAME_INI = readFileSync(join(TEST_PACK_DIR, "fixtures", "Game.ini"))
+      .toString("utf8")
+      .replace("DeathPenalty=All)", "DeathPenalty=All,Platforms=(Steam,Xbox))");
+    const platforms: Setting = {
+      key: "Options.Platforms",
+      label: "Platforms",
+      file: "game",
+      locator: { kind: "struct", key: "OptionSettings", field: "Platforms" },
+      type: "list",
+      default: ["Steam", "Xbox"],
+      itemEnum: [
+        { value: "Steam", label: "Steam" },
+        { value: "Xbox", label: "Xbox" },
+        { value: "PS5", label: "PlayStation 5" },
+      ],
+      description: "Client platforms that may join the synthetic server.",
+    };
+
+    function withPlatforms(
+      change: Partial<Setting>,
+      presets?: Pack["presets"],
+    ) {
+      const pack = testPack();
+      const settings = [...pack.settings, { ...platforms, ...change }];
+      return { ...pack, settings, presets: presets ?? pack.presets };
+    }
+
+    it("passes when the default and the presets use listed items", () => {
+      const presets = [
+        {
+          id: "consoles",
+          label: "Consoles",
+          values: { "Options.Platforms": ["PS5"] },
+        },
+      ];
+      const fixtures = { "Game.ini": GAME_INI };
+      expect(problemsOf(withPlatforms({}, presets), fixtures)).toEqual([]);
+    });
+
+    it("fails a default item outside the item choices", () => {
+      const steamOnly = { itemEnum: [{ value: "Steam", label: "Steam" }] };
+      const fixtures = { "Game.ini": GAME_INI };
+      expect(problemsOf(withPlatforms(steamOnly), fixtures)).toEqual([
+        "setting Options.Platforms: the default is invalid: Every item must be one of the listed choices.",
+      ]);
+    });
+
+    it("fails a preset item outside the item choices", () => {
+      const presets = [
+        {
+          id: "handheld",
+          label: "Handheld",
+          values: { "Options.Platforms": ["Switch"] },
+        },
+      ];
+      const fixtures = { "Game.ini": GAME_INI };
+      expect(problemsOf(withPlatforms({}, presets), fixtures)).toEqual([
+        "preset handheld: Options.Platforms: Every item must be one of the listed choices.",
+      ]);
+    });
   });
 
   it("fails a locator that does not resolve on its fixture", () => {
