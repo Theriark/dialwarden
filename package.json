@@ -10,7 +10,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "lint": "eslint . --max-warnings 0 && prettier --check .",
+    "lint": "eslint . --max-warnings 0 && prettier --check . || (prettier --write packages/packs-schema/src/validate.ts && git --no-pager diff -- packages/packs-schema/src/validate.ts && exit 1)",
     "format": "prettier --write .",
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest run",
