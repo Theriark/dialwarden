@@ -1,5 +1,7 @@
 // validate(pack, values), contract C3: one function for the browser and the
 // server, so the editor shows exactly the issues the server refuses with.
+// Rules marked serverEvaluated are the one exception: only the server runs
+// them, because the browser sees secrets masked (THE-2361).
 import { ruleData, ruleFires } from "./rules.js";
 import type { JsonValue, Pack, Setting, ValidationIssue } from "./types.js";
 
@@ -77,6 +79,18 @@ function isChoice(setting: Setting, value: JsonValue): boolean {
   return choices.some((option) => option.value === value);
 }
 
+/** True when every item is a listed item choice, or the list has none. */
+function itemsAreChoices(
+  setting: Setting,
+  items: readonly JsonValue[],
+): boolean {
+  const choices = setting.itemEnum;
+  if (choices === undefined) return true;
+  return items.every((item) => {
+    return choices.some((option) => option.value === item);
+  });
+}
+
 function checkLength(setting: Setting, length: number, noun: string) {
   if (setting.min !== undefined && length < setting.min) {
     return `Needs at least ${setting.min} ${noun}.`;
@@ -88,8 +102,8 @@ function checkLength(setting: Setting, length: number, noun: string) {
 }
 
 /**
- * What is wrong with one value of a setting (type, range, step, enum), or
- * undefined. null means "not set" and is always accepted.
+ * What is wrong with one value of a setting (type, range, step, enum, list
+ * item choices), or undefined. null means "not set" and is always accepted.
  */
 export function checkValue(
   setting: Setting,
@@ -114,6 +128,9 @@ export function checkValue(
       if (!Array.isArray(value)) return "Must be a list.";
       if (value.some((item: JsonValue) => !isScalar(item))) {
         return "List items must be text, numbers or on/off values.";
+      }
+      if (!itemsAreChoices(setting, value)) {
+        return "Every item must be one of the listed choices.";
       }
       return checkLength(setting, value.length, "items");
     case "struct":
@@ -168,13 +185,29 @@ export function effectiveValues(
   return out;
 }
 
+export interface ValidateOptions {
+  /**
+   * Whether the rules marked serverEvaluated run (default true). The browser
+   * passes false: it holds only masked secrets, so those rules are judged by
+   * the server and reach the editor through its responses (THE-2361).
+   */
+  readonly includeServerEvaluated?: boolean;
+}
+
 /**
  * The issues of a set of values against a pack: unknown keys, types, min,
  * max, step, enums, shell characters in files a shell reads, and the pack's
- * rules over the defaults overlaid with the values. The result is the same in
- * the browser and on the server: the order follows the pack.
+ * rules over the defaults overlaid with the values. With the same values the
+ * browser and the server get the same issues for every rule not marked
+ * serverEvaluated; the server call (no options) runs every rule. The order
+ * follows the pack.
  */
-export function validate(pack: Pack, values: Values): ValidationIssue[] {
+export function validate(
+  pack: Pack,
+  values: Values,
+  options: ValidateOptions = {},
+): ValidationIssue[] {
+  const withServerRules = options.includeServerEvaluated ?? true;
   const given = valueMap(values);
   const settings = settingsByKey(pack);
   const shellFiles = new Set<string>();
@@ -199,6 +232,7 @@ export function validate(pack: Pack, values: Values): ValidationIssue[] {
   const known = new Map([...given].filter(([key]) => settings.has(key)));
   const data = ruleData(effectiveValues(pack, known));
   for (const rule of pack.rules) {
+    if (rule.serverEvaluated === true && !withServerRules) continue;
     if (!ruleFires(rule, data)) continue;
     for (const key of rule.settings) {
       issues.push({ key, severity: rule.severity, message: rule.message });

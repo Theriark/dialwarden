@@ -262,8 +262,14 @@
       "default": ["Steam", "Xbox", "PS5", "Mac"],
       "min": 1,
       "max": 4,
+      "itemEnum": [
+        { "value": "Steam", "label": "Steam" },
+        { "value": "Xbox", "label": "Xbox" },
+        { "value": "PS5", "label": "PlayStation 5" },
+        { "value": "Mac", "label": "Mac" }
+      ],
       "group": "Network",
-      "description": "Client platforms that may join, written as a list in parentheses. Known entries are Steam, Xbox, PS5 and Mac.",
+      "description": "Client platforms that may join, written as a list in parentheses.",
       "restartRequired": true
     },
     {
@@ -2415,8 +2421,6 @@
         "ServerDescription",
         "Region",
         "PublicIP",
-        "AdminPassword",
-        "ServerPassword",
         "RandomizerSeed"
       ],
       "when": {
@@ -2425,9 +2429,20 @@
           { "in": ["\"", { "var": "ServerDescription" }] },
           { "in": ["\"", { "var": "Region" }] },
           { "in": ["\"", { "var": "PublicIP" }] },
-          { "in": ["\"", { "var": "AdminPassword" }] },
-          { "in": ["\"", { "var": "ServerPassword" }] },
           { "in": ["\"", { "var": "RandomizerSeed" }] }
+        ]
+      }
+    },
+    {
+      "id": "quote-in-text-secret",
+      "severity": "error",
+      "message": "The settings file has no way to store a double quote inside a quoted value; one would break the whole OptionSettings line.",
+      "settings": ["AdminPassword", "ServerPassword"],
+      "serverEvaluated": true,
+      "when": {
+        "or": [
+          { "in": ["\"", { "var": "AdminPassword" }] },
+          { "in": ["\"", { "var": "ServerPassword" }] }
         ]
       }
     },

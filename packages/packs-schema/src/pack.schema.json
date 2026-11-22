@@ -355,6 +355,12 @@
           "maxItems": 200,
           "items": { "$ref": "#/$defs/enumOption" }
         },
+        "itemEnum": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/enumOption" }
+        },
         "group": { "$ref": "#/$defs/plainText80" },
         "tags": {
           "type": "array",
@@ -376,8 +382,16 @@
         "liveReloadable": { "type": "boolean" },
         "overrideNote": { "$ref": "#/$defs/ownWords" }
       },
-      "if": { "properties": { "type": { "const": "enum" } } },
-      "then": { "required": ["enum"] }
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": { "required": ["enum"] }
+        },
+        {
+          "if": { "required": ["itemEnum"] },
+          "then": { "properties": { "type": { "const": "list" } } }
+        }
+      ]
     },
     "rule": {
       "type": "object",
@@ -394,7 +408,8 @@
           "uniqueItems": true,
           "items": { "type": "string", "$ref": "#/$defs/settingKey" }
         },
-        "when": { "type": "object" }
+        "when": { "type": "object" },
+        "serverEvaluated": { "type": "boolean" }
       }
     },
     "preset": {

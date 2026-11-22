@@ -62,6 +62,11 @@ export interface Setting {
   readonly step?: number;
   readonly unit?: string;
   readonly enum?: readonly EnumOption[];
+  /**
+   * The words each item of a list setting must be (list only, THE-2362);
+   * without it the items are free text.
+   */
+  readonly itemEnum?: readonly EnumOption[];
   readonly group?: string;
   readonly tags?: readonly string[];
   /** Our own words, 20 to 300 characters (Legal). */
@@ -86,6 +91,12 @@ export interface Rule {
   readonly message: string;
   readonly settings: readonly string[];
   readonly when: { readonly [operator: string]: JsonValue };
+  /**
+   * Only the server runs this rule, on the real stored values; the browser
+   * sees only masked secrets and skips it (THE-2361). A rule that reads a
+   * secret beyond an emptiness or presence test needs it.
+   */
+  readonly serverEvaluated?: boolean;
 }
 
 export interface Preset {

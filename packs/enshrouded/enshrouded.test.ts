@@ -128,6 +128,18 @@ describe("Enshrouded pack", () => {
     expect(validate(pack, single)).toEqual([]);
   });
 
+  it("refuses a browser tag the game does not know as an error", () => {
+    // An unknown tag stops the server at start, so it never reaches the file.
+    expect(issuesWith({ tags: ["English", "Roleplay"] })).toEqual([]);
+    expect(issuesWith({ tags: ["English", "Pirates"] })).toEqual([
+      {
+        key: "tags",
+        severity: "error",
+        message: "Every item must be one of the listed choices.",
+      },
+    ]);
+  });
+
   it("reads no file through a shell, so the X1 check never applies", () => {
     const shellRead = pack.files.some((f) => SHELL_ADAPTERS.has(f.adapter));
     expect(shellRead).toBe(false);
