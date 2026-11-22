@@ -196,12 +196,19 @@ describe("launch arguments: plus convars and quoting", () => {
     expect(errorCode(() => launch.remove(twice, flag("-a")))).toBe("ambiguous");
   });
 
-  it("doubles a lone backslash at the end before adding a flag", () => {
+  it("doubles a lone backslash at the end before adding an argument", () => {
     const out = edited(launch, "-a \\", (d) => launch.insert(d, flag("-b"), 1));
     expect(out).toBe("-a \\\\ -b 1");
     const doc = launch.parse(bytes(out));
     expect(launch.get(doc, flag("-a"))).toBe("\\");
     expect(launch.get(doc, flag("-b"))).toBe("1");
+    const chain = edited(launch, "Map?a\\", (d) =>
+      launch.insert(d, flag("?b"), "x y"),
+    );
+    expect(chain).toBe('Map?a\\\\"?b=x y"');
+    const after = launch.parse(bytes(chain));
+    expect(launch.get(after, flag("?a\\"))).toBe(true);
+    expect(launch.get(after, flag("?b"))).toBe("x y");
   });
 
   it("adds the first argument to an empty or comment-only file", () => {

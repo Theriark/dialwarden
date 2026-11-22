@@ -335,6 +335,14 @@ function setArg(doc: LaunchDoc, arg: Arg, value: Value): Splice[] {
   return [replaceIn(word, range.start, range.end, text)];
 }
 
+/**
+ * A lone \ at the end of the file is literal, but text written right after
+ * it would be escaped by it, so it is rewritten as \\ (the same text) first.
+ */
+function isLoneBackslash(char: Char | undefined): char is Char {
+  return char?.byte === 92 && char.to - char.from === 1 && char.context === 0;
+}
+
 function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
   if (value === false) return [];
   const text = value === true ? undefined : scalar(value, undefined);
@@ -348,6 +356,10 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     }
     const option = text === undefined ? flag : `${flag}=${text}`;
     const last = chain.chars.at(-1);
+    if (isLoneBackslash(last)) {
+      const raw = `\\\\${encodeIn(0, option)}`;
+      return [{ start: last.from, end: last.to, text: raw }];
+    }
     const context = last?.context ?? 0;
     const inside = context !== 0 && last !== undefined;
     const at = inside ? last.to : chain.end;
@@ -369,10 +381,8 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     const text = at < doc.source.length ? `${token} ` : token;
     return [{ start: at, end: at, text }];
   }
-  // A lone \ at the end of the file is literal; a space after it would be
-  // escaped into the word, so it is written as \\ (the same text).
   const tail = last.chars.at(-1);
-  if (tail?.byte === 92 && tail.to - tail.from === 1 && tail.context === 0) {
+  if (isLoneBackslash(tail)) {
     return [{ start: tail.from, end: tail.to, text: `\\\\ ${token}` }];
   }
   return [{ start: last.end, end: last.end, text: ` ${token}` }];
