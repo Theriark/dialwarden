@@ -1110,7 +1110,7 @@
         "key": "OptionSettings",
         "field": "bInvisibleOtherGuildBaseCampAreaFX"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Player versus player",
       "description": "When on, the border effect drawn around bases of other guilds is hidden.",
@@ -1155,7 +1155,7 @@
         "key": "OptionSettings",
         "field": "bDisplayPvPItemNumOnWorldMap_BaseCamp"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Player versus player",
       "description": "In PvP, shows on the world map how many PvP items each base holds.",
@@ -1170,7 +1170,7 @@
         "key": "OptionSettings",
         "field": "bDisplayPvPItemNumOnWorldMap_Player"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Player versus player",
       "description": "In PvP, shows player positions and the PvP items they carry on the world map.",
@@ -1185,7 +1185,7 @@
         "key": "OptionSettings",
         "field": "bAdditionalDropItemWhenPlayerKillingInPvPMode"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Player versus player",
       "description": "In PvP, a player who is killed drops an extra item for the killer, set by the two settings below.",
@@ -1269,7 +1269,7 @@
         "key": "OptionSettings",
         "field": "bPalLost"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Death penalty",
       "description": "Pals that die are gone for good instead of recovering after a while.",
@@ -1284,7 +1284,7 @@
         "key": "OptionSettings",
         "field": "bCharacterRecreateInHardcore"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Death penalty",
       "description": "In hardcore mode, lets a player whose character died start again with a fresh one.",
@@ -1494,7 +1494,7 @@
         "key": "OptionSettings",
         "field": "AutoTransferMasterCheckIntervalSeconds"
       },
-      "type": "float",
+      "type": "float,
       "default": 3600,
       "min": 60,
       "max": 86400,
@@ -1598,7 +1598,7 @@
         "key": "OptionSettings",
         "field": "bEnableBuildingPlayerUIdDisplay"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "Guilds and bases",
       "description": "Shows the id of the player who placed each structure, which helps moderators track griefing.",
@@ -1712,7 +1712,7 @@
         "key": "OptionSettings",
         "field": "bExistPlayerAfterLogout"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "World",
       "description": "Leaves a sleeping player body in the world after the player logs out.",
@@ -1727,7 +1727,7 @@
         "key": "OptionSettings",
         "field": "bEnableNonLoginPenalty"
       },
-      "type": "bool",
+      "type": "bool,
       "default": true,
       "group": "World",
       "description": "Applies a penalty to players who stay away for a long time. The game does not document the exact effect.",
@@ -1742,7 +1742,7 @@
         "key": "OptionSettings",
         "field": "bIsMultiplay"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "World",
       "description": "Multiplayer flag for co-op worlds hosted from a client. It has little or no effect on a dedicated server.",
@@ -1757,7 +1757,7 @@
         "key": "OptionSettings",
         "field": "bActiveUNKO"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "World",
       "description": "Switches on a dormant mechanic in which Pals leave droppings. Leave it off unless you are testing.",
@@ -1790,7 +1790,7 @@
         "key": "OptionSettings",
         "field": "DropItemMaxNum_UNKO"
       },
-      "type": "int",
+      "type": "int,
       "default": 100,
       "min": 0,
       "max": 5000,
@@ -1808,7 +1808,7 @@
         "key": "OptionSettings",
         "field": "PhysicsActiveDropItemMaxNum"
       },
-      "type": "int",
+      "type": "int,
       "default": -1,
       "min": -1,
       "max": 10000,
@@ -1910,7 +1910,7 @@
         "key": "OptionSettings",
         "field": "bAllowGlobalPalboxImport"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "World",
       "description": "Lets players bring Pals from the global Palbox into this world.",
@@ -1925,7 +1925,7 @@
         "key": "OptionSettings",
         "field": "bEnableVoiceChat"
       },
-      "type": "bool",
+      "type": "bool,
       "default": false,
       "group": "World",
       "description": "Turns on proximity voice chat in game for everyone connected.",
@@ -2030,7 +2030,7 @@
         "key": "OptionSettings",
         "field": "MaxGuildsPerFrame"
       },
-      "type": "int",
+      "type": "int,
       "default": 10,
       "min": 1,
       "max": 100,
@@ -2251,8 +2251,8 @@
     },
     {
       "id": "rest-port-is-game-port",
-      "severity": "error",
-      "message": "The HTTP admin API port is the same as the game port.",
+      "severity": "warning",
+      "message": "The HTTP admin API port number matches the game port. That can work, because the game port is UDP and the API listens on TCP; change it only where a firewall or container mapping cannot tell the two apart.",
       "settings": ["RESTAPIPort", "Launch.Port"],
       "when": {
         "and": [
@@ -2263,8 +2263,8 @@
     },
     {
       "id": "rcon-port-is-game-port",
-      "severity": "error",
-      "message": "The legacy RCON port is the same as the game port.",
+      "severity": "warning",
+      "message": "The legacy RCON port number matches the game port. That can work, because the game port is UDP and RCON listens on TCP; change it only where a firewall or container mapping cannot tell the two apart.",
       "settings": ["RCONPort", "Launch.Port"],
       "when": {
         "and": [
@@ -2407,18 +2407,6 @@
       }
     },
     {
-      "id": "admin-is-join-password",
-      "severity": "warning",
-      "message": "The admin password and the join password are the same, so every player could gain admin rights.",
-      "settings": ["AdminPassword", "ServerPassword"],
-      "when": {
-        "and": [
-          { "!=": [{ "var": "AdminPassword" }, ""] },
-          { "==": [{ "var": "AdminPassword" }, { "var": "ServerPassword" }] }
-        ]
-      }
-    },
-    {
       "id": "quote-in-text",
       "severity": "error",
       "message": "The settings file has no way to store a double quote inside a quoted value; one would break the whole OptionSettings line.",
@@ -2509,27 +2497,34 @@
     {
       "id": "default",
       "label": "Default",
-      "description": "Puts the main rates, the death penalty and the PvP switches back to the values the game starts with.",
+      "description": "Returns every setting the Casual and Hardcore presets change to the value the game starts with.",
       "values": {
-        "Difficulty": "None",
         "ExpRate": 1,
         "PalCaptureRate": 1,
         "CollectionDropRate": 1,
         "EnemyDropItemRate": 1,
         "WorkSpeedRate": 1,
-        "DeathPenalty": "Item",
-        "PlayerDamageRateDefense": 1,
-        "PalDamageRateDefense": 1,
-        "PlayerStomachDecreaceRate": 1,
         "ItemWeightRate": 1,
-        "BlockRespawnTime": 5,
-        "bEnableFastTravel": true,
+        "EquipmentDurabilityDamageRate": 1,
+        "ItemCorruptionMultiplier": 1,
+        "Difficulty": "None",
+        "PalDamageRateDefense": 1,
+        "PlayerDamageRateDefense": 1,
+        "PlayerStomachDecreaceRate": 1,
+        "PlayerStaminaDecreaceRate": 1,
+        "PalStomachDecreaceRate": 1,
         "bEnableInvaderEnemy": true,
-        "bHardcore": false,
-        "bPalLost": false,
         "bIsPvP": false,
         "bEnablePlayerToPlayerDamage": false,
-        "bEnableDefenseOtherGuildPlayer": false
+        "bEnableDefenseOtherGuildPlayer": false,
+        "DeathPenalty": "Item",
+        "bHardcore": false,
+        "bPalLost": false,
+        "bCharacterRecreateInHardcore": false,
+        "BlockRespawnTime": 5,
+        "BuildObjectDeteriorationDamageRate": 1,
+        "bEnableFastTravel": true,
+        "bEnableFastTravelOnlyBaseCamp": false
       }
     },
     {
