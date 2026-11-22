@@ -104,6 +104,16 @@ describe("console cfg edge cases", () => {
     expect(cfg.get(cfg.parse(bytes("sv_lan\n")), command("sv_lan"))).toBe("");
   });
 
+  it("keeps a bare value apart from a command it touched", () => {
+    const out = edited(cfg, 'x"".\n', (d) => cfg.set(d, command("x"), 0));
+    expect(out).toBe("x 0\n");
+    expect(cfg.get(cfg.parse(bytes(out)), command("x"))).toBe("0");
+    const slash = edited(cfg, "x a//c\n", (d) =>
+      cfg.set(d, command("x"), "b/"),
+    );
+    expect(slash).toBe('x "b/"//c\n');
+  });
+
   it("reads and replaces several arguments", () => {
     const doc = cfg.parse(bytes("sv_tags a b\n"));
     expect(cfg.get(doc, command("sv_tags"))).toBe("a b");

@@ -78,9 +78,7 @@ describe("shell variables: LinuxGSM cfg", () => {
       shell.remove(d, name("maxplayers")),
     );
     expect(both).toBe(
-      source
-        .replace('maxplayers="16"\n', "")
-        .replace('maxplayers="20"\n', ""),
+      source.replace('maxplayers="16"\n', "").replace('maxplayers="20"\n', ""),
     );
     const commented = edited(shell, data, (d) =>
       shell.remove(d, name("unknownsetting")),
@@ -183,5 +181,13 @@ describe("shell variables: malformed files", () => {
     expect(codes("A='open\n")).toEqual(["syntax"]);
     expect(codes("A=`date`\n")).toEqual(["expansion"]);
     expect(shell.get(shell.parse(bytes("A=x\\\ny\n")), name("A"))).toBe("xy");
+  });
+
+  it("ends a line continuation before appending a variable", () => {
+    const out = edited(shell, "A=x\\\n", (d) => shell.insert(d, name("B"), 1));
+    expect(out).toBe('A=x\\\n\nB="1"\n');
+    const doc = shell.parse(bytes(out));
+    expect(shell.get(doc, name("A"))).toBe("x");
+    expect(shell.get(doc, name("B"))).toBe("1");
   });
 });

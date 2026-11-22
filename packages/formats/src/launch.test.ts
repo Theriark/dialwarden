@@ -196,6 +196,14 @@ describe("launch arguments: plus convars and quoting", () => {
     expect(errorCode(() => launch.remove(twice, flag("-a")))).toBe("ambiguous");
   });
 
+  it("doubles a lone backslash at the end before adding a flag", () => {
+    const out = edited(launch, "-a \\", (d) => launch.insert(d, flag("-b"), 1));
+    expect(out).toBe("-a \\\\ -b 1");
+    const doc = launch.parse(bytes(out));
+    expect(launch.get(doc, flag("-a"))).toBe("\\");
+    expect(launch.get(doc, flag("-b"))).toBe("1");
+  });
+
   it("adds the first argument to an empty or comment-only file", () => {
     const empty = edited(launch, "", (d) => launch.insert(d, flag("-x"), true));
     expect(empty).toBe("-x");
