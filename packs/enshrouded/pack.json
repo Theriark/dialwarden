@@ -377,7 +377,7 @@
       "max": 2,
       "unit": "multiplier",
       "group": "Custom difficulty: survival",
-      "description": "Multiplies how long a character may stay inside the Shroud before its timer runs out and kills them.",
+      "description": "Scales the time a player can spend in the Shroud before its harm begins. Values above 1 extend that grace period; below 1 the fog hurts sooner.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -417,7 +417,7 @@
         { "value": "Hard", "label": "Hard" }
       ],
       "group": "Custom difficulty: survival",
-      "description": "How likely enemies are to curse players. Easy turns curses off and Hard raises the chance; there is no Off value.",
+      "description": "Sets how often enemy hits apply a curse. Normal keeps the usual odds, Hard makes curses more frequent, and the Easy step removes curses from the game entirely.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -531,7 +531,7 @@
         { "value": "VeryHard", "label": "Very hard" }
       ],
       "group": "Custom difficulty: world",
-      "description": "How hard fish fight back in the fishing minigame; stronger fish take longer to land.",
+      "description": "How hard the fish fight on the line. Every step up makes the catch struggle longer before it gives in; the easiest steps suit new anglers.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -549,7 +549,7 @@
       "max": 20,
       "unit": "level",
       "group": "Custom difficulty: world",
-      "description": "Flame level a player needs before Flame Altars can be placed inside the Shroud. Whole numbers only.",
+      "description": "Sets which Flame Level a player must reach before altars may go up inside the Shroud. A higher number keeps that locked behind more progress.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -711,7 +711,7 @@
       "max": 1,
       "unit": "share",
       "group": "Custom difficulty: progression",
-      "description": "Share of the spent Runes returned when an upgraded weapon is salvaged: 0.5 gives half back, 1 gives all of them.",
+      "description": "Portion of the Runes a player gets back after scrapping an upgraded weapon. The default, 0.5, refunds half; 1 refunds every Rune.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -826,7 +826,7 @@
       "max": 2,
       "unit": "multiplier",
       "group": "Custom difficulty: enemies",
-      "description": "Multiplies how far regular enemies can see or hear players before they react. Bosses are not affected.",
+      "description": "Scales the senses of regular enemies. Above 1 they notice players sooner and from farther away; below 1 they must come closer first. Bosses ignore this one.",
       "restartRequired": true,
       "overrideNote": "Used only while the difficulty preset is Custom; with any other preset the game applies its own built-in values."
     },
@@ -924,10 +924,9 @@
         "pointer": "/userGroups/0/password"
       },
       "type": "string",
-      "min": 8,
       "max": 64,
       "group": "Roles",
-      "description": "Password that gives a joining player the first role in the file (Admin in a file the game writes). The game makes a random one at first start.",
+      "description": "Password that gives a joining player the first role in the file (Admin in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
       "restartRequired": true,
       "secret": true
     },
@@ -957,11 +956,10 @@
         "pointer": "/userGroups/1/name"
       },
       "type": "string",
-      "default": "Friend",
       "min": 1,
       "max": 32,
       "group": "Roles",
-      "description": "Name of the second role in the file. A file the game writes lists Friend here; roles are told apart by name, so each must be unique.",
+      "description": "Name of the second role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
       "restartRequired": true
     },
     {
@@ -973,10 +971,9 @@
         "pointer": "/userGroups/1/password"
       },
       "type": "string",
-      "min": 8,
       "max": 64,
       "group": "Roles",
-      "description": "Password that gives a joining player the second role in the file (Friend in a file the game writes). The game makes a random one at first start.",
+      "description": "Password that gives a joining player the second role in the file (Friend in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
       "restartRequired": true,
       "secret": true
     },
@@ -1006,11 +1003,10 @@
         "pointer": "/userGroups/2/name"
       },
       "type": "string",
-      "default": "Guest",
       "min": 1,
       "max": 32,
       "group": "Roles",
-      "description": "Name of the third role in the file. A file the game writes lists Guest here; roles are told apart by name, so each must be unique.",
+      "description": "Name of the third role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
       "restartRequired": true
     },
     {
@@ -1022,10 +1018,9 @@
         "pointer": "/userGroups/2/password"
       },
       "type": "string",
-      "min": 8,
       "max": 64,
       "group": "Roles",
-      "description": "Password that gives a joining player the third role in the file (Guest in a file the game writes). The game makes a random one at first start.",
+      "description": "Password that gives a joining player the third role in the file (Guest in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
       "restartRequired": true,
       "secret": true
     },
@@ -1055,11 +1050,10 @@
         "pointer": "/userGroups/3/name"
       },
       "type": "string",
-      "default": "Visitor",
       "min": 1,
       "max": 32,
       "group": "Roles",
-      "description": "Name of the fourth role in the file. A file the game writes lists Visitor here; roles are told apart by name, so each must be unique.",
+      "description": "Name of the fourth role, when the file holds that many. Roles are told apart by name, so every name must be unique.",
       "restartRequired": true
     },
     {
@@ -1071,10 +1065,9 @@
         "pointer": "/userGroups/3/password"
       },
       "type": "string",
-      "min": 8,
       "max": 64,
       "group": "Roles",
-      "description": "Password that gives a joining player the fourth role in the file (Visitor in a file the game writes). The game makes a random one at first start.",
+      "description": "Password that gives a joining player the fourth role in the file (Visitor in a file the game writes). The game makes a random one at first start. An empty password leaves the role open to every joiner.",
       "restartRequired": true,
       "secret": true
     },
@@ -1200,7 +1193,7 @@
     },
     {
       "id": "role-without-password",
-      "severity": "error",
+      "severity": "warning",
       "message": "A role has an empty password, so anyone could join with that role.",
       "settings": [
         "userGroups.slot1.password",
@@ -1230,39 +1223,75 @@
       "when": {
         "or": [
           {
-            "==": [
-              { "var": "userGroups.slot1.name" },
-              { "var": "userGroups.slot2.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot2.name" }
+                ]
+              }
             ]
           },
           {
-            "==": [
-              { "var": "userGroups.slot1.name" },
-              { "var": "userGroups.slot3.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot3.name" }
+                ]
+              }
             ]
           },
           {
-            "==": [
-              { "var": "userGroups.slot1.name" },
-              { "var": "userGroups.slot4.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot1.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot1.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
             ]
           },
           {
-            "==": [
-              { "var": "userGroups.slot2.name" },
-              { "var": "userGroups.slot3.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot2.name" },
+                  { "var": "userGroups.slot3.name" }
+                ]
+              }
             ]
           },
           {
-            "==": [
-              { "var": "userGroups.slot2.name" },
-              { "var": "userGroups.slot4.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot2.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot2.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
             ]
           },
           {
-            "==": [
-              { "var": "userGroups.slot3.name" },
-              { "var": "userGroups.slot4.name" }
+            "and": [
+              { "!!": [{ "var": "userGroups.slot3.name" }] },
+              { "!!": [{ "var": "userGroups.slot4.name" }] },
+              {
+                "==": [
+                  { "var": "userGroups.slot3.name" },
+                  { "var": "userGroups.slot4.name" }
+                ]
+              }
             ]
           }
         ]
@@ -1324,9 +1353,47 @@
     {
       "id": "default",
       "label": "Default",
-      "description": "Selects the game's Default difficulty preset; the custom difficulty values are then left unused.",
+      "description": "Switches to the game's Default difficulty preset and puts every custom difficulty value back to what the game starts with.",
       "values": {
-        "gameSettingsPreset": "Default"
+        "gameSettingsPreset": "Default",
+        "gameSettings.playerHealthFactor": 1,
+        "gameSettings.playerManaFactor": 1,
+        "gameSettings.playerStaminaFactor": 1,
+        "gameSettings.playerBodyHeatFactor": 1,
+        "gameSettings.playerDivingTimeFactor": 1,
+        "gameSettings.enableDurability": true,
+        "gameSettings.enableStarvingDebuff": false,
+        "gameSettings.foodBuffDurationFactor": 1,
+        "gameSettings.fromHungerToStarving": 600000000000,
+        "gameSettings.shroudTimeFactor": 1,
+        "gameSettings.tombstoneMode": "AddBackpackMaterials",
+        "gameSettings.curseModifier": "Normal",
+        "gameSettings.dayTimeDuration": 1800000000000,
+        "gameSettings.nightTimeDuration": 720000000000,
+        "gameSettings.weatherFrequency": "Normal",
+        "gameSettings.enableGliderTurbulences": true,
+        "gameSettings.tamingStartleRepercussion": "LoseSomeProgress",
+        "gameSettings.fishingDifficulty": "Normal",
+        "gameSettings.flameLevelFogRemoval": 11,
+        "gameSettings.miningDamageFactor": 1,
+        "gameSettings.plantGrowthSpeedFactor": 1,
+        "gameSettings.resourceDropStackAmountFactor": 1,
+        "gameSettings.factoryProductionSpeedFactor": 1,
+        "gameSettings.experienceCombatFactor": 1,
+        "gameSettings.experienceMiningFactor": 1,
+        "gameSettings.experienceExplorationQuestsFactor": 1,
+        "gameSettings.perkCostFactor": 1,
+        "gameSettings.perkUpgradeRecyclingFactor": 0.5,
+        "gameSettings.randomSpawnerAmount": "Normal",
+        "gameSettings.aggroPoolAmount": "Normal",
+        "gameSettings.enemyDamageFactor": 1,
+        "gameSettings.enemyHealthFactor": 1,
+        "gameSettings.enemyStaminaFactor": 1,
+        "gameSettings.enemyPerceptionRangeFactor": 1,
+        "gameSettings.bossDamageFactor": 1,
+        "gameSettings.bossHealthFactor": 1,
+        "gameSettings.threatBonus": 1,
+        "gameSettings.pacifyAllEnemies": false
       }
     },
     {

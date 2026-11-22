@@ -108,6 +108,26 @@ describe("Enshrouded pack", () => {
     expect(masked).not.toContain(SECRET_MASK);
   });
 
+  it("warns, not errors, about an empty role password", () => {
+    // An open role is a valid game setup, so the operator gets a warning
+    // on every password field, never a refusal.
+    const { severity, message } = ruleOf(pack, "role-without-password");
+    expect(severity).toBe("warning");
+    const fields = [1, 2, 3, 4].map((n) => `userGroups.slot${n}.password`);
+    expect(issuesWith({ "userGroups.slot4.password": "" })).toEqual(
+      fields.map((key) => ({ key, severity, message })),
+    );
+  });
+
+  it("stays quiet about role slots the file does not have", () => {
+    // The game can write a single role; slots 2 to 4 then read as absent,
+    // and no rule may count two absent slots as a repeat.
+    const single = new Map(
+      [...fixture].filter(([key]) => !/^userGroups\.slot[2-4]\./.test(key)),
+    );
+    expect(validate(pack, single)).toEqual([]);
+  });
+
   it("reads no file through a shell, so the X1 check never applies", () => {
     const shellRead = pack.files.some((f) => SHELL_ADAPTERS.has(f.adapter));
     expect(shellRead).toBe(false);
@@ -118,6 +138,21 @@ describe("Enshrouded pack", () => {
     const { values } = applyPreset(pack, fixture, id);
     const issues = validate(pack, values);
     expect(issues.filter((issue) => issue.severity !== "info")).toEqual([]);
+  });
+
+  it("applies every preset after every other preset without a warning", () => {
+    // Default resets the custom difficulty values too, so switching from
+    // one preset to another never leaves the custom-preset warning behind.
+    for (const before of pack.presets) {
+      const first = applyPreset(pack, fixture, before.id).values;
+      for (const after of pack.presets) {
+        const { values } = applyPreset(pack, first, after.id);
+        const issues = validate(pack, values).filter(
+          (issue) => issue.severity !== "info",
+        );
+        expect(issues, `${before.id} then ${after.id}`).toEqual([]);
+      }
+    }
   });
 });
 

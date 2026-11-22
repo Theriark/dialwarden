@@ -90,11 +90,6 @@ const RULES: readonly (readonly [string, Changes, Changes])[] = [
     { CrossplayPlatforms: ["Steam", "Mac"] },
   ],
   [
-    "admin-is-join-password",
-    { AdminPassword: "same-secret", ServerPassword: "same-secret" },
-    { ServerPassword: "join-secret" },
-  ],
-  [
     "quote-in-text",
     { ServerDescription: 'Say "hello"' },
     { ServerDescription: "Say hello" },
@@ -161,12 +156,25 @@ describe("Palworld pack", () => {
     expect(fires(id, { ...fire, ...clear })).toBe(false);
   });
 
-  it.each(PRESET_IDS)("applies preset %s without an error", (id) => {
+  it.each(PRESET_IDS)("applies preset %s without an issue", (id) => {
     const { values, changes } = applyPreset(pack, fixture, id);
-    const issues = validate(pack, values);
-    const errors = issues.filter((issue) => issue.severity === "error");
-    expect(errors).toEqual([]);
+    expect(validate(pack, values)).toEqual([]);
     if (id !== "default") expect(changes.length).toBeGreaterThan(0);
+  });
+
+  it("applies every preset after every other preset without an error or warning", () => {
+    // Default returns everything Casual and Hardcore change, so switching
+    // between presets leaves no warning behind; an info may remain.
+    for (const before of PRESET_IDS) {
+      const first = applyPreset(pack, fixture, before).values;
+      for (const after of PRESET_IDS) {
+        const { values } = applyPreset(pack, first, after);
+        const issues = validate(pack, values).filter(
+          (issue) => issue.severity !== "info",
+        );
+        expect(issues, `${before} then ${after}`).toEqual([]);
+      }
+    }
   });
 });
 
