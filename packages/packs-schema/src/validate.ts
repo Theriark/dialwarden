@@ -1,13 +1,7 @@
 // validate(pack, values), contract C3: one function for the browser and the
 // server, so the editor shows exactly the issues the server refuses with.
 import { ruleData, ruleFires } from "./rules.js";
-import type {
-  JsonValue,
-  Pack,
-  Setting,
-  Severity,
-  ValidationIssue,
-} from "./types.js";
+import type { JsonValue, Pack, Setting, ValidationIssue } from "./types.js";
 
 /** Adapters whose files a shell reads (LinuxGSM runs them through sh -c). */
 const SHELL_ADAPTER_IDS = ["launch", "shellvar", "shellvar-systemd"];
@@ -32,12 +26,8 @@ export function valueMap(values: Values): Map<string, JsonValue> {
   return new Map(Object.entries(values as { [key: string]: JsonValue }));
 }
 
-function issue(
-  setting: Setting,
-  message: string,
-  severity: Severity = "error",
-): ValidationIssue {
-  return { key: setting.key, severity, message };
+function issue(setting: Setting, message: string): ValidationIssue {
+  return { key: setting.key, severity: "error", message };
 }
 
 function isRecord(value: JsonValue): boolean {
@@ -73,6 +63,11 @@ function checkNumber(setting: Setting, value: number): string | undefined {
   return undefined;
 }
 
+function isChoice(setting: Setting, value: JsonValue): boolean {
+  const choices = setting.enum ?? [];
+  return choices.some((option) => option.value === value);
+}
+
 function checkLength(setting: Setting, length: number, noun: string) {
   if (setting.min !== undefined && length < setting.min) {
     return `Needs at least ${setting.min} ${noun}.`;
@@ -100,11 +95,9 @@ export function checkValue(
     case "duration":
       if (typeof value !== "number") return "Must be a number.";
       return checkNumber(setting, value);
-    case "enum": {
-      const allowed = setting.enum ?? [];
-      if (allowed.some((option) => option.value === value)) return undefined;
+    case "enum":
+      if (isChoice(setting, value)) return undefined;
       return "Must be one of the listed choices.";
-    }
     case "string":
       if (typeof value !== "string") return "Must be text.";
       return checkLength(setting, value.length, "characters");
