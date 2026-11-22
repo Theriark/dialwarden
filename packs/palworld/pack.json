@@ -1,6 +1,6 @@
 {
   "id": "palworld",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Palworld",
   "steamAppId": 2394010,
   "builds": {
@@ -2443,6 +2443,19 @@
         "or": [
           { "in": ["\"", { "var": "AdminPassword" }] },
           { "in": ["\"", { "var": "ServerPassword" }] }
+        ]
+      }
+    },
+    {
+      "id": "admin-is-join-password",
+      "severity": "warning",
+      "message": "The admin password is the same as the join password, so everyone who can join the server also gets full admin rights.",
+      "settings": ["AdminPassword", "ServerPassword"],
+      "serverEvaluated": true,
+      "when": {
+        "and": [
+          { "!=": [{ "var": "AdminPassword" }, ""] },
+          { "==": [{ "var": "AdminPassword" }, { "var": "ServerPassword" }] }
         ]
       }
     },
