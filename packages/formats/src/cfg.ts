@@ -141,7 +141,9 @@ function argsValue(doc: CfgDoc, statement: Statement): string {
 }
 
 function needsQuotes(text: string): boolean {
-  return text === "" || /[\s;]/.test(text) || text.includes("//");
+  // A final / could start a // comment that follows the value directly.
+  const slash = text.includes("//") || text.endsWith("/");
+  return text === "" || /[\s;]/.test(text) || slash;
 }
 
 function valueText(value: Value, previous: string | undefined): string {
@@ -173,7 +175,10 @@ function setStatement(doc: CfgDoc, statement: Statement, value: Value): Splice {
     const at = statement.commandEnd;
     return { start: at, end: at, text: ` ${final}` };
   }
-  return { start: first.start, end: statement.end, text: final };
+  // hostname"x": a bare value right after the command would join its word.
+  const joined = first.start === statement.commandEnd && !final.startsWith('"');
+  const gap = joined ? " " : "";
+  return { start: first.start, end: statement.end, text: gap + final };
 }
 
 function statementRange(doc: CfgDoc, statement: Statement) {

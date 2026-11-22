@@ -10,6 +10,7 @@
 import { appendLines, lineRange, mergeRanges, verified } from "./edits.js";
 import {
   applySplices,
+  decodeUtf8,
   hasLineBreak,
   own,
   Source,
@@ -67,7 +68,7 @@ function scanName(text: string, from: number): number {
 }
 
 function decodeBytes(bytes: number[]): string {
-  return new TextDecoder().decode(new Uint8Array(bytes));
+  return decodeUtf8(new Uint8Array(bytes));
 }
 
 // Shell dialect -------------------------------------------------------------
@@ -360,7 +361,13 @@ function createShellVarAdapter(
       const style = dialect.systemd ? "bare" : "double";
       const text = valueText(dialect, scalar(value, undefined), style, false);
       const line = `${locator.name}=${text}`;
-      return verified(adapter, shell, [appendLines(shell.source, [line])]);
+      const src = shell.source;
+      const last = shell.assignments.at(-1);
+      // A value that ends the file with a \ line continuation would take
+      // the new line into it; an empty line ends the value first.
+      const open = last?.valueEnd === src.length && src.text.endsWith("\\\n");
+      const lines = open ? ["", line] : [line];
+      return verified(adapter, shell, [appendLines(src, lines)]);
     },
     remove(doc, locator) {
       const shell = own<ShellDoc>(doc, id);

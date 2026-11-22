@@ -12,7 +12,9 @@ import {
   type Splice,
 } from "./types.js";
 
-const utf8 = new TextDecoder("utf-8");
+// ignoreBOM keeps a U+FEFF inside the file as text; the file's own BOM is
+// never part of a slice (begin skips it).
+const utf8 = new TextDecoder("utf-8", { ignoreBOM: true });
 const utf8Strict = new TextDecoder("utf-8", { fatal: true });
 const encoder = new TextEncoder();
 
@@ -21,6 +23,11 @@ export interface Line {
   readonly start: number;
   readonly end: number;
   readonly next: number;
+}
+
+/** UTF-8 text of bytes, a leading U+FEFF kept as text. */
+export function decodeUtf8(bytes: Uint8Array): string {
+  return utf8.decode(bytes);
 }
 
 export function toBinary(bytes: Uint8Array): string {

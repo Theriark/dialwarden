@@ -10,6 +10,7 @@
 import { verified } from "./edits.js";
 import {
   applySplices,
+  decodeUtf8,
   own,
   Source,
   sortedIssues,
@@ -82,8 +83,7 @@ const SPACE = /[ \t\n\r\f\v]/;
 const SAFE = /^[A-Za-z0-9_./:@%+,=-]*$/;
 
 function decode(chars: readonly Char[]): string {
-  const bytes = new Uint8Array(chars.map((c) => c.byte));
-  return new TextDecoder().decode(bytes);
+  return decodeUtf8(new Uint8Array(chars.map((c) => c.byte)));
 }
 
 // Words ---------------------------------------------------------------------
@@ -368,6 +368,12 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     const at = doc.source.begin;
     const text = at < doc.source.length ? `${token} ` : token;
     return [{ start: at, end: at, text }];
+  }
+  // A lone \ at the end of the file is literal; a space after it would be
+  // escaped into the word, so it is written as \\ (the same text).
+  const tail = last.chars.at(-1);
+  if (tail?.byte === 92 && tail.to - tail.from === 1 && tail.context === 0) {
+    return [{ start: tail.from, end: tail.to, text: `\\\\ ${token}` }];
   }
   return [{ start: last.end, end: last.end, text: ` ${token}` }];
 }
