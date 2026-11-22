@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- Synthetic fixture written by Theriark (see SYNTHETIC.md). -->
+<ServerSettings>
+	<!-- Identity -->
+	<property name="ServerName" value="Ridge &amp; Hollow" />
+	<property value="Mostly peaceful &lt;3" name="ServerDescription" />
+	<property name='ServerPort' value='26900' />
+	<property name="ServerVisibility"  value="2"/>
+	<!-- <property name="ServerPassword" value="" /> -->
+	<property name="Region" value="">
+	</property>
+	<property name="ServerMaxPlayerCount" value="8" />  
+	<unknown kind="future" />
+</ServerSettings>

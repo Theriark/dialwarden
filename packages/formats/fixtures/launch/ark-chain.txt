@@ -1,0 +1,2 @@
+# Synthetic fixture written by Theriark (see SYNTHETIC.md).
+ShooterGameServer TheIsland?listen?SessionName="Dune Riders"?MaxPlayers=20?ServerAdminPassword=?QueryPort=27015 -server -log -NoBattlEye

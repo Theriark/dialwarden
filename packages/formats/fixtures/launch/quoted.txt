@@ -1,0 +1,3 @@
+# Synthetic fixture written by Theriark (see SYNTHETIC.md).
+./valheim_server.x86_64 -name "Moss & Stone" -port 2456 \
+  -world 'Old Hearth' -password "" -public 1
