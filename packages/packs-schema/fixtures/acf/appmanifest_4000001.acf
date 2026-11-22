@@ -1,0 +1,25 @@
+"AppState"
+{
+	"appid"		"4000001"
+	"Universe"		"1"
+	"name"		"Synthetic Test Server"
+	"StateFlags"		"4"
+	"installdir"		"Synthetic Test Server"
+	"LastUpdated"		"1795244400"
+	"SizeOnDisk"		"1048576"
+	"buildid"		"12345"
+	"LastOwner"		"0"
+	"AutoUpdateBehavior"		"0"
+	"InstalledDepots"
+	{
+		"4000002"
+		{
+			"manifest"		"1111222233334444555"
+			"size"		"1048576"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"english"
+	}
+}

@@ -14,6 +14,7 @@
     "format": "prettier --write .",
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest run",
+    "packs:check": "vitest run packs/packs.test.ts packages/packs-schema/src/packs-check.test.ts",
     "build": "pnpm -r run build && pnpm run check:assets && pnpm run check:bundle",
     "check:assets": "node tools/notices/src/check-assets.mjs apps/web/dist",
     "check:bundle": "node tools/licence/src/check-bundle.mjs",

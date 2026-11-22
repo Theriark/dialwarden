@@ -1,5 +1,7 @@
 // Runtime configuration from the environment (dev-work-plan Runtime). Secrets
 // are kept in this object only; nothing here is logged.
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
@@ -23,6 +25,8 @@ export interface AppConfig {
   demoSeed: boolean;
   /** WEB_DIST: the built web app the server serves (contract C8). */
   webDist: string;
+  /** PACKS_DIR: the game packs folder (default: @dialwarden/packs). */
+  packsDir: string;
 }
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
@@ -34,6 +38,19 @@ const ZERO_PREFIX = /\/0+$/;
 // /app/public in the image. From the sources it is apps/server/public, which
 // does not exist, so tests and API-only runs serve no web UI.
 const DEFAULT_WEB_DIST = fileURLToPath(new URL("../public/", import.meta.url));
+
+// The folder of the @dialwarden/packs package: packs/ in the workspace, and
+// node_modules/@dialwarden/packs in the image, where pnpm deploy copies the
+// pack.json files and fixtures of every pack (packs/package.json "files").
+function defaultPacksDir(): string {
+  try {
+    const resolver = createRequire(import.meta.url);
+    return dirname(resolver.resolve("@dialwarden/packs/package.json"));
+  } catch {
+    // Not installed: the loader logs that the folder is missing.
+    return fileURLToPath(new URL("../packs/", import.meta.url));
+  }
+}
 
 const nonEmpty = (value: string | undefined): string | null => {
   const trimmed = value?.trim() ?? "";
@@ -88,5 +105,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     backupTimezone: nonEmpty(env["BACKUP_TZ"]) ?? "Europe/Lisbon",
     demoSeed: env["DEMO_SEED"] === "true",
     webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,
+    packsDir: nonEmpty(env["PACKS_DIR"]) ?? defaultPacksDir(),
   };
 }

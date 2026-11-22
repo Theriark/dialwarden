@@ -14,3 +14,5 @@ screenshots/
 *.tsbuildinfo
 THIRD_PARTY_NOTICES
 .DS_Store
+# Generated from pack.schema.json at build, typecheck and test time.
+packages/packs-schema/src/generated/
