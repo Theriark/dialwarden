@@ -1,0 +1,461 @@
+name: Promote - Stage
+
+# One button (release standard): Gate 2 approval dispatches this workflow on
+# development with no inputs. It takes the exact commit and image digest that
+# Development runs, verifies the cosign signature CI made for that digest, runs the
+# test suite on that commit, tags the next annotated release candidate
+# v27.<minor>.<patch>-rc.<n> (or reuses the one that already seals this commit and
+# digest), tags the same multi-arch digest as that candidate version in GHCR (never
+# rebuilt, so the build date the licence rule reads never changes), deploys the
+# digest to the Stage application and verifies health, digest and revision.
+#
+# It never moves the stage or main branch: the Actions token may not move a branch
+# to a commit that changes workflow files. After a successful run the gate script
+# fast-forwards stage to the new candidate tag with the operator token. So the run
+# refuses, before any write, when stage is not an ancestor of the commit.
+#
+# dry_run=true checks every precondition and runs the tests, then stops: no tag, no
+# image tag, no deployment. The plan job prints what a real run does.
+#
+# Rollback is not a button: revert on development, let it deploy to Development,
+# then promote again. The SQLite database is migrated forward only and never
+# downgraded. See docs/ci-cd.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Check everything and run the tests, but create no tag, push no image tag and deploy nothing."
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# One delivery run at a time per repository (shared with CI on development and
+# Release); a live run is never cancelled.
+concurrency:
+  group: dialwarden-delivery
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/theriark/dialwarden
+  NODE_VERSION: "24"
+  # The keyless signing identity of the Development build (ci.yml).
+  SIGNER: https://github.com/Theriark/dialwarden/.github/workflows/ci.yml@refs/heads/development
+  OIDC_ISSUER: https://token.actions.githubusercontent.com
+  # Registered for this product by the setup broker (github_repo_status).
+  DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
+  DEV_HOST: dev-dialwarden.theriark.dev
+  STAGE_APPLICATION_ID: "-cMPJhRMwT7vxF8fl_sxV"
+  STAGE_HOST: stg-dialwarden.theriark.dev
+
+jobs:
+  plan:
+    name: Plan - what Development runs, the candidate and what Stage runs now
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Read only. The stage environment holds the Dokploy read credentials.
+    environment: stage
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    outputs:
+      dry_run: ${{ steps.mode.outputs.dry_run }}
+      commit: ${{ steps.dev.outputs.commit }}
+      digest: ${{ steps.dev.outputs.digest }}
+      dev_run: ${{ steps.dev.outputs.run }}
+      version: ${{ steps.rc.outputs.version }}
+      rc_tag: ${{ steps.rc.outputs.tag }}
+      rc_exists: ${{ steps.rc.outputs.exists }}
+    env:
+      DRY_RUN_INPUT: ${{ inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the run mode and the execution ref
+        id: mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only the literal false is a real run; anything else is refused.
+          case "${DRY_RUN_INPUT}" in
+            true | false) ;;
+            *) echo "::error::dry_run must be true or false, got '${DRY_RUN_INPUT}'"; exit 1 ;;
+          esac
+          [[ "${GITHUB_REF}" == "refs/heads/development" ]] || {
+            echo "::error::Promote - Stage runs from development, got ${GITHUB_REF}"
+            exit 1
+          }
+          for id in DEV_APPLICATION_ID STAGE_APPLICATION_ID; do
+            [[ "${!id}" =~ ^[A-Za-z0-9_-]{8,64}$ ]] || { echo "::error::${id} is not set in promote-stage.yml (registered by the setup broker)"; exit 1; }
+          done
+          echo "dry_run=${DRY_RUN_INPUT}" >> "${GITHUB_OUTPUT}"
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Find the commit and digest Development runs
+        id: dev
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          for required in DOKPLOY_URL DOKPLOY_API_KEY CF_ID CF_SECRET; do
+            [[ -n "${!required}" ]] || { echo "::error::${required} is missing from the stage environment"; exit 1; }
+          done
+          running="$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+            --header "CF-Access-Client-Id: ${CF_ID}" \
+            --header "CF-Access-Client-Secret: ${CF_SECRET}" \
+            --header "x-api-key: ${DOKPLOY_API_KEY}" \
+            --get "${DOKPLOY_URL%/}/api/application.one" \
+            --data-urlencode "applicationId=${DEV_APPLICATION_ID}" | jq -r '.dockerImage // empty')"
+          digest="${running#"${IMAGE}@"}"
+          [[ "${running}" == "${IMAGE}@${digest}" && "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::Development runs '${running}', not an immutable ${IMAGE}@sha256 digest"
+            exit 1
+          }
+          # The commit is the revision label baked into that exact image.
+          commit="$(docker buildx imagetools inspect "${IMAGE}@${digest}" --format '{{json .Image}}' | jq -r '
+              (if has("config") then .config else ([.[]] | first | .config) end)
+              | .Labels["org.opencontainers.image.revision"] // empty')"
+          [[ "${commit}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::${IMAGE}@${digest} carries no revision label"; exit 1; }
+          git merge-base --is-ancestor "${commit}" "${GITHUB_SHA}" || {
+            echo "::error::Development runs ${commit}, which is not a commit of development"
+            exit 1
+          }
+          # CI built that digest for that commit (sha-<commit> tag, built once).
+          published="$(docker buildx imagetools inspect "${IMAGE}:sha-${commit}" --format '{{.Manifest.Digest}}')"
+          [[ "${published}" == "${digest}" ]] || {
+            echo "::error::${IMAGE}:sha-${commit} is ${published}, not the ${digest} Development runs"
+            exit 1
+          }
+          # CI signed exactly that digest from development (keyless, GitHub OIDC).
+          cosign verify "${IMAGE}@${digest}" --certificate-oidc-issuer "${OIDC_ISSUER}" --certificate-identity "${SIGNER}" >/dev/null || {
+            echo "::error::${IMAGE}@${digest} has no valid cosign signature from ${SIGNER}"
+            exit 1
+          }
+          # The successful CI push run on development that built and deployed it.
+          run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?branch=development&event=push&status=success&head_sha=${commit}&per_page=10" \
+            --jq '[.workflow_runs[].id] | max // empty')"
+          [[ "${run}" =~ ^[1-9][0-9]*$ ]] || { echo "::error::no successful CI push run on development for ${commit}"; exit 1; }
+          jq -e --arg sha "${commit}" '
+              .path == ".github/workflows/ci.yml" and .event == "push"
+              and .head_branch == "development" and .head_sha == $sha
+              and .status == "completed" and .conclusion == "success"' \
+            <<<"$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}")" >/dev/null || {
+            echo "::error::run ${run} is not a successful CI push run on development for ${commit}"
+            exit 1
+          }
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs" --jq '.jobs[] | [.name, .conclusion] | @tsv' > jobs.tsv
+          grep -Fq $'Deploy Development (build once, deploy the digest)\tsuccess' jobs.tsv || {
+            echo "::error::CI run ${run} has no successful Development deployment job"
+            exit 1
+          }
+          rm -f jobs.tsv
+          curl --fail --silent --show-error --max-time 15 "https://${DEV_HOST}/healthz" >/dev/null
+          {
+            echo "commit=${commit}"
+            echo "digest=${digest}"
+            echo "run=${run}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "Development runs ${IMAGE}@${digest} = ${commit} (CI run ${run})"
+
+      - name: Check that the gate can fast-forward stage to the commit
+        id: stage
+        shell: bash
+        env:
+          COMMIT: ${{ steps.dev.outputs.commit }}
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          # Read only. This workflow never moves stage: after a successful run the gate
+          # script fast-forwards it to the candidate tag. That only works forward, so
+          # refuse now, before the tests and any write, if stage is not an ancestor.
+          git fetch origin +refs/heads/stage:refs/remotes/origin/stage || {
+            echo "::error::the stage branch does not exist"
+            exit 1
+          }
+          stage_sha="$(git rev-parse refs/remotes/origin/stage)"
+          git merge-base --is-ancestor "${stage_sha}" "${COMMIT}" || {
+            echo "::error::stage (${stage_sha}) is not an ancestor of the commit Development runs (${COMMIT}): it is ahead of it or diverged, so the gate could not fast-forward stage after this run. Nothing was written."
+            exit 1
+          }
+          stage_image="$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+            --header "CF-Access-Client-Id: ${CF_ID}" \
+            --header "CF-Access-Client-Secret: ${CF_SECRET}" \
+            --header "x-api-key: ${DOKPLOY_API_KEY}" \
+            --get "${DOKPLOY_URL%/}/api/application.one" \
+            --data-urlencode "applicationId=${STAGE_APPLICATION_ID}" | jq -r '.dockerImage // empty')"
+          {
+            echo "sha=${stage_sha}"
+            echo "image=${stage_image}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "stage ${stage_sha} is an ancestor of ${COMMIT}; Stage runs ${stage_image:-unknown}"
+
+      - name: Work out the release candidate tag
+        id: rc
+        shell: bash
+        env:
+          COMMIT: ${{ steps.dev.outputs.commit }}
+          DIGEST: ${{ steps.dev.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          bash .github/scripts/release_tags.sh next "${COMMIT}" "${DIGEST}" > rc.env
+          cat rc.env
+          # shellcheck disable=SC1091
+          source rc.env
+          # The candidate version tag in GHCR is absent or already this digest.
+          if existing="$(docker buildx imagetools inspect "${IMAGE}:${tag#v}" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            [[ "${existing}" == "${DIGEST}" ]] || {
+              echo "::error::${IMAGE}:${tag#v} already points at ${existing}, not ${DIGEST}"
+              exit 1
+            }
+          fi
+          cat rc.env >> "${GITHUB_OUTPUT}"
+          rm -f rc.env
+
+      - name: Summary of what this run does
+        shell: bash
+        env:
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          COMMIT: ${{ steps.dev.outputs.commit }}
+          DIGEST: ${{ steps.dev.outputs.digest }}
+          DEV_RUN: ${{ steps.dev.outputs.run }}
+          STAGE_SHA: ${{ steps.stage.outputs.sha }}
+          STAGE_IMAGE: ${{ steps.stage.outputs.image }}
+          RC_TAG: ${{ steps.rc.outputs.tag }}
+          RC_EXISTS: ${{ steps.rc.outputs.exists }}
+        run: |
+          set -euo pipefail
+          if [[ "${RC_EXISTS}" == "true" ]]; then
+            rc_line="reuse the existing annotated tag \`${RC_TAG}\` (it already seals this commit and digest)"
+          else
+            rc_line="create the annotated tag \`${RC_TAG}\` on \`${COMMIT}\`"
+          fi
+          {
+            if [[ "${DRY_RUN}" == "true" ]]; then
+              echo "## dialwarden Promote - Stage: DRY RUN (nothing is changed)"
+            else
+              echo "## dialwarden Promote - Stage: plan"
+            fi
+            echo
+            echo "- Commit Development runs: \`${COMMIT}\` (CI run \`${DEV_RUN}\`)"
+            echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (no rebuild; cosign signature verified)"
+            echo "- Test suite: runs on \`${COMMIT}\` before any write"
+            echo "- Release candidate: ${rc_line}"
+            echo "- GHCR tags on the same digest: \`${RC_TAG#v}\` and \`stage\`"
+            echo "- Stage application: \`${STAGE_IMAGE:-unknown}\` -> \`${IMAGE}@${DIGEST}\` on https://${STAGE_HOST}/ (health, digest and revision verified)"
+            echo "- stage branch: \`${STAGE_SHA}\` now, an ancestor of \`${COMMIT}\` (fast-forward possible); this workflow does not move it"
+            echo "- For the gate, after a successful run: fast-forward stage to candidate \`${RC_TAG}\` = commit \`${COMMIT}\`"
+            if [[ "${DRY_RUN}" == "true" ]]; then
+              echo
+              echo "Dry run: every precondition above was checked and the tests run; no tag, image tag or deployment is made."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  test:
+    name: Test suite on the commit Development runs
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.plan.outputs.commit }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm run typecheck
+          pnpm run test
+
+  promote:
+    name: Promote to Stage - tag and deploy the digest
+    needs: [plan, test]
+    # The only job that writes. Skipped in a dry run. It never moves a branch.
+    if: needs.plan.outputs.dry_run == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: stage
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    env:
+      DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+      SOURCE_SHA: ${{ needs.plan.outputs.commit }}
+      DIGEST: ${{ needs.plan.outputs.digest }}
+      DEV_RUN_ID: ${{ needs.plan.outputs.dev_run }}
+      RC_TAG: ${{ needs.plan.outputs.rc_tag }}
+      RC_EXISTS: ${{ needs.plan.outputs.rc_exists }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Refuse to write in a dry run and re-check the plan
+        shell: bash
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          [[ "${DRY_RUN}" == "false" ]] || { echo "::error::dry run: this job must not write"; exit 1; }
+          [[ "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ && "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::plan outputs missing"; exit 1; }
+          [[ "${RC_TAG}" =~ ^v27\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.[1-9][0-9]*$ ]] || { echo "::error::unexpected candidate tag '${RC_TAG}'"; exit 1; }
+          # Nothing moved while the tests ran (the concurrency group serializes
+          # deployments, so this only catches a change by hand).
+          running="$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+            --header "CF-Access-Client-Id: ${CF_ID}" \
+            --header "CF-Access-Client-Secret: ${CF_SECRET}" \
+            --header "x-api-key: ${DOKPLOY_API_KEY}" \
+            --get "${DOKPLOY_URL%/}/api/application.one" \
+            --data-urlencode "applicationId=${DEV_APPLICATION_ID}" | jq -r '.dockerImage // empty')"
+          [[ "${running}" == "${IMAGE}@${DIGEST}" ]] || { echo "::error::Development now runs '${running}', not ${IMAGE}@${DIGEST}"; exit 1; }
+          # Read only: the gate can still fast-forward stage to the commit.
+          git fetch origin +refs/heads/stage:refs/remotes/origin/stage
+          git merge-base --is-ancestor refs/remotes/origin/stage "${SOURCE_SHA}" || {
+            echo "::error::stage moved since the plan and is no longer an ancestor of ${SOURCE_SHA}; nothing was written"
+            exit 1
+          }
+
+      - name: Create or reuse the annotated release candidate tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          seals() {
+            jq -e --arg t "${RC_TAG}" --arg c "${SOURCE_SHA}" --arg d "${DIGEST}" '
+                .tag == $t and .object.type == "commit" and .object.sha == $c
+                and ((.message | fromjson? // {}) | .imageDigest == $d)' >/dev/null
+          }
+          if ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RC_TAG}" 2>/dev/null)"; then
+            [[ "$(jq -r '.object.type' <<<"${ref}")" == "tag" ]] || { echo "::error::${RC_TAG} is not an annotated tag"; exit 1; }
+            gh api "repos/${GITHUB_REPOSITORY}/git/tags/$(jq -r '.object.sha' <<<"${ref}")" | seals || {
+              echo "::error::${RC_TAG} exists but does not seal ${SOURCE_SHA} and ${DIGEST}"
+              exit 1
+            }
+            echo "Reusing ${RC_TAG}"
+          else
+            [[ "${RC_EXISTS}" == "false" ]] || { echo "::error::${RC_TAG} was planned as existing but is gone"; exit 1; }
+            message="$(jq -cn --arg c "${SOURCE_SHA}" --arg d "${DIGEST}" \
+              --argjson dev "${DEV_RUN_ID}" --argjson run "${GITHUB_RUN_ID}" \
+              '{sourceCommit: $c, imageDigest: $d, developmentRunId: $dev, workflowRunId: $run}')"
+            tag_sha="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/tags" \
+              -f tag="${RC_TAG}" -f message="${message}" -f object="${SOURCE_SHA}" -f type=commit --jq '.sha')"
+            [[ "${tag_sha}" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::the tag object was not created"; exit 1; }
+            if ! gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/${RC_TAG}" -f sha="${tag_sha}" >/dev/null; then
+              # Uncertain result: read the ref back, never create twice.
+              existing="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RC_TAG}" --jq '.object.sha' || true)"
+              [[ "${existing}" == "${tag_sha}" ]] || { echo "::error::could not create ${RC_TAG}"; exit 1; }
+            fi
+            gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" | seals || { echo "::error::${RC_TAG} did not read back"; exit 1; }
+            echo "Created ${RC_TAG}"
+          fi
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Tag the immutable image as the candidate version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A carbon copy of the multi-arch index: the digest stays the same.
+          docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${RC_TAG#v}" "${IMAGE}@${DIGEST}"
+          tagged="$(docker buildx imagetools inspect "${IMAGE}:${RC_TAG#v}" --format '{{.Manifest.Digest}}')"
+          [[ "${tagged}" == "${DIGEST}" ]] || { echo "::error::${IMAGE}:${RC_TAG#v} is ${tagged}, not ${DIGEST}"; exit 1; }
+
+      - id: deploy
+        uses: ./.github/actions/dokploy-deploy
+        with:
+          application-id: ${{ env.STAGE_APPLICATION_ID }}
+          expected-host: ${{ env.STAGE_HOST }}
+          image: ${{ env.IMAGE }}@${{ env.DIGEST }}
+          health-url: https://${{ env.STAGE_HOST }}/healthz
+          expected-revision: ${{ env.SOURCE_SHA }}
+          title: Stage ${{ env.SOURCE_SHA }}
+          restore-on-failure: "true"
+          dokploy-url: ${{ secrets.DOKPLOY_URL }}
+          dokploy-api-key: ${{ secrets.DOKPLOY_API_KEY }}
+          cf-access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          cf-access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+
+      - name: Verify Stage health, digest and revision
+        shell: bash
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          CF_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 "https://${STAGE_HOST}/healthz" >/dev/null
+          running="$(curl --fail-with-body --silent --show-error --retry 3 --retry-all-errors --max-time 30 \
+            --header "CF-Access-Client-Id: ${CF_ID}" \
+            --header "CF-Access-Client-Secret: ${CF_SECRET}" \
+            --header "x-api-key: ${DOKPLOY_API_KEY}" \
+            --get "${DOKPLOY_URL%/}/api/application.one" \
+            --data-urlencode "applicationId=${STAGE_APPLICATION_ID}" | jq -r '.dockerImage // empty')"
+          [[ "${running}" == "${IMAGE}@${DIGEST}" ]] || { echo "::error::Stage runs '${running}', not ${IMAGE}@${DIGEST}"; exit 1; }
+          # The version is the revision label of the exact digest Stage runs.
+          revision="$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Image}}' | jq -r '
+              (if has("config") then .config else ([.[]] | first | .config) end)
+              | .Labels["org.opencontainers.image.revision"] // empty')"
+          [[ "${revision}" == "${SOURCE_SHA}" ]] || { echo "::error::Stage image revision is '${revision}', not ${SOURCE_SHA}"; exit 1; }
+
+      - name: Tag the promoted image as stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:stage" "${IMAGE}@${DIGEST}"
+          tagged="$(docker buildx imagetools inspect "${IMAGE}:stage" --format '{{.Manifest.Digest}}')"
+          [[ "${tagged}" == "${DIGEST}" ]] || { echo "::error::${IMAGE}:stage is ${tagged}, not ${DIGEST}"; exit 1; }
+
+      - name: Record the Stage result
+        shell: bash
+        env:
+          PREVIOUS: ${{ steps.deploy.outputs.previous-image }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## dialwarden promoted to Stage"
+            echo
+            echo "- Source commit: \`${SOURCE_SHA}\` (Development CI run \`${DEV_RUN_ID}\`)"
+            echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (no rebuild), also tagged \`${RC_TAG#v}\` and \`stage\`"
+            echo "- Release candidate: \`${RC_TAG}\`; Stage run: \`${GITHUB_RUN_ID}\`"
+            echo "- Previous Stage image: \`${PREVIOUS:-none}\`"
+            echo "- URL: https://${STAGE_HOST}/"
+            echo "- Branches: none moved by this run"
+            echo "- For the gate: fast-forward stage to candidate \`${RC_TAG}\` = commit \`${SOURCE_SHA}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "Candidate ${RC_TAG} = commit ${SOURCE_SHA}: the gate fast-forwards stage to ${RC_TAG}"
