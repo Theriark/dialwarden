@@ -1,0 +1,78 @@
+/*
+ * Brand values (brand-assets-1 part 1) and the semantic layer on top of them
+ * (design-direction-1 part 2). Components use the semantic layer only; the
+ * raw dw-* colours never change with the theme. Status colours belong to the
+ * design system and are always shown with an icon and text.
+ */
+:root {
+  --dw-midnight: #141b2d;
+  --dw-ice: #eef2f7;
+  --dw-white: #ffffff;
+  --dw-surface-dark: #1e2740;
+  --dw-green: #3fb97a;
+  --dw-green-700: #1f7a4d;
+  --dw-steel: #8a97ad;
+  --dw-steel-700: #5b6880;
+
+  --dw-bg: var(--dw-ice);
+  --dw-surface: var(--dw-white);
+  --dw-fg: var(--dw-midnight);
+  --dw-fg-muted: var(--dw-steel-700);
+  --dw-primary: var(--dw-green-700);
+  --dw-primary-fg: var(--dw-ice);
+  --dw-accent-soft: #e4efea;
+  --dw-border: #d3dae6;
+  --dw-border-strong: var(--dw-steel-700);
+  --dw-skeleton: #d6dce4;
+  --dw-overlay: rgb(20 27 45 / 48%);
+  --dw-shadow-card: 0 1px 2px rgb(20 27 45 / 6%);
+  --dw-banner-bg: var(--dw-steel-700);
+  --dw-banner-fg: var(--dw-ice);
+
+  --dw-error: #b42318;
+  --dw-error-soft: #f8e9e8;
+  --dw-warning: #b54708;
+  --dw-warning-soft: #f8ede6;
+  --dw-pending: #7a4b00;
+  --dw-pending-soft: #f2ede6;
+  --dw-success: var(--dw-green-700);
+  --dw-success-soft: #e9f2ed;
+  --dw-info: #175cd3;
+  --dw-info-soft: #e8effb;
+  --dw-neutral: var(--dw-steel-700);
+  --dw-on-error: #ffffff;
+
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --dw-bg: var(--dw-midnight);
+  --dw-surface: var(--dw-surface-dark);
+  --dw-fg: var(--dw-ice);
+  --dw-fg-muted: var(--dw-steel);
+  --dw-primary: var(--dw-green);
+  --dw-primary-fg: var(--dw-midnight);
+  --dw-accent-soft: #233e49;
+  --dw-border: #2a3550;
+  --dw-border-strong: var(--dw-steel);
+  --dw-skeleton: #2f3951;
+  --dw-overlay: rgb(20 27 45 / 64%);
+  --dw-shadow-card: none;
+  --dw-banner-bg: var(--dw-steel);
+  --dw-banner-fg: var(--dw-midnight);
+
+  --dw-error: #f97066;
+  --dw-error-soft: #342e44;
+  --dw-warning: #fdb022;
+  --dw-warning-soft: #34353d;
+  --dw-pending: #f5c451;
+  --dw-pending-soft: #343742;
+  --dw-success: var(--dw-green);
+  --dw-success-soft: #213646;
+  --dw-info: #84caff;
+  --dw-info-soft: #283753;
+  --dw-neutral: var(--dw-steel);
+  --dw-on-error: var(--dw-midnight);
+
+  color-scheme: dark;
+}

@@ -32,6 +32,15 @@ needs Legal's agreement in the pull request. Add a row only with a reason.
 | Package | Licence | Scope | Reason |
 | --- | --- | --- | --- |
 | `argparse` | `Python-2.0` | dev | YAML parser dependency of the linter (eslint, @eslint/eslintrc, js-yaml); never in the image |
+| `lightningcss` | `MPL-2.0` | dev | CSS compiler that Tailwind CSS v4 (@tailwindcss/vite) runs while apps/web builds; only its CSS output ships, never the package |
+| `lightningcss-linux-x64-gnu` | `MPL-2.0` | dev | Platform binary of lightningcss (see above); build tool only |
+| `lightningcss-linux-x64-musl` | `MPL-2.0` | dev | Platform binary of lightningcss (see above); build tool only |
+| `lightningcss-linux-arm64-gnu` | `MPL-2.0` | dev | Platform binary of lightningcss (see above); build tool only |
+| `lightningcss-linux-arm64-musl` | `MPL-2.0` | dev | Platform binary of lightningcss (see above); build tool only |
+| `lightningcss-darwin-arm64` | `MPL-2.0` | dev | Platform binary of lightningcss (see above); local builds only |
+| `caniuse-lite` | `CC-BY-4.0` | dev | Browser support data read by browserslist during the apps/web build (@vitejs/plugin-react, Babel); the data does not ship |
+| `@csstools/color-helpers` | `MIT-0` | dev | Colour helpers of jsdom's CSS parser (cssstyle), used by the apps/web unit tests only |
+| `isbot` | `Unlicense` | all | Dependency of @tanstack/react-router, the apps/web router, used only by its server-side rendering entry that apps/web does not import, so it is not expected in the built bundle; Unlicense is a public-domain dedication with no conditions. Pending Legal's agreement on the pull request (THE-2121) |
 
 ## How to change this list
 

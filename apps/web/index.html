@@ -3,10 +3,48 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Dialwarden" />
+    <meta property="og:title" content="Dialwarden" />
+    <meta property="og:image" content="/brand/social-og-1200x630.png" />
     <title>Dialwarden</title>
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/brand/favicon-32x32.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="/brand/favicon-180x180.png"
+    />
+    <link rel="manifest" href="/site.webmanifest" />
+    <!--
+      The one inline script of the app (contract C8): it sets data-theme before
+      the first paint so the page never flashes the wrong theme. The server
+      allows it through a Content-Security-Policy hash it computes from this
+      file at start. src/theme/theme.ts keeps the attribute in step afterwards.
+    -->
+    <script>
+      (function () {
+        var stored = null;
+        try {
+          stored = window.localStorage.getItem("dw.theme");
+        } catch (error) {
+          stored = null;
+        }
+        var query = window.matchMedia("(prefers-color-scheme: dark)");
+        var theme = query.matches ? "dark" : "light";
+        if (stored === "light" || stored === "dark") {
+          theme = stored;
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

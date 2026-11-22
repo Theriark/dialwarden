@@ -1,0 +1,22 @@
+{
+  "name": "Dialwarden",
+  "short_name": "Dialwarden",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef2f7",
+  "theme_color": "#141b2d",
+  "icons": [
+    {
+      "src": "/brand/favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/app-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
