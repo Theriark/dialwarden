@@ -5,7 +5,8 @@
 // - production.pub: the production key. A placeholder until Ruben posts the
 //   production public key (people dependency 5); a placeholder verifies nothing.
 // - development-current.pub and development-next.pub: the development keys of
-//   the setup broker (empty until D5, people dependency 4; P1-C commits the key).
+//   the setup broker. The current slot holds the D5 key (people dependency 4,
+//   committed in P1-C); the next slot stays empty until a key rotation.
 //
 // A slot file holds one Ed25519 public key in SPKI PEM form. Lines starting
 // with # are comments (the fingerprint goes there). A file with no PEM block is

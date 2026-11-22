@@ -7,15 +7,23 @@ import { lidHash8, revocationHash } from "./revocation.js";
 const pem = (key: KeyObject) =>
   key.export({ format: "pem", type: "spki" }).toString();
 
+// The setup broker's development key (D5), committed in P1-C. Same value as the
+// comment in keys/development-current.pub.
+const DEVELOPMENT_CURRENT_FINGERPRINT =
+  "699a4e45ae9178f62b0b0666284a6534a04319163fdaaad492dfcf691094ad07";
+
 describe("key slots", () => {
-  it("the committed slots load, with no production key yet", () => {
-    // Production waits for Ruben (people dependency 5). The development slots
-    // get their key in P1-C, so only their form is checked here.
+  it("the committed slots hold the development key only", () => {
+    // Production waits for Ruben (people dependency 5). The development
+    // current slot holds the broker key; the next slot stays empty.
     const ring = loadKeyRing();
     expect(ring.production).toHaveLength(0);
     for (const key of ring.development) {
       expect(key.asymmetricKeyType).toBe("ed25519");
     }
+    expect(ring.development.map((key) => keyFingerprint(key))).toEqual([
+      DEVELOPMENT_CURRENT_FINGERPRINT,
+    ]);
   });
 
   it("a comment-only slot is empty", () => {
