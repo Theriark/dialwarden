@@ -1,7 +1,8 @@
 # Dialwarden: one image, Free and Paid plans (docs/ci-cd.md).
 #
 # Build stage: installs the workspace from the lock file, builds it, writes
-# THIRD_PARTY_NOTICES and deploys only the server's production files to /out.
+# THIRD_PARTY_NOTICES and deploys only the server's production files to /out,
+# with the web build in /out/public.
 # Runtime stage: node:24-slim with /out, run as UID 10001. Nothing from tools/
 # reaches the runtime stage. Both FROM lines carry the same digest; Dependabot
 # (docker) updates them together.
@@ -21,12 +22,16 @@ RUN --mount=type=cache,id=dialwarden-pnpm-store,target=/pnpm/store \
 # a shared lock file pnpm falls back to a fresh resolution and writes no lock
 # file: the test -f refuses that. The derived file is removed afterwards (it
 # lists the whole workspace and would add dev packages to the image scan).
+# The web build goes to /out/public, which the server serves from /app/public
+# (contract C8); a build without index.html fails here.
 RUN --mount=type=cache,id=dialwarden-pnpm-store,target=/pnpm/store \
     pnpm run build \
  && pnpm run notices \
  && pnpm --filter @dialwarden/server deploy --prod /out \
  && test -f /out/pnpm-lock.yaml \
  && rm /out/pnpm-lock.yaml \
+ && cp -r apps/web/dist /out/public \
+ && test -f /out/public/index.html \
  && cp LICENSE LICENSING.md THIRD_PARTY_NOTICES /out/
 
 FROM node:24-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54 AS runtime
@@ -52,6 +57,7 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
  && chown 10001:10001 /data /demo-servers \
  && chmod 0750 /data /demo-servers
 WORKDIR /app
+# /app/public (the web build) is owned by root like the rest of /app.
 COPY --from=build /out/ /app/
 RUN printf '{"revision":"%s","buildEpoch":"%s","featureBaselineEpoch":"%s"}\n' \
       "${REVISION}" "${SOURCE_DATE_EPOCH}" "${FEATURE_BASELINE_EPOCH}" \

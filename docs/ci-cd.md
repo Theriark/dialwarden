@@ -45,7 +45,7 @@ passed, and a tripwire failed the run as soon as an application file existed.)
 | 1 - lint, typecheck, unit tests and build | `pnpm install --frozen-lockfile`, then `pnpm run lint` (eslint with security rules, no warnings; prettier), `typecheck`, `test` (vitest), `build` (ends with `check:assets`: no outside host in a CSS `url()` or `@import` of CSS files, HTML and SVG style, or CSS inlined into JavaScript; no outside font host) |
 | 2 - dependency audit and licence audit | `pnpm audit --prod --audit-level moderate`, `pnpm run licence:audit` |
 | 3 - hygiene | LICENSE is FCL-1.0-MIT; no edition names; no private key block; no OSS claim in README.md, LICENSING.md, docs/ or apps/web/src (the exact phrase "not open source" is the one allowed use); every `packs/*/fixtures` and `packages/formats/fixtures` folder has a SYNTHETIC.md that lists each file as a whole entry; gitleaks on the tree and on every commit of the range |
-| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH; image user 10001:10001 and process UID 10001; base image Node 24; no tools/ in the image; `/data` and `/demo-servers` owned by 10001, mode 0750; read-only root file system with /tmp as tmpfs; `/healthz` answers 200 with the commit as `revision`, the commit time as `buildDate`, the feature baseline as `featureBaseline` and the package version; `/readyz` answers 200 |
+| 4 - multi-arch image build | amd64 and arm64 with SOURCE_DATE_EPOCH and FEATURE_BASELINE_EPOCH; image user 10001:10001 and process UID 10001; base image Node 24; no tools/ in the image; `/data` and `/demo-servers` owned by 10001, mode 0750; read-only root file system with /tmp as tmpfs; `/healthz` answers 200 with the commit as `revision`, the commit time as `buildDate`, the feature baseline as `featureBaseline` and the package version; `/readyz` answers 200; `/app/public` owned by root and not writable for UID 10001; `/` answers 200 `text/html` with a Content-Security-Policy that holds `frame-ancestors 'none'` and `script-src 'self'` (recorded in the step summary); `/login` answers 200 `text/html`; the first `/assets/` script of the page answers 200 with an `immutable` cache-control; `/api/v1/does-not-exist` answers 404 JSON; `/healthz` carries `X-Content-Type-Options: nosniff` |
 | SBOM | syft SPDX SBOM of the image and grype scan (fails on a fixable high or critical) |
 | DCO | Signed-off-by on every commit (`.github/scripts/dco.sh`) |
 | Merge gate summary | the only required result; fails on any failure, and on any skip when STRICT is true |
@@ -113,6 +113,18 @@ The image is built once, on the merge to development, by the job
   0750); `EXPOSE 8080`; `HEALTHCHECK` with node `fetch` on `/healthz`.
   Application files belong to root, so the app writes only to the two volumes
   and `/tmp`. `LICENSE`, `LICENSING.md` and `THIRD_PARTY_NOTICES` are in `/app`.
+- Web UI (contract C8, web-serving-decision THE-2195): the build stage copies
+  `apps/web/dist` to `/out/public` right after `pnpm deploy` and fails when
+  `index.html` is missing, so every image carries the web build at `/app/public`,
+  owned by root and read-only for UID 10001. The server reads that folder into
+  memory once at start and serves it on the same origin and port as the API,
+  with the security headers of `apps/server/src/http/headers.ts`. It finds the
+  folder through `WEB_DIST` when that is set, otherwise `public` next to its
+  `dist` folder, which is `/app/public` in the image; neither the image nor
+  `deploy/dokploy.json` sets `WEB_DIST`. A local production check is
+  `pnpm run build`, then `WEB_DIST=apps/web/dist node apps/server/dist/main.js`.
+  Without an `index.html` the server logs one warning and serves the API only;
+  the image smoke test refuses such an image.
 - Only the tag `sha-<commit>` is pushed. Promote - Stage adds `27.x.y-rc.N` and
   `stage`; Release adds `27.x.y` and `latest`. Every tag is a carbon copy of the
   same multi-arch index digest.
