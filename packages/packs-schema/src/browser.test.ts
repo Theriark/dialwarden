@@ -19,7 +19,9 @@ const WORKSPACE = new Map([["@dialwarden/formats", "formats/src/index.ts"]]);
 /** Packages from npm the browser bundle may take in. */
 const NPM = new Set(["json-logic-js", "jsonc-parser"]);
 
-const SPECIFIER = /(?:from|import)\s*\(?\s*"([^"]+)"/g;
+/** An import or export with from, or an import for its side effects. */
+const FROM = /^(?:import|export)\b[^;]*?\bfrom\s*"([^"]+)"/gm;
+const BARE_IMPORT = /^import\s*"([^"]+)"/gm;
 
 /** packages/packs-schema/src, the folder of this test file. */
 function sourceDir(): string {
@@ -56,7 +58,8 @@ function importGraph(): Map<string, string[]> {
   for (let file = queue.pop(); file !== undefined; file = queue.pop()) {
     if (graph.has(file)) continue;
     const text = readFileSync(file, "utf8");
-    const names = Array.from(text.matchAll(SPECIFIER), (m) => String(m[1]));
+    const found = [...text.matchAll(FROM), ...text.matchAll(BARE_IMPORT)];
+    const names = found.map((m) => String(m[1]));
     graph.set(file, names);
     for (const name of names) {
       const next = resolve(name, file);
