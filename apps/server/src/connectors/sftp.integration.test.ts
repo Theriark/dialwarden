@@ -45,8 +45,8 @@ adduser -D -s /bin/sh ${USER}
 echo "${USER}:$DW_PASSWORD" | chpasswd
 mkdir -p /home/${USER}/.ssh ${ROOT}/Config ${ROOT}/Pal/Saved/SaveGames/0/${WORLD} /srv/outside
 cp /setup/authorized_keys /home/${USER}/.ssh/authorized_keys
-printf '[Game]\nName=One\n' > ${ROOT}/Config/game.ini
-printf '#!/bin/sh\n' > ${ROOT}/PalServer.sh
+printf '[Game]\\nName=One\\n' > ${ROOT}/Config/game.ini
+printf '#!/bin/sh\\n' > ${ROOT}/PalServer.sh
 echo outside > /srv/outside/secret.txt
 ln -s /srv/outside ${ROOT}/linked
 ln -s /srv/outside/secret.txt ${ROOT}/link.txt

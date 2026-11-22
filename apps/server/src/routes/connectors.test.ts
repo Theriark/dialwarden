@@ -144,8 +144,8 @@ describe("connector endpoints", () => {
   });
 
   it("refuses the data folder and a folder around it as a Local root", async () => {
-    const dataDir = app.ctx.config.dataDir;
     const { app, headers } = await signedIn();
+    const dataDir = app.ctx.config.dataDir;
     for (const root of [
       dataDir,
       join(dataDir, ".."),
