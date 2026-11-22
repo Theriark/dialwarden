@@ -1,5 +1,5 @@
-// Palworld pack (dev-work-plan P3-B): the synthetic fixture validates clean,
-// the launch flags go through the X1 shell check, every rule fires and
+// Palworld pack (dev-work-plan P3-B, P4-A): the synthetic fixture validates
+// clean, the launch flags go through the X1 shell check, every rule fires and
 // clears, the presets apply, and detection warns about WorldOption.sav.
 import {
   applyPreset,
@@ -100,6 +100,11 @@ const RULES: readonly (readonly [string, Changes, Changes])[] = [
     { ServerPassword: "join-me" },
   ],
   [
+    "admin-is-join-password",
+    { AdminPassword: "same-secret", ServerPassword: "same-secret" },
+    { ServerPassword: "join-secret" },
+  ],
+  [
     "seed-without-randomizer",
     { RandomizerSeed: "seed-1" },
     { RandomizerType: "Region" },
@@ -183,6 +188,29 @@ describe("Palworld pack", () => {
       "PublicIP",
       "RandomizerSeed",
     ]);
+  });
+
+  it("warns on the server only when the admin and join passwords match", () => {
+    // Both passwords look the same in the browser (masked), so only the
+    // server can compare them (c3-secret-rules-decision, THE-2361).
+    const rule = ruleOf(pack, "admin-is-join-password");
+    expect(rule).toMatchObject({ severity: "warning", serverEvaluated: true });
+    const values = new Map(fixture);
+    values.set("AdminPassword", "same-secret");
+    values.set("ServerPassword", "same-secret");
+    const issues = rule.settings.map((key) => {
+      return { key, severity: "warning", message: rule.message };
+    });
+    expect(validate(pack, values)).toEqual(issues);
+    const browser = { includeServerEvaluated: false };
+    expect(validate(pack, values, browser)).toEqual([]);
+    // Two empty passwords are not a shared admin password.
+    values.set("AdminPassword", "");
+    values.set("ServerPassword", "");
+    expect(fires("admin-is-join-password", {})).toBe(false);
+    expect(
+      validate(pack, values).filter((issue) => issue.message === rule.message),
+    ).toEqual([]);
   });
 
   it("has a fire and clear case for every rule", () => {

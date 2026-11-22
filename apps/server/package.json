@@ -2,7 +2,7 @@
   "name": "@dialwarden/server",
   "version": "27.0.0",
   "private": true,
-  "description": "Dialwarden server: API, authentication, entitlement, SQLite storage and the backup engine.",
+  "description": "Dialwarden server: API, authentication, entitlement, SQLite storage, the backup engine and the Local and SFTP connectors.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "bin": {
@@ -28,9 +28,14 @@
     "croner": "^9.1.0",
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.4.0",
+    "ssh2": "^1.17.0",
+    "ssh2-sftp-client": "^12.1.1",
     "zod": "^4.1.5"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/ssh2": "^1.15.5",
+    "@types/ssh2-sftp-client": "^9.0.6",
+    "testcontainers": "^11.14.0"
   }
 }
