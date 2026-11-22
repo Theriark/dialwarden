@@ -10,11 +10,8 @@ import type {
 } from "./types.js";
 
 /** Adapters whose files a shell reads (LinuxGSM runs them through sh -c). */
-export const SHELL_ADAPTERS: ReadonlySet<string> = new Set([
-  "launch",
-  "shellvar",
-  "shellvar-systemd",
-]);
+const SHELL_ADAPTER_IDS = ["launch", "shellvar", "shellvar-systemd"];
+export const SHELL_ADAPTERS: ReadonlySet<string> = new Set(SHELL_ADAPTER_IDS);
 
 /**
  * Characters that let a value run a command when a shell reads it:
@@ -31,9 +28,8 @@ export type Values =
   | { readonly [key: string]: JsonValue };
 
 export function valueMap(values: Values): Map<string, JsonValue> {
-  return values instanceof Map
-    ? new Map(values)
-    : new Map(Object.entries(values as { [key: string]: JsonValue }));
+  if (values instanceof Map) return new Map(values);
+  return new Map(Object.entries(values as { [key: string]: JsonValue }));
 }
 
 function issue(
@@ -102,19 +98,16 @@ export function checkValue(
     case "int":
     case "float":
     case "duration":
-      return typeof value === "number"
-        ? checkNumber(setting, value)
-        : "Must be a number.";
+      if (typeof value !== "number") return "Must be a number.";
+      return checkNumber(setting, value);
     case "enum": {
       const allowed = setting.enum ?? [];
-      return allowed.some((option) => option.value === value)
-        ? undefined
-        : "Must be one of the listed choices.";
+      if (allowed.some((option) => option.value === value)) return undefined;
+      return "Must be one of the listed choices.";
     }
     case "string":
-      return typeof value === "string"
-        ? checkLength(setting, value.length, "characters")
-        : "Must be text.";
+      if (typeof value !== "string") return "Must be text.";
+      return checkLength(setting, value.length, "characters");
     case "list":
       if (!Array.isArray(value)) return "Must be a list.";
       if (value.some((item: JsonValue) => !isScalar(item))) {
@@ -163,9 +156,8 @@ export function effectiveValues(
 ): Map<string, JsonValue> {
   const out = new Map<string, JsonValue>();
   for (const setting of pack.settings) {
-    const value = values.has(setting.key)
-      ? values.get(setting.key)
-      : setting.default;
+    const fallback = setting.default;
+    const value = values.has(setting.key) ? values.get(setting.key) : fallback;
     if (value !== undefined) out.set(setting.key, value);
   }
   return out;

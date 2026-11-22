@@ -20,7 +20,8 @@ describe("wrong-file and wrong-section lint", () => {
         severity: "warning",
         line: 5,
         column: 1,
-        message: "NetRate belongs in Engine.ini; it has no effect in this file.",
+        message:
+          "NetRate belongs in Engine.ini; it has no effect in this file.",
         locator: { kind: "ini", section: "Net", key: "NetRate" },
       },
     ]);
