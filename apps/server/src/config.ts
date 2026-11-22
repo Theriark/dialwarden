@@ -1,5 +1,6 @@
 // Runtime configuration from the environment (dev-work-plan Runtime). Secrets
 // are kept in this object only; nothing here is logged.
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 export interface AppConfig {
@@ -20,12 +21,19 @@ export interface AppConfig {
   backupSchedule: string;
   backupTimezone: string;
   demoSeed: boolean;
+  /** WEB_DIST: the built web app the server serves (contract C8). */
+  webDist: string;
 }
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
 const HEX64 = /^[0-9a-fA-F]{64}$/;
 const PROXY_ENTRY = /^[0-9a-fA-F.:]+(?:\/\d|\/\d\d|\/\d\d\d)?$/;
 const ZERO_PREFIX = /\/0+$/;
+
+// The folder public next to the server build (dist/config.js), which is
+// /app/public in the image. From the sources it is apps/server/public, which
+// does not exist, so tests and API-only runs serve no web UI.
+const DEFAULT_WEB_DIST = fileURLToPath(new URL("../public/", import.meta.url));
 
 const nonEmpty = (value: string | undefined): string | null => {
   const trimmed = value?.trim() ?? "";
@@ -79,5 +87,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     backupSchedule: nonEmpty(env["BACKUP_SCHEDULE"]) ?? "30 3 * * *",
     backupTimezone: nonEmpty(env["BACKUP_TZ"]) ?? "Europe/Lisbon",
     demoSeed: env["DEMO_SEED"] === "true",
+    webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,
   };
 }

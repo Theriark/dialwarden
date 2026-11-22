@@ -1,7 +1,8 @@
 // What every route can reach (app.ctx), the request session, and the route
 // config keys: auth (public, user or owner; every matched route defaults to
-// user, so a route that should be open says auth "public") and
-// entitlement (a FeatureKey; the route answers 402 on Free, contract C1).
+// user, so a route that should be open says auth "public"),
+// entitlement (a FeatureKey; the route answers 402 on Free, contract C1) and
+// web (the route of the built web app, contract C8).
 import type {
   BuildInfo,
   EntitlementGate,
@@ -64,5 +65,7 @@ declare module "fastify" {
   interface FastifyContextConfig {
     auth?: AuthLevel;
     entitlement?: FeatureKey;
+    /** The web app route: static files only, so no session is read. */
+    web?: boolean;
   }
 }

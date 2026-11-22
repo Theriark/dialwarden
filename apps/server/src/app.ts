@@ -1,7 +1,8 @@
 // The Dialwarden server (dev-work-plan P1-A): Fastify 5 with zod schemas,
 // OpenAPI 3.1 at /api/v1/openapi.json, pino with redaction, SQLite through the
-// store, authentication, the licence and entitlement gate, activity and the
-// backup engine. buildApp() opens everything; app.close() closes it again.
+// store, authentication, the licence and entitlement gate, activity, the
+// backup engine, and the built web app with its security headers (contract
+// C8). buildApp() opens everything; app.close() closes it again.
 import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import fastifyCookie from "@fastify/cookie";
@@ -29,6 +30,8 @@ import { Store } from "./db/store.js";
 import type { AppContext } from "./http/context.js";
 import { errorHandler } from "./http/errors.js";
 import { registerGuard } from "./http/guard.js";
+import { registerSecurityHeaders } from "./http/headers.js";
+import { loadWebDist, webRoutes } from "./http/web.js";
 import {
   openApiTransform,
   serializerCompiler,
@@ -212,6 +215,10 @@ export async function buildApp(
     transform: openApiTransform,
   });
   registerGuard(app);
+  // Contract C8: the built web app (none in tests and API-only runs) and the
+  // security headers of every response.
+  const web = loadWebDist(config.webDist, app.log);
+  registerSecurityHeaders(app, web?.scriptHashes ?? []);
 
   healthRoutes(app);
   authRoutes(app);
@@ -223,6 +230,9 @@ export async function buildApp(
     { config: { auth: "public" }, schema: { hide: true } },
     async () => app.swagger(),
   );
+  if (web !== null) {
+    webRoutes(app, web);
+  }
   options.extend?.(app);
 
   await app.ready();
