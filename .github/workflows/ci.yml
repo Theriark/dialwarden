@@ -1,0 +1,732 @@
+name: CI
+
+# Merge gate for dialwarden, the Development deployment job and the lock-file
+# job, in ONE workflow. This repository has exactly three workflows: CI,
+# Promote - Stage and Release (docs/ci-cd.md).
+#
+# Dialwarden is a single-image product (founder rule): one repository, one image
+# ghcr.io/theriark/dialwarden, the Free and Paid plans in the same build, Paid
+# unlocked by an offline signed licence key checked inside the image. There is no
+# CE/EE split and no second image.
+#
+# STRICT is "true" since phase P0 added the application: every check must run
+# and succeed, and a skipped check fails the gate. ("false" was the setup mode: a
+# check whose input did not exist was skipped, and the tripwire in `detect` failed
+# the run if an application file existed.)
+#
+# How CI is started: a push to a feature branch never runs this workflow. For pull
+# requests the ONLY trigger is the label event, and a run does anything only for the
+# label "ci-go", which the CI request broker sets. A push to development (a merge)
+# runs the gate and then the deploy-development job. workflow_dispatch with mode=ci
+# runs the gate by hand; mode=lock runs ONLY the lock job. Release candidates are
+# tagged by Promote - Stage.
+# pull_request (not pull_request_target) has a read-only token and no secrets.
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "ci runs the merge gate. lock ONLY resolves pnpm-lock.yaml and commits it to this branch."
+        required: false
+        default: ci
+        type: choice
+        options:
+          - ci
+          - lock
+
+permissions:
+  contents: read
+
+# Pull request runs: one group per ref, superseded runs are cancelled, and a label
+# other than ci-go gets its own unique group so it can never cancel a ci-go run.
+# Every other event uses the single repository group shared with Promote - Stage and
+# Release: those runs never overlap and a live deployment is never cancelled.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('ci-{0}-{1}', github.ref, github.event.label.name == 'ci-go' && 'run' || github.run_id) || 'dialwarden-delivery' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NODE_VERSION: "24"
+  IMAGE_NAME: dialwarden
+  # "true": no check may skip; any result other than success fails the gate.
+  # "false": skips are tolerated only while no application file exists.
+  STRICT: "true"
+
+jobs:
+  detect:
+    name: Detect which inputs exist
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'ci-go') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'ci')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.probe.outputs.app }}
+      docker: ${{ steps.probe.outputs.docker }}
+      strict: ${{ steps.probe.outputs.strict }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${STRICT}" in
+            true|false) ;;
+            *) echo "::error::STRICT must be the literal true or false, got '${STRICT}'"; exit 1 ;;
+          esac
+          echo "strict=${STRICT}" >> "$GITHUB_OUTPUT"
+          # In strict mode every flag is true, so a missing input makes its check
+          # run and fail loudly instead of skipping.
+          flag() { if [[ "${STRICT}" == "true" || -e "$2" ]]; then echo "$1=true" >> "$GITHUB_OUTPUT"; else echo "$1=false" >> "$GITHUB_OUTPUT"; fi; }
+          flag app package.json
+          flag docker Dockerfile
+          # Tripwire: the application must not land while STRICT is still false.
+          if [[ "${STRICT}" != "true" ]]; then
+            for f in package.json pnpm-lock.yaml pnpm-workspace.yaml apps packages packs tools Dockerfile docker-compose.yml; do
+              if [[ -e "${f}" ]]; then
+                echo "::error::${f} exists but STRICT is false. Set STRICT to \"true\" in .github/workflows/ci.yml."
+                exit 1
+              fi
+            done
+          fi
+          cat "$GITHUB_OUTPUT"
+
+  checks:
+    name: 1 - lint, typecheck, unit tests and build (pnpm)
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - shell: bash
+        run: |
+          set -euo pipefail
+          # pnpm is the version pinned in package.json "packageManager" (corepack).
+          # Install scripts run only for the packages allowed in
+          # pnpm.onlyBuiltDependencies (argon2, better-sqlite3).
+          corepack enable
+          pnpm install --frozen-lockfile
+          # All four run, so one run reports every finding.
+          status=0
+          pnpm run lint || status=1
+          pnpm run typecheck || status=1
+          pnpm run test || status=1
+          pnpm run build || status=1
+          exit "${status}"
+
+  audit:
+    name: 2 - dependency audit and licence audit
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile --ignore-scripts
+          status=0
+          # Production dependencies, moderate and higher. Reviewed exceptions live
+          # in package.json pnpm.auditConfig.ignoreGhsas with a reason in docs.
+          pnpm audit --prod --audit-level moderate || status=1
+          # SPDX allow-list of the runtime and development packages (script added
+          # in P0, docs/licences.md).
+          pnpm run licence:audit || status=1
+          exit "${status}"
+
+  hygiene:
+    name: 3 - one edition, licence text, no key material, no committed credentials
+    # Runs on every gate run, also before the application exists.
+    needs: detect
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          status=0
+          # The source licence is FCL-1.0-MIT (Gate 1, D2).
+          if ! head -n 1 LICENSE | grep -qx '# Fair Core License, Version 1.0, MIT Future License'; then
+            echo "::error file=LICENSE::LICENSE must be the FCL-1.0-MIT text"
+            status=1
+          fi
+          # One codebase and one image: no CE or EE edition names in the code.
+          if git grep -nIiE 'dialwarden[_-](ce|ee)\b' -- . ':!docs' ':!.github'; then
+            echo "::error::an edition name (dialwarden-ce or dialwarden-ee) appears in the code"
+            status=1
+          fi
+          # No private key in the repository. The production licence key pair stays
+          # with Ruben and the development signing key stays in the setup broker;
+          # CI generates throwaway test keys at run time.
+          if git grep -nIE -e '-----BEGIN ([A-Z]+ )?PRIVATE KEY-----' -- .; then
+            echo "::error::a private key block is committed"
+            status=1
+          fi
+          # FCL-1.0-MIT is source-available, never open source (legal-input-1 1.7):
+          # no open source claim in the README, docs, LICENSING.md or the web app.
+          # The exact phrase "not open source" is the one allowed use.
+          claims="$(git grep -nIiE 'open[- ]?source' -- README.md LICENSING.md docs apps/web/src |
+            sed -E 's/not open source//Ig' | grep -iE ':.*open[- ]?source' || true)"
+          if [[ -n "${claims}" ]]; then
+            echo "${claims}"
+            echo "::error::an open source claim appears; Dialwarden is source-available (FCL-1.0-MIT)"
+            status=1
+          fi
+          # Fixtures are synthetic and written by Theriark (legal-input-1 2): every
+          # fixtures folder has a SYNTHETIC.md that lists each of its files.
+          shopt -s nullglob
+          for dir in packs/*/fixtures packages/formats/fixtures; do
+            [[ -d "${dir}" ]] || continue
+            if [[ ! -f "${dir}/SYNTHETIC.md" ]]; then
+              echo "::error file=${dir}::${dir} has no SYNTHETIC.md"
+              status=1
+              continue
+            fi
+            while IFS= read -r -d '' file; do
+              name="${file#"${dir}/"}"
+              [[ "${name}" == "SYNTHETIC.md" ]] && continue
+              # A whole entry only (bounded by line start or end, a pipe, a space
+              # or a backtick), so r.ini is not taken as listed by server.ini.
+              escaped="$(printf '%s' "${name}" | sed -e 's/[][\.*^$+?(){}|]/\\&/g')"
+              grep -qE -- '(^|[|[:space:]`])'"${escaped}"'($|[|[:space:]`])' "${dir}/SYNTHETIC.md" || {
+                echo "::error file=${file}::${name} is not listed in ${dir}/SYNTHETIC.md"
+                status=1
+              }
+            done < <(find "${dir}" -type f -print0)
+          done
+          shopt -u nullglob
+          # Credential scan with gitleaks (MIT), pinned by digest, default rules: the
+          # checked-out tree, then every commit of the pull request or push, so a
+          # secret added and removed again inside the range is found too.
+          gitleaks=(docker run --rm -v "${GITHUB_WORKSPACE}:/repo:ro"
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*'
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f)
+          "${gitleaks[@]}" dir /repo --no-banner --redact || status=1
+          case "${EVENT}" in
+            pull_request)
+              range="${PR_BASE}..${PR_HEAD}"
+              ;;
+            push)
+              if [[ "${PUSH_BEFORE}" =~ ^0+$ ]]; then
+                range="${HEAD_SHA}~1..${HEAD_SHA}"
+              else
+                range="${PUSH_BEFORE}..${HEAD_SHA}"
+              fi
+              ;;
+            *)
+              range="$(git merge-base origin/development HEAD)..HEAD"
+              ;;
+          esac
+          echo "gitleaks history range: ${range}"
+          "${gitleaks[@]}" git /repo --no-banner --redact --log-opts="${range}" || status=1
+          exit "${status}"
+
+  docker-build:
+    name: 4 - multi-arch image build, non-root, health smoke
+    # Built for linux/amd64 and linux/arm64 with SOURCE_DATE_EPOCH, never pushed here.
+    needs: detect
+    if: needs.detect.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Tags are needed for the feature baseline (feature_baseline.sh).
+          fetch-depth: 0
+      - id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The build date of the image is the commit time (rnd-report-1 3.3): the
+          # licence rule compares it with updatesUntil, and it never changes on
+          # promotion because Stage and Production run the same digest.
+          epoch="$(git log -1 --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u -d "@${epoch}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          baseline="$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)"
+          echo "baseline=${baseline}" >> "$GITHUB_OUTPUT"
+          echo "baseline_date=$(date -u -d "@${baseline}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build both architectures
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          provenance: false
+          build-args: |
+            REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Load the amd64 image for the checks
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          provenance: false
+          tags: ${{ env.IMAGE_NAME }}:ci
+          build-args: |
+            REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
+          cache-from: type=gha
+      - name: Image must run as UID 10001 and answer /healthz
+        shell: bash
+        env:
+          CREATED: ${{ steps.epoch.outputs.created }}
+          BASELINE_DATE: ${{ steps.epoch.outputs.baseline_date }}
+        run: |
+          set -euo pipefail
+          user="$(docker image inspect "${IMAGE_NAME}:ci" --format '{{.Config.User}}')"
+          [[ -n "${user}" && "${user}" != "root" && "${user}" != "0" && "${user}" != "0:0" ]] || { echo "::error::image runs as root"; exit 1; }
+          [[ "${user}" == "10001:10001" ]] || { echo "::error::image user is '${user}', not 10001:10001"; exit 1; }
+          # The pinned base is Node 24, and nothing from tools/ is in the image.
+          node_version="$(docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -p process.versions.node)"
+          [[ "${node_version}" == 24.* ]] || { echo "::error::base image runs Node ${node_version}, not 24"; exit 1; }
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            if (fs.existsSync("/app/tools") || !fs.existsSync("/app/THIRD_PARTY_NOTICES")) process.exit(1);
+            if (fs.readdirSync("/app/node_modules/@dialwarden").some((n) => n.startsWith("tools-"))) process.exit(1);
+          ' || { echo "::error::tools/ is in the image or THIRD_PARTY_NOTICES is missing"; exit 1; }
+          # Both volume folders of deploy/dokploy.json belong to UID 10001, mode 0750.
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            for (const dir of ["/data", "/demo-servers"]) {
+              const s = fs.statSync(dir);
+              if (s.uid !== 10001 || (s.mode & 0o777) !== 0o750) process.exit(1);
+            }
+          ' || { echo "::error::/data or /demo-servers is not owned by 10001 with mode 0750"; exit 1; }
+          # Read-only root file system: the app may write only to the volumes and /tmp.
+          # Throwaway values generated for this run only; nothing is reused.
+          docker run -d --name smoke -p 8080:8080 --read-only --tmpfs /tmp \
+            -e APP_SECRET_KEY="$(openssl rand -hex 32)" \
+            -e SESSION_SECRET="$(openssl rand -hex 32)" \
+            -e BASE_URL=http://localhost:8080 \
+            "${IMAGE_NAME}:ci"
+          ready=false
+          for _ in $(seq 1 30); do
+            if body="$(curl -fsS http://localhost:8080/healthz)"; then ready=true; break; fi
+            sleep 2
+          done
+          [[ "${ready}" == "true" ]] || { docker logs --tail 200 smoke || true; echo "::error::/healthz did not answer 200 on port 8080"; exit 1; }
+          echo "${body}"
+          revision="$(jq -r '.revision // empty' <<<"${body}")"
+          [[ "${revision}" == "${GITHUB_SHA}" ]] || { echo "::error::/healthz reports revision '${revision}', not ${GITHUB_SHA}"; exit 1; }
+          # P0 acceptance: buildDate is the commit time, featureBaseline the
+          # baseline (equal to buildDate until v27.0.0 exists), version the line.
+          build_date="$(jq -r '.buildDate // empty' <<<"${body}")"
+          [[ "${build_date}" == "${CREATED}" ]] || { echo "::error::/healthz buildDate '${build_date}' is not the commit time ${CREATED}"; exit 1; }
+          baseline="$(jq -r '.featureBaseline // empty' <<<"${body}")"
+          [[ "${baseline}" == "${BASELINE_DATE}" ]] || { echo "::error::/healthz featureBaseline '${baseline}' is not ${BASELINE_DATE}"; exit 1; }
+          version="$(jq -r '.version // empty' <<<"${body}")"
+          [[ "${version}" == "$(jq -r '.version' package.json)" ]] || { echo "::error::/healthz version '${version}' is not package.json's"; exit 1; }
+          uid="$(docker exec smoke id -u)"
+          [[ "${uid}" == "10001" ]] || { echo "::error::the app runs as UID ${uid}, not 10001"; exit 1; }
+          curl -fsS http://localhost:8080/readyz >/dev/null || { echo "::error::/readyz did not answer 200"; exit 1; }
+          {
+            echo "## Image smoke test (amd64)"
+            echo
+            echo "- User: ${user}, process UID ${uid}, Node ${node_version}, read-only root file system"
+            echo "- /healthz: \`${body}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          docker rm -f smoke >/dev/null
+
+  sbom:
+    name: SBOM - syft on the image, grype scan
+    # SPDX SBOM of the amd64 image and a vulnerability scan of every package in it,
+    # OS layer included. Fails on a high or critical finding that has a fix.
+    needs: [detect, docker-build]
+    if: needs.detect.outputs.docker == 'true' && needs.docker-build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch="$(git log -1 --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "baseline=$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          provenance: false
+          tags: ${{ env.IMAGE_NAME }}:sbom
+          build-args: |
+            REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
+          cache-from: type=gha
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE_NAME }}:sbom
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Check the SBOM and record the base images
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '.spdxVersion and (.packages | length > 0)' sbom.spdx.json >/dev/null || {
+            echo "::error::sbom.spdx.json is not an SPDX document with packages"
+            exit 1
+          }
+          packages="$(jq '.packages | length' sbom.spdx.json)"
+          {
+            echo "## dialwarden SBOM"
+            echo
+            echo "- Artefact: sbom.spdx.json (SPDX JSON from syft), ${packages} packages"
+            echo "- Source commit: ${GITHUB_SHA}"
+            echo "- Base images, pinned by digest in the Dockerfile:"
+            grep -E '^FROM ' Dockerfile | awk '{print "  - " $2}'
+          } >> "${GITHUB_STEP_SUMMARY}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom.spdx.json
+          path: sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
+        with:
+          sbom: sbom.spdx.json
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table
+          output-file: grype.txt
+      - name: Record the vulnerability scan
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f grype.txt ]] || { echo "no grype report"; exit 0; }
+          cat grype.txt
+          {
+            echo "## grype scan of the image (fails on high or critical with a fix)"
+            echo
+            echo '```'
+            head -n 60 grype.txt
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  dco:
+    name: DCO - Signed-off-by on every commit
+    # Developer Certificate of Origin 1.1 (CONTRIBUTING.md). The rule and the lock job
+    # and Dependabot exemptions are in .github/scripts/dco.sh.
+    needs: detect
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          # Read-only (contents: read): GitHub's signature check of a Dependabot commit.
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/dco.sh
+
+  gate:
+    name: Merge gate summary
+    needs:
+      - detect
+      - checks
+      - audit
+      - hygiene
+      - docker-build
+      - sbom
+      - dco
+    if: >-
+      always() && (
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'ci-go') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'ci'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          STRICT: ${{ needs.detect.outputs.strict }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## dialwarden merge gate (STRICT=${STRICT:-unknown})"
+            echo
+            echo "| Job | Result |"
+            echo "| --- | --- |"
+            echo "${RESULTS}" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"'
+            echo
+            echo "A result of \`skipped\` is not a pass. It is tolerated only while STRICT is false (see docs/ci-cd.md)."
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if echo "${RESULTS}" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
+            echo "::error::at least one required check failed"
+            exit 1
+          fi
+          # detect, hygiene and dco always run, so they must succeed in either mode.
+          if ! echo "${RESULTS}" | jq -e '.detect.result == "success" and .hygiene.result == "success" and .dco.result == "success"' >/dev/null; then
+            echo "::error::detect, hygiene and dco must succeed"
+            exit 1
+          fi
+          if [[ "${STRICT}" == "true" ]]; then
+            if ! echo "${RESULTS}" | jq -e 'all(.[]; .result == "success")' >/dev/null; then
+              echo "::error::STRICT is true: every check must succeed, a skipped check fails the gate"
+              exit 1
+            fi
+          elif [[ "${STRICT}" != "false" ]]; then
+            echo "::error::STRICT value unavailable (detect did not complete)"
+            exit 1
+          fi
+
+  deploy-development:
+    name: Deploy Development (build once, deploy the digest)
+    # Only a merge (push) to development, and only after the whole gate succeeded.
+    # Also gated on the repository variable DEPLOY_DEVELOPMENT_ENABLED, which the
+    # setup broker sets when it prepares the Development runtime (dokploy_prepare):
+    # until then a merge deploys nothing and pushes no image.
+    needs: gate
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/development' &&
+      vars.DEPLOY_DEVELOPMENT_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: development
+    permissions:
+      contents: read
+      packages: write
+      # Keyless cosign signature with the GitHub OIDC identity of this workflow.
+      id-token: write
+    env:
+      IMAGE: ghcr.io/theriark/dialwarden
+      SOURCE_SHA: ${{ github.sha }}
+      # Registered for this product by the setup broker (github_repo_status).
+      DEV_APPLICATION_ID: "oOeHOxSOBdf80di9Fu-Bv"
+      DEV_HOST: dev-dialwarden.theriark.dev
+    steps:
+      - name: Require the registered Development application
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${DEV_APPLICATION_ID}" =~ ^[A-Za-z0-9_-]{8,64}$ ]] || {
+            echo "::error::DEV_APPLICATION_ID is not set in ci.yml; add the id registered by the setup broker before enabling deployment"
+            exit 1
+          }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - id: epoch
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch="$(git log -1 --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u -d "@${epoch}" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "baseline=$(SOURCE_DATE_EPOCH="${epoch}" bash .github/scripts/feature_baseline.sh)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          # Built once. Only the source SHA tag is pushed (never latest); every later
+          # step, Stage and the release use this digest. Timestamps come from the
+          # commit (SOURCE_DATE_EPOCH, rewrite-timestamp) so the build is repeatable.
+          outputs: type=registry,rewrite-timestamp=true
+          tags: ${{ env.IMAGE }}:sha-${{ github.sha }}
+          provenance: false
+          build-args: |
+            REVISION=${{ github.sha }}
+            SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
+            FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
+          labels: |
+            org.opencontainers.image.title=Dialwarden
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.epoch.outputs.created }}
+            org.opencontainers.image.licenses=LicenseRef-FCL-1.0-MIT
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Require a valid digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::build produced no valid digest"; exit 1; }
+      - uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - name: Sign the digest and attach the SBOM (cosign keyless)
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}@${DIGEST}"
+          cosign sign --yes "${ref}"
+          cosign attest --yes --type spdxjson --predicate sbom.spdx.json "${ref}"
+          # Promote - Stage and Release verify exactly this identity.
+          cosign verify "${ref}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/ci.yml@refs/heads/development" >/dev/null
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom-${{ github.sha }}.spdx.json
+          path: sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 90
+      - id: deploy
+        uses: ./.github/actions/dokploy-deploy
+        with:
+          application-id: ${{ env.DEV_APPLICATION_ID }}
+          expected-host: ${{ env.DEV_HOST }}
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          health-url: https://${{ env.DEV_HOST }}/healthz
+          expected-revision: ${{ github.sha }}
+          title: Development ${{ github.sha }}
+          dokploy-url: ${{ secrets.DOKPLOY_URL }}
+          dokploy-api-key: ${{ secrets.DOKPLOY_API_KEY }}
+          cf-access-client-id: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          cf-access-client-secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - name: Record immutable Development result
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PREVIOUS: ${{ steps.deploy.outputs.previous-image }}
+          CREATED: ${{ steps.epoch.outputs.created }}
+        run: |
+          set -euo pipefail
+          {
+            echo "## dialwarden deployed to Development"
+            echo
+            echo "- Source commit: \`${SOURCE_SHA}\` (build date ${CREATED}, SOURCE_DATE_EPOCH)"
+            echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (linux/amd64 and linux/arm64, cosign signed, SBOM attested)"
+            echo "- Previous image (rollback target): \`${PREVIOUS:-none}\`"
+            echo "- URL: https://${DEV_HOST}/"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  lock:
+    name: Lock - resolve and commit pnpm-lock.yaml
+    # ONLY for workflow_dispatch with mode=lock on a same-repository feature branch.
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.mode == 'lock' &&
+      github.event.repository.fork == false &&
+      github.ref_type == 'branch' &&
+      github.actor != 'github-actions[bot]' &&
+      !contains(fromJSON('["main","development","stage","production"]'), github.ref_name)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.ref }}
+          # No token in .git/config while third-party packages are resolved; only
+          # the push step below receives it.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Resolve the lock file
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f package.json ]] || { echo "::error::no package.json on this branch"; exit 1; }
+          corepack enable
+          # Resolution only: no package is installed and no package script runs.
+          pnpm install --lockfile-only --ignore-scripts
+      - name: Commit the changed lock file to the branch
+        shell: bash
+        env:
+          BRANCH: ${{ github.ref_name }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Nothing the resolve step may have left in .git/config runs or redirects
+          # traffic here: no hooks, no fsmonitor, no proxy, TLS verified.
+          safe_git=(git -c core.hooksPath=/dev/null -c core.fsmonitor=false
+            -c http.proxy= -c http.sslVerify=true)
+          "${safe_git[@]}" add pnpm-lock.yaml
+          if "${safe_git[@]}" diff --cached --quiet; then
+            echo "::notice::pnpm-lock.yaml is already up to date. Nothing committed."
+            exit 0
+          fi
+          "${safe_git[@]}" -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update pnpm lock file"
+          # The same header actions/checkout would have stored, for this push only.
+          auth="$(printf 'x-access-token:%s' "${TOKEN}" | base64 -w0)"
+          echo "::add-mask::${auth}"
+          "${safe_git[@]}" \
+            -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
+            push origin "HEAD:refs/heads/${BRANCH}"
+          {
+            echo "## pnpm-lock.yaml committed to \`${BRANCH}\`"
+            echo
+            echo "- New head: \`$(git rev-parse HEAD)\`"
+            echo "- CI was NOT started. Request one run for this head with the CI request broker (label \`ci-go\`)."
+          } >> "${GITHUB_STEP_SUMMARY}"
