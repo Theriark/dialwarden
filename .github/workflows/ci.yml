@@ -302,7 +302,7 @@ jobs:
             SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
             FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           cache-from: type=gha
-      - name: Image must run as UID 10001 and answer /healthz
+      - name: Image must run as UID 10001, answer /healthz and serve the web UI
         shell: bash
         env:
           CREATED: ${{ steps.epoch.outputs.created }}
@@ -328,6 +328,15 @@ jobs:
               if (s.uid !== 10001 || (s.mode & 0o777) !== 0o750) process.exit(1);
             }
           ' || { echo "::error::/data or /demo-servers is not owned by 10001 with mode 0750"; exit 1; }
+          # The web build (contract C8) is in /app/public, owned by root and not
+          # writable for UID 10001.
+          docker run --rm --entrypoint node "${IMAGE_NAME}:ci" -e '
+            const fs = require("node:fs");
+            for (const path of ["/app/public", "/app/public/index.html"]) {
+              if (fs.statSync(path).uid !== 0) process.exit(1);
+              try { fs.accessSync(path, fs.constants.W_OK); process.exit(1); } catch {}
+            }
+          ' || { echo "::error::/app/public is missing, not owned by root or writable for UID 10001"; exit 1; }
           # Read-only root file system: the app may write only to the volumes and /tmp.
           # Throwaway values generated for this run only; nothing is reused.
           docker run -d --name smoke -p 8080:8080 --read-only --tmpfs /tmp \
@@ -355,11 +364,43 @@ jobs:
           uid="$(docker exec smoke id -u)"
           [[ "${uid}" == "10001" ]] || { echo "::error::the app runs as UID ${uid}, not 10001"; exit 1; }
           curl -fsS http://localhost:8080/readyz >/dev/null || { echo "::error::/readyz did not answer 200"; exit 1; }
+          # Contract C8: the same server serves the web build with its security
+          # headers. fetch NAME PATH stores the body and headers and prints the
+          # status; header NAME FILE prints one header value (name in lower case).
+          web="$(mktemp -d)"
+          fetch() { curl -sS -o "${web}/$1.body" -D "${web}/$1.head" -w '%{http_code}' "http://localhost:8080$2" || true; }
+          header() { tr -d '\r' < "$2" | awk -v name="$1" '!found && index(tolower($0), name ":") == 1 { sub(/^[^:]*:[ \t]*/, ""); print; found = 1 }'; }
+          status="$(fetch page /)"
+          [[ "${status}" == "200" ]] || { echo "::error::GET / answered ${status}, not 200"; exit 1; }
+          [[ "$(header content-type "${web}/page.head")" == text/html* ]] || { echo "::error::GET / is not text/html"; exit 1; }
+          csp="$(header content-security-policy "${web}/page.head")"
+          [[ "${csp}" == *"frame-ancestors 'none'"* && "${csp}" == *"script-src 'self'"* ]] || {
+            echo "::error::GET / Content-Security-Policy lacks frame-ancestors 'none' or script-src 'self': '${csp}'"
+            exit 1
+          }
+          status="$(fetch login /login)"
+          [[ "${status}" == "200" ]] || { echo "::error::GET /login answered ${status}, not 200"; exit 1; }
+          [[ "$(header content-type "${web}/login.head")" == text/html* ]] || { echo "::error::GET /login is not text/html"; exit 1; }
+          asset="$(grep -oE 'src="/assets/[^"]+\.js"' "${web}/page.body" | sed -n '1{s/^src="//;s/"$//;p}' || true)"
+          [[ -n "${asset}" ]] || { echo "::error::the page references no /assets/ script"; exit 1; }
+          status="$(fetch asset "${asset}")"
+          [[ "${status}" == "200" ]] || { echo "::error::GET ${asset} answered ${status}, not 200"; exit 1; }
+          [[ "$(header cache-control "${web}/asset.head")" == *immutable* ]] || { echo "::error::GET ${asset} is not cached as immutable"; exit 1; }
+          status="$(fetch api /api/v1/does-not-exist)"
+          [[ "${status}" == "404" ]] || { echo "::error::GET /api/v1/does-not-exist answered ${status}, not 404"; exit 1; }
+          jq -e 'type == "object"' "${web}/api.body" >/dev/null || { echo "::error::GET /api/v1/does-not-exist has no JSON body"; exit 1; }
+          status="$(fetch health /healthz)"
+          [[ "${status}" == "200" && "$(header x-content-type-options "${web}/health.head")" == "nosniff" ]] || {
+            echo "::error::/healthz does not carry X-Content-Type-Options: nosniff"
+            exit 1
+          }
           {
             echo "## Image smoke test (amd64)"
             echo
             echo "- User: ${user}, process UID ${uid}, Node ${node_version}, read-only root file system"
             echo "- /healthz: \`${body}\`"
+            echo "- Web UI from /app/public: / and /login 200 text/html, ${asset} 200 immutable, /api/v1/does-not-exist 404 JSON, /healthz nosniff"
+            echo "- Content-Security-Policy of /: \`${csp}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
           docker rm -f smoke >/dev/null
 
