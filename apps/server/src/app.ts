@@ -14,6 +14,7 @@ import {
   ruleDates,
   type KeyRing,
 } from "@dialwarden/entitlement";
+import { loadPacks } from "@dialwarden/packs-schema/node";
 import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
 import { bootstrapOwner, openFirstRunSetup } from "./auth/bootstrap.js";
@@ -42,6 +43,7 @@ import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { activityRoutes } from "./routes/activity.js";
 import { authRoutes } from "./routes/auth.js";
+import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { licenceRoutes } from "./routes/licence.js";
 import { systemRoutes } from "./routes/system.js";
@@ -137,6 +139,9 @@ export async function buildApp(
     log: app.log,
     now,
   });
+  // Game packs (contract C3): a broken pack is refused with a log line and
+  // never stops the server.
+  const packs = loadPacks(config.packsDir, app.log);
   const editable = new EditableServers(settings);
   const entitlement = new EntitlementGate(
     () => licences.current(),
@@ -167,6 +172,7 @@ export async function buildApp(
       revision: build.revision,
       now,
     }),
+    packs: packs.packs,
     maintenance: false,
     importing: false,
     routes: [],
@@ -225,6 +231,7 @@ export async function buildApp(
   licenceRoutes(app);
   activityRoutes(app);
   systemRoutes(app);
+  gameRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },

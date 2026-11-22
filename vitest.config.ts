@@ -27,6 +27,10 @@ export default defineConfig({
         find: /^@dialwarden\/packs-schema$/,
         replacement: source("packages/packs-schema/src/index.ts"),
       },
+      {
+        find: /^@dialwarden\/packs-schema\/node$/,
+        replacement: source("packages/packs-schema/src/node.ts"),
+      },
     ],
   },
   esbuild: {
@@ -41,19 +45,30 @@ export default defineConfig({
     ],
     exclude: ["**/node_modules/**", "**/dist/**"],
     environment: "node",
+    // Writes the pack.json validator the packs-schema sources import (it is
+    // generated from pack.schema.json, never committed).
+    globalSetup: ["packages/packs-schema/scripts/generate-validator.mjs"],
     // argon2id and scrypt make some server tests slower than the default.
     testTimeout: 30_000,
     hookTimeout: 30_000,
-    // CI measures the format engine (P2): below 90 percent line coverage of
-    // packages/formats the test run fails. Locally, add --coverage.
+    // CI measures the format engine (P2) and the pack package (P3): below 90
+    // percent line coverage of either the test run fails. Locally, add
+    // --coverage.
     coverage: {
       enabled: process.env.CI === "true",
       provider: "v8",
-      include: ["packages/formats/src/**/*.ts"],
-      exclude: ["packages/formats/src/**/*.test.ts"],
+      include: [
+        "packages/formats/src/**/*.ts",
+        "packages/packs-schema/src/**/*.ts",
+      ],
+      exclude: [
+        "packages/*/src/**/*.test.ts",
+        "packages/packs-schema/src/generated/**",
+      ],
       reporter: ["text", "text-summary"],
       thresholds: {
         "packages/formats/src/**/*.ts": { lines: 90 },
+        "packages/packs-schema/src/**/*.ts": { lines: 90 },
       },
     },
   },

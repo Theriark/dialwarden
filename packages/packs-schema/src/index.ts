@@ -1,18 +1,49 @@
-// Game pack schema (interface contract C3). P3 adds the full schema, the
-// loader and validate(pack, values); P0 fixes the setting types and pack ids.
+// Game packs (interface contract C3): the pack.json schema and its checks,
+// validate(pack, values), JSONLogic rules, presets, detection, secret masking
+// and the wrong-file lint. Everything here runs in the browser and on the
+// server alike; the loader and the packs check that read files are in
+// @dialwarden/packs-schema/node.
 
-export const SETTING_TYPES = [
-  "bool",
-  "int",
-  "float",
-  "enum",
-  "string",
-  "duration",
-  "list",
-  "struct",
-] as const;
-
-export type SettingType = (typeof SETTING_TYPES)[number];
+export * from "./types.js";
+export { checkPack, referenceProblems, safeRelativePath } from "./check.js";
+export type { PackCheck } from "./check.js";
+export { fromFileValue, sameAsDefault } from "./coerce.js";
+export {
+  AcfError,
+  appManifestPath,
+  buildSupported,
+  detectGames,
+  MAX_ACF_BYTES,
+  parseAppManifest,
+  parseKeyValues,
+} from "./detection.js";
+export type {
+  AppManifest,
+  Detection,
+  DetectionProbe,
+  KeyValues,
+} from "./detection.js";
+export { lintPackFile } from "./lint.js";
+export { maskSecrets, maskValue, SECRET_MASK } from "./mask.js";
+export { applyPreset, sameJson } from "./presets.js";
+export type { PresetChange, PresetResult } from "./presets.js";
+export {
+  checkLogic,
+  checkRules,
+  RULE_OPERATORS,
+  ruleData,
+  ruleFires,
+} from "./rules.js";
+export type { LogicCheck, RuleData } from "./rules.js";
+export { schemaProblems } from "./schema.js";
+export {
+  checkValue,
+  effectiveValues,
+  hasShellCharacters,
+  SHELL_ADAPTERS,
+  validate,
+} from "./validate.js";
+export type { Values } from "./validate.js";
 
 const PACK_ID = /^[a-z0-9][a-z0-9-]{1,39}$/;
 

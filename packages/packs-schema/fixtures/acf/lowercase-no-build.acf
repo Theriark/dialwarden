@@ -1,0 +1,8 @@
+// Synthetic fixture written by Theriark (see SYNTHETIC.md).
+"appstate"
+{
+	"AppID"		"4000001"
+	"Name"		"Synthetic \"Quoted\" Server\\Path"
+	"InstallDir"		"SyntheticTestServer"
+	"MountedDepots" { "4000002" "1111222233334444555" }
+}

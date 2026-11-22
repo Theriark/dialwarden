@@ -19,6 +19,8 @@
   },
   "dependencies": {
     "@dialwarden/entitlement": "workspace:*",
+    "@dialwarden/packs": "workspace:*",
+    "@dialwarden/packs-schema": "workspace:*",
     "@fastify/cookie": "^11.0.2",
     "@fastify/swagger": "^9.5.1",
     "argon2": "^0.43.1",

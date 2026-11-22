@@ -1,24 +1,18 @@
-import { existsSync, readdirSync } from "node:fs";
+// pnpm packs:check (dev-work-plan P3-A step 3), part of pnpm test: every pack
+// folder holds a pack.json that passes the schema and reference checks, every
+// setting locator resolves on its synthetic fixture, and every default equals
+// the fixture value where the fixture sets one.
+import { fileURLToPath } from "node:url";
+import { checkPacksFolder } from "@dialwarden/packs-schema/node";
 import { describe, expect, it } from "vitest";
 
-const root = new URL("./", import.meta.url);
-const skip = new Set(["node_modules"]);
+const root = fileURLToPath(new URL("./", import.meta.url));
 
 describe("packs folder", () => {
-  it("holds a pack.json in every pack folder", () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- this folder
-    const entries = readdirSync(root, { withFileTypes: true });
-    const missing: string[] = [];
-    for (const entry of entries) {
-      if (!entry.isDirectory() || skip.has(entry.name)) {
-        continue;
-      }
-      const pack = new URL(`${entry.name}/pack.json`, root);
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- listed above
-      if (!existsSync(pack)) {
-        missing.push(entry.name);
-      }
-    }
-    expect(missing).toEqual([]);
+  it("passes pnpm packs:check", () => {
+    const failed = checkPacksFolder(root).filter(
+      (report) => report.problems.length > 0,
+    );
+    expect(failed).toEqual([]);
   });
 });
