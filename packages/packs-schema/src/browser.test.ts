@@ -3,18 +3,15 @@
 // on the server. This file runs the package root under jsdom and compares
 // with the golden list that validate.test.ts also checks under node, and it
 // keeps Node built-ins and the node entry out of the root's import graph.
+// Under jsdom import.meta.url is no file URL, so files are found from the
+// path of this test file instead.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { GOLDEN_ISSUES, GOLDEN_VALUES, testPack } from "../test/kit.js";
-import { validate } from "./index.js";
+import { GOLDEN_ISSUES, GOLDEN_VALUES } from "../test/golden.js";
+import { type Pack, validate } from "./index.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- the package's own sources */
-
-// Plain paths, not URL objects: jsdom puts its own URL class on globalThis.
-const SOURCE = dirname(fileURLToPath(import.meta.url));
-const PACKAGES = join(SOURCE, "..", "..");
 
 /** Workspace packages the root imports, by name. */
 const WORKSPACE = new Map([["@dialwarden/formats", "formats/src/index.ts"]]);
@@ -23,6 +20,19 @@ const WORKSPACE = new Map([["@dialwarden/formats", "formats/src/index.ts"]]);
 const NPM = new Set(["json-logic-js", "jsonc-parser"]);
 
 const SPECIFIER = /(?:from|import)\s*\(?\s*"([^"]+)"/g;
+
+/** packages/packs-schema/src, the folder of this test file. */
+function sourceDir(): string {
+  const path = expect.getState().testPath;
+  if (path === undefined) throw new Error("no test path");
+  return dirname(path);
+}
+
+/** The synthetic test pack. */
+function testPack(): Pack {
+  const file = join(sourceDir(), "../test/packs/testpack/pack.json");
+  return JSON.parse(readFileSync(file, "utf8")) as Pack;
+}
 
 /** A relative import, a workspace package or an allowed npm package. */
 function isKnown(name: string): boolean {
@@ -35,13 +45,14 @@ function resolve(name: string, from: string): string | undefined {
     return join(dirname(from), name.replace(/\.js$/, ".ts"));
   }
   const workspace = WORKSPACE.get(name);
-  return workspace === undefined ? undefined : join(PACKAGES, workspace);
+  if (workspace === undefined) return undefined;
+  return join(sourceDir(), "..", "..", workspace);
 }
 
 /** Every module the package root reaches, with the names it imports. */
 function importGraph(): Map<string, string[]> {
   const graph = new Map<string, string[]>();
-  const queue = [join(SOURCE, "index.ts")];
+  const queue = [join(sourceDir(), "index.ts")];
   for (let file = queue.pop(); file !== undefined; file = queue.pop()) {
     if (graph.has(file)) continue;
     const text = readFileSync(file, "utf8");

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  GOLDEN_ISSUES,
-  GOLDEN_VALUES,
-  settingOf,
-  testPack,
-  withSetting,
-} from "../test/kit.js";
+import { GOLDEN_ISSUES, GOLDEN_VALUES } from "../test/golden.js";
+import { settingOf, testPack, withSetting } from "../test/kit.js";
 import type { JsonValue, Pack, PackFile } from "./types.js";
 import {
   checkValue,
