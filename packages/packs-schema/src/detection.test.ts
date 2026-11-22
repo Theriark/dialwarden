@@ -206,6 +206,8 @@ describe("detection warnings with a * part", () => {
   });
 
   it("looks at no more than MAX_WILDCARD_ENTRIES entries", async () => {
+    // The bound is part of the packs contract (packs/README.md): pin it.
+    expect(MAX_WILDCARD_ENTRIES).toBe(64);
     const count = MAX_WILDCARD_ENTRIES + 1;
     const names = Array.from({ length: count }, (_, i) => `w${i}`);
     const folders = { "Saved/Worlds": names };

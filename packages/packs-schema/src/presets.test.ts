@@ -58,9 +58,11 @@ describe("presets engine", () => {
 });
 
 describe("secret masking", () => {
-  it("masks secret defaults and preset values, nothing else", () => {
+  it("masks non-empty secret defaults and preset values, nothing else", () => {
     const masked = maskSecrets(pack);
-    expect(settingOf(masked, "AdminPassword").default).toBe(SECRET_MASK);
+    // The testpack's admin password default is empty; an empty value
+    // reveals nothing, so it stays empty for the rules that read it.
+    expect(settingOf(masked, "AdminPassword").default).toBe("");
     expect(settingOf(masked, "ServerName").default).toBe(
       "Synthetic Test Server",
     );
@@ -79,11 +81,12 @@ describe("secret masking", () => {
   it("masks one value of a secret setting", () => {
     const secret = settingOf(pack, "AdminPassword");
     expect(maskValue(secret, "letmein")).toBe(SECRET_MASK);
+    expect(maskValue(secret, "")).toBe("");
     expect(maskValue(settingOf(pack, "Mode"), "Casual")).toBe("Casual");
     expect(maskValue(undefined, 3)).toBe(3);
   });
 
-  it("masks any secret default and keeps a secret without one as it is", () => {
+  it("masks any non-empty secret default and keeps a secret without one as it is", () => {
     const port = { ...settingOf(pack, "Port"), secret: true };
     const bare: Setting = {
       key: "Token",
@@ -95,6 +98,17 @@ describe("secret masking", () => {
     };
     const masked = maskSecrets({ ...pack, settings: [port, bare] });
     expect(masked.settings).toEqual([{ ...port, default: SECRET_MASK }, bare]);
+  });
+
+  it("keeps an empty value in a preset empty", () => {
+    const cleared = {
+      ...pack,
+      presets: [
+        { id: "cleared", label: "Cleared", values: { AdminPassword: "" } },
+      ],
+    };
+    const masked = maskSecrets(cleared);
+    expect(masked.presets.at(0)?.values).toEqual({ AdminPassword: "" });
   });
 });
 

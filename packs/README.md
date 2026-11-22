@@ -6,10 +6,10 @@ a `pack.json` that follows contract C3. The JSON Schema is
 `packages/packs-schema/test/packs/testpack` shows every part of it. The server
 loads every pack at start and refuses a broken one with a log line.
 
-| Pack | Files | Settings |
-| --- | --- | --- |
-| palworld | PalWorldSettings.ini (OptionSettings struct), app-managed launch line | 130 |
-| enshrouded | enshrouded_server.json | 61 |
+| Pack       | Files                                                                 | Settings |
+| ---------- | --------------------------------------------------------------------- | -------- |
+| palworld   | PalWorldSettings.ini (OptionSettings struct), app-managed launch line | 130      |
+| enshrouded | enshrouded_server.json                                                | 61       |
 
 Rules for every pack (dev-work-plan, Rules for every phase):
 
@@ -50,7 +50,11 @@ breaks), because LinuxGSM passes start parameters to a shell.
 - `contract.test.ts`: every setting of every listed pack round-trips through its
   format adapter on the synthetic fixture (another valid value is written and
   read back, no other setting of the file moves, and writing the fixture value
-  back gives the fixture's bytes again).
+  back gives the fixture's bytes again). Two adapters cannot always restore the
+  old bytes by design, so for those settings the test checks only the value: a
+  removed bare launch flag is added again at the end of the line (the four bare
+  Palworld flags), and a JSON list is written in JSON.stringify layout (the
+  Enshrouded tags).
 - `GAME/GAME.test.ts`: the pack's own rules fire and clear, its presets apply,
   and its launch flags (if any) refuse shell characters.
 - `kit.ts` holds the shared helpers. It is a file, not a folder, because every

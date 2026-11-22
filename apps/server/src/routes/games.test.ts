@@ -80,14 +80,16 @@ describe("game packs API", () => {
     expect(body.rules).toHaveLength(3);
     expect(body.files).toHaveLength(4);
     const secret = body.settings.find((s) => s.key === "AdminPassword");
-    expect(secret).toMatchObject({ secret: true, default: SECRET_MASK });
+    // The testpack's admin password default is empty, and an empty secret
+    // stays empty (it reveals nothing); the preset value stays masked.
+    expect(secret).toMatchObject({ secret: true, default: "" });
     const hardcore = body.presets.find((p) => p.id === "hardcore");
     expect(hardcore?.values["AdminPassword"]).toBe(SECRET_MASK);
     expect(response.body).not.toContain('"AdminPassword":"hardcore"');
     expect(response.body).not.toContain("detection");
   });
 
-  it("masks the secrets of the Palworld and Enshrouded packs", async () => {
+  it("shows the secrets of the Palworld and Enshrouded packs empty or masked", async () => {
     const { app, headers } = await signedIn(REPO_PACKS);
     const list = await app.inject({ url: GAMES, headers });
     const ids = list.json<GameList>().items.map((game) => game.id);
@@ -103,16 +105,24 @@ describe("game packs API", () => {
       const body = response.json<SettingsMeta>();
       const secrets = body.settings.filter((s) => s.secret === true);
       expect(secrets.map((s) => s.key)).toEqual(keys);
-      // Palworld's passwords have a default (empty); Enshrouded's have none.
-      const defaults = secrets.filter((s) => s.default !== undefined);
-      expect(defaults.length, id).toBe(id === "palworld" ? 2 : 0);
-      for (const s of defaults) expect(s.default).toBe(SECRET_MASK);
-      for (const preset of body.presets) {
-        const values = new Map(Object.entries(preset.values));
-        const shown = secrets.filter((s) => values.has(s.key));
-        for (const s of shown) expect(values.get(s.key)).toBe(SECRET_MASK);
+      // An empty secret stays empty (it reveals nothing), so the rules that
+      // read a password agree in the browser and on the server: Palworld's
+      // password defaults are empty, Enshrouded's are absent.
+      for (const key of keys) {
+        const secret = secrets.find((s) => s.key === key);
+        expect(secret?.default, `${id} ${key}`).toBe(
+          id === "palworld" ? "" : undefined,
+        );
       }
-      expect(response.body).not.toContain("synthetic-admin-pass");
+      // No preset of the repository packs may set a secret key; the masked
+      // preset value itself is covered by the testpack above.
+      for (const preset of body.presets) {
+        const secretKeys = Object.keys(preset.values).filter((key) =>
+          secrets.some((s) => s.key === key),
+        );
+        expect(secretKeys, `${id} ${preset.id}`).toEqual([]);
+      }
+      expect(response.body).not.toContain(`"${SECRET_MASK}"`);
     }
   });
 
