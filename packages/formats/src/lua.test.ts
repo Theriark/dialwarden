@@ -55,6 +55,21 @@ describe("Lua: SandboxVars assignment", () => {
     expect(lua.get(lua.parse(bytes(multiline)), sandbox("Name"))).toBe("x\ny");
   });
 
+  it("keeps a trailing comment with the field it follows", () => {
+    const insert = (input: string) =>
+      edited(lua, input, (d) => lua.insert(d, path("t", "c"), 3));
+    expect(insert("t = {\n  a = 1, -- one\n  b = 2 -- two\n}\n")).toBe(
+      "t = {\n  a = 1, -- one\n  b = 2, -- two\n  c = 3\n}\n",
+    );
+    expect(insert("t = {\n  a = 1,   \n  b = 2, -- two\n}\n")).toBe(
+      "t = {\n  a = 1,   \n  b = 2, -- two\n  c = 3,\n}\n",
+    );
+    // A long comment may run past the line: the field goes before it.
+    expect(insert("t = {\n  b = 2, --[[ two\n  ]]\n}\n")).toBe(
+      "t = {\n  b = 2,\n  c = 3, --[[ two\n  ]]\n}\n",
+    );
+  });
+
   it("inserts fields in the style of the table", () => {
     const key = edited(lua, data, (d) => lua.insert(d, sandbox("NewKey"), 7));
     expect(key).toBe(

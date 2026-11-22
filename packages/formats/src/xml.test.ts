@@ -38,12 +38,29 @@ describe("XML property list", () => {
   });
 
   it("inserts after the last property with its indentation", () => {
+    // The trailing spaces stay on the line of the property they follow.
     const out = edited(xml, data, (d) => xml.insert(d, prop("NewProp"), "x"));
     expect(out).toBe(
       source.replace(
         'value="8" />  \n',
-        'value="8" />\n\t<property name="NewProp" value="x" />  \n',
+        'value="8" />  \n\t<property name="NewProp" value="x" />\n',
       ),
+    );
+  });
+
+  it("keeps a trailing comment with the property it follows", () => {
+    const input = '<S>\n  <property name="A" value="1"/> <!-- a -->\n</S>\n';
+    const out = edited(xml, input, (d) => xml.insert(d, prop("B"), 2));
+    expect(out).toBe(
+      '<S>\n  <property name="A" value="1"/> <!-- a -->\n' +
+        '  <property name="B" value="2"/>\n</S>\n',
+    );
+    // Anything else after the property keeps the insert next to it.
+    const shared = '<S>\n  <property name="A" value="1"/></S>\n';
+    const next = edited(xml, shared, (d) => xml.insert(d, prop("B"), 2));
+    expect(next).toBe(
+      '<S>\n  <property name="A" value="1"/>\n' +
+        '  <property name="B" value="2"/></S>\n',
     );
   });
 

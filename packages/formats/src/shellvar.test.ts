@@ -59,6 +59,32 @@ describe("shell variables: LinuxGSM cfg", () => {
     expect(out).toBe(source);
   });
 
+  it("never writes a live command into a value that uses references", () => {
+    // LinuxGSM sources the cfg with bash: only plain $NAME and ${NAME} stay
+    // live; command substitution, arithmetic and ${...} operators are text.
+    const set = (value: string) =>
+      edited(shell, data, (d) => shell.set(d, name("startparameters"), value));
+    const line = (value: string) =>
+      source.replace(
+        `"-name '\${servername}' -port \${port}"`,
+        () => `"${value}"`,
+      );
+    expect(set("-port 2456 $(touch /tmp/x)")).toBe(
+      line("-port 2456 \\$(touch /tmp/x)"),
+    );
+    expect(set("-port `id` $((1+1))")).toBe(line("-port \\`id\\` \\$((1+1))"));
+    expect(set("-port ${port:-$(id)}")).toBe(line("-port \\${port:-\\$(id)}"));
+    expect(set("-port ${port} -name $servername $1 $")).toBe(
+      line("-port ${port} -name $servername \\$1 \\$"),
+    );
+    const out = set("-port 2456 $(touch /tmp/x) `id`");
+    const after = shell.parse(bytes(out));
+    expect(shell.get(after, name("startparameters"))).toBe(
+      "-port 2456 $(touch /tmp/x) `id`",
+    );
+    expect(shell.lint(after).map((i) => i.code)).not.toContain("expansion");
+  });
+
   it("appends, refuses and removes", () => {
     const added = edited(shell, data, (d) =>
       shell.insert(d, name("newsetting"), 5),
@@ -151,6 +177,27 @@ describe("shell variables: systemd EnvironmentFile", () => {
       systemd.insert(d, name("NEW"), 1),
     );
     expect(added).toBe(`${source}NEW=1\n`);
+  });
+
+  it("reads and writes backslashes as systemd does", () => {
+    // Unquoted, \ keeps the next character: the service sees pass.
+    const escaped = systemd.parse(bytes('A=pa\\ss\nB=c\\\\d\nC="e\\\\f"\n'));
+    expect(systemd.lint(escaped)).toEqual([]);
+    expect(systemd.get(escaped, name("A"))).toBe("pass");
+    expect(systemd.get(escaped, name("B"))).toBe("c\\d");
+    expect(systemd.get(escaped, name("C"))).toBe("e\\f");
+    // A value with a \ is written in double quotes, the \ escaped.
+    const out = edited(systemd, data, (d) =>
+      systemd.set(d, name("SERVER_ARGS"), "pa\\ss"),
+    );
+    expect(out).toBe(source.replace("-batchmode -nographics", '"pa\\\\ss"'));
+    expect(systemd.get(systemd.parse(bytes(out)), name("SERVER_ARGS"))).toBe(
+      "pa\\ss",
+    );
+    const added = edited(systemd, data, (d) =>
+      systemd.insert(d, name("NEW"), "x\\y"),
+    );
+    expect(added).toBe(`${source}NEW="x\\\\y"\n`);
   });
 
   it("follows each dialect's comment and line rules", () => {
