@@ -363,9 +363,11 @@ function createShellVarAdapter(
       const line = `${locator.name}=${text}`;
       const src = shell.source;
       const last = shell.assignments.at(-1);
-      // A value that ends the file with a \ line continuation would take
+      // A value that ends the file with an unescaped \ (a line continuation,
+      // or a lone \ that the added line break would turn into one) would take
       // the new line into it; an empty line ends the value first.
-      const open = last?.valueEnd === src.length && src.text.endsWith("\\\n");
+      const lone = /(^|[^\\])(\\\\)*\\\n?$/.test(src.text);
+      const open = last?.valueEnd === src.length && lone;
       const lines = open ? ["", line] : [line];
       return verified(adapter, shell, [appendLines(src, lines)]);
     },

@@ -190,4 +190,16 @@ describe("shell variables: malformed files", () => {
     expect(shell.get(doc, name("A"))).toBe("x");
     expect(shell.get(doc, name("B"))).toBe("1");
   });
+
+  it("ends a lone \\ at the file end before appending a variable", () => {
+    const out = edited(shell, 'A=""\\', (d) => shell.insert(d, name("B"), 1));
+    expect(out).toBe('A=""\\\n\nB="1"');
+    const doc = shell.parse(bytes(out));
+    expect(shell.get(doc, name("A"))).toBe("");
+    expect(shell.get(doc, name("B"))).toBe("1");
+    const escaped = edited(shell, "A=x\\\\", (d) =>
+      shell.insert(d, name("B"), 1),
+    );
+    expect(escaped).toBe('A=x\\\\\nB="1"');
+  });
 });

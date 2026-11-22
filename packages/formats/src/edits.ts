@@ -11,7 +11,8 @@ import {
 /**
  * Applies the splices to a copy and parses the result. An edit that would
  * leave an error in a file that had none is refused, so a write can never
- * produce a file the adapter itself cannot read.
+ * produce a file the adapter itself cannot read. So is an edit that moves a
+ * U+FEFF inside the file to its start, where it would read as a BOM.
  */
 export function verified(
   adapter: Pick<FormatAdapter, "id" | "parse">,
@@ -20,6 +21,12 @@ export function verified(
 ): Splice[] {
   if (splices.length === 0) return splices;
   const after = adapter.parse(applySplices(doc.bytes, splices));
+  if (after.bom && !doc.bom) {
+    throw new FormatError(
+      "invalid-value",
+      `${adapter.id}: the edit would turn a U+FEFF into a byte order mark`,
+    );
+  }
   const error = after.issues.find((issue) => issue.severity === "error");
   if (error) {
     const where = `line ${error.line}, column ${error.column}`;

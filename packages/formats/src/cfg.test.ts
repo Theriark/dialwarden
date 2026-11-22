@@ -114,6 +114,14 @@ describe("console cfg edge cases", () => {
     expect(slash).toBe('x "b/"//c\n');
   });
 
+  it("refuses an edit that would turn a U+FEFF into a BOM", () => {
+    const doc = cfg.parse(bytes(`Z\n${String.fromCharCode(0xfeff)}Z`));
+    expect(cfg.get(doc, command("Z"))).toBe("");
+    expect(errorCode(() => cfg.remove(doc, command("Z")))).toBe(
+      "invalid-value",
+    );
+  });
+
   it("reads and replaces several arguments", () => {
     const doc = cfg.parse(bytes("sv_tags a b\n"));
     expect(cfg.get(doc, command("sv_tags"))).toBe("a b");
