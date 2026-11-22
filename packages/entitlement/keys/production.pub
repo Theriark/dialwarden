@@ -1,0 +1,6 @@
+# Production licence key slot (packages/entitlement/src/keys.ts).
+# Placeholder: it holds no key, so it verifies nothing. Ruben creates the
+# production key pair offline and posts the public key and its fingerprint
+# (dev-work-plan people dependency 5); P10-C commits the public key here as one
+# SPKI PEM block with the SHA-256 fingerprint of its DER encoding in a comment.
+# Never put a private key in this repository.

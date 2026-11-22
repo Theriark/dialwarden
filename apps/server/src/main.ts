@@ -1,7 +1,9 @@
 // Container entry point: port 8080 (deploy/dokploy.json, Dockerfile EXPOSE).
 import { buildApp } from "./app.js";
 
-const app = buildApp();
+const app = await buildApp();
+const { config } = app.ctx;
+app.ctx.backups.start(config.backupSchedule, config.backupTimezone);
 
 const shutdown = (signal: string) => {
   app.log.info({ signal }, "shutting down");
@@ -13,4 +15,4 @@ const shutdown = (signal: string) => {
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
 
-await app.listen({ host: "0.0.0.0", port: 8080 });
+await app.listen({ host: config.host, port: config.port });

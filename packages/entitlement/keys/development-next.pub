@@ -1,0 +1,4 @@
+# Development licence key slot, next (packages/entitlement/src/keys.ts).
+# Empty. Used only for a key rotation: the new development public key goes here
+# first, so licences signed with either key verify during the change.
+# This key verifies internal-dev licences only, never customer licences.

@@ -14,8 +14,9 @@
     "format": "prettier --write .",
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest run",
-    "build": "pnpm -r run build && pnpm run check:assets",
+    "build": "pnpm -r run build && pnpm run check:assets && pnpm run check:bundle",
     "check:assets": "node tools/notices/src/check-assets.mjs apps/web/dist",
+    "check:bundle": "node tools/licence/src/check-bundle.mjs",
     "notices": "node tools/notices/src/notices.mjs THIRD_PARTY_NOTICES",
     "licence:audit": "node tools/notices/src/audit.mjs docs/licences.md"
   },

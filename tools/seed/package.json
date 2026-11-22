@@ -6,6 +6,7 @@
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed": "node seed-accounts.mjs"
   }
 }
