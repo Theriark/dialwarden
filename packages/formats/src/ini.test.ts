@@ -154,7 +154,7 @@ describe("UE INI: CRLF, BOM and trailing spaces", () => {
     expect(ue.get(doc, field("ServerName"))).toBe('Tidewater "North"');
     const out = edited(ue, data, (d) => ue.set(d, field("ExpRate"), 3));
     expect(out).toBe(source.replace("ExpRate=2.000000", "ExpRate=3.000000"));
-    expect(out.startsWith("\\u{FEFF}")).toBe(true);
+    expect(out.startsWith("\u{FEFF}")).toBe(true);
     const added = edited(ue, data, (d) => ue.insert(d, key(PAL, "Extra"), "1"));
     expect(added).toBe(
       source.replace("True)   \r\n", "True)   \r\nExtra=1\r\n"),
