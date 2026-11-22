@@ -1,5 +1,6 @@
 // The request guard, one onRequest hook for every route:
-// 1. reads the session from the signed cookie;
+// 1. reads the session from the signed cookie, except on the web route
+//    (static files only, contract C8);
 // 2. refuses API calls with 503 while a first-run import runs;
 // 3. checks the CSRF header on every state-changing request with a session;
 // 4. enforces config.auth. Every matched route defaults to "user", so a route
@@ -53,8 +54,10 @@ export function registerGuard(app: FastifyInstance): void {
     if (app.ctx.maintenance && routePath(request).startsWith("/api/")) {
       throw new ApiError(503, "maintenance");
     }
-    // While a first-run import swaps the database the store is closed.
-    if (app.ctx.store.isOpen) {
+    // While a first-run import swaps the database the store is closed. The
+    // web route serves static files that carry no user data: no cookie check
+    // and no database lookup.
+    if (app.ctx.store.isOpen && request.routeOptions.config.web !== true) {
       readSession(app, request);
     }
     const session = request.session;
