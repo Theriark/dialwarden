@@ -1,6 +1,7 @@
 // The built web app and the security headers (contract C8): the P1-D tests 1
-// to 12 of web-serving-decision (THE-2195). Every test writes its own dist
-// folder, with files next to it and links out of it that are never served.
+// to 12 of web-serving-decision (THE-2195) and the threat tests T1 to T9 of
+// its security review (THE-2250). Every test writes its own dist folder, with
+// files next to it and links out of it that are never served.
 import { createHash } from "node:crypto";
 import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
@@ -66,6 +67,12 @@ const API_MISSES = [
   ["GET", "/api/v1/nope"],
   ["POST", "/login"],
   ["POST", "/"],
+] as const;
+
+const STATIC_WRITES = [
+  ["POST", "/assets/app-abc.js"],
+  ["PUT", "/index.html"],
+  ["DELETE", "/"],
 ] as const;
 
 const TRAVERSALS = [
@@ -448,6 +455,178 @@ describe("web app (contract C8)", () => {
     expect(methods).toEqual(["GET", "HEAD"]);
     for (const route of web) {
       expect(route).toMatchObject({ auth: "public", entitlement: null });
+    }
+  });
+});
+
+describe("web app threat tests (security review THE-2250)", () => {
+  // T1.
+  it("keeps the API route auth for an encoded /api prefix", async () => {
+    const { dist, html } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const owner = await setupOwner(current.app);
+    const resolve = vi.spyOn(current.app.ctx.sessions, "resolve");
+    const url = "/%61pi/v1/system/status";
+    const anonymous = await get(url);
+    expect(anonymous.statusCode).toBe(401);
+    expect(anonymous.json()).toEqual({ error: "unauthenticated" });
+    expect(anonymous.headers["content-security-policy"]).toBe(LOCKED);
+    expect(anonymous.headers["cache-control"]).toBe("no-store");
+    expect(anonymous.body).not.toBe(html);
+    const signed = await get(url, { cookie: owner.cookie });
+    expect(signed.statusCode).toBe(200);
+    expect(signed.json()).toHaveProperty("version");
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
+  // T2.
+  it("never reaches an API handler through an encoded slash", async () => {
+    const { dist } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    reference = await testApp({ extraEnv: { WEB_DIST: NO_WEB } });
+    const owner = await setupOwner(current.app);
+    const resolve = vi.spyOn(current.app.ctx.sessions, "resolve");
+    const headers = { cookie: owner.cookie };
+    for (const url of ["/api%2Fv1/auth/session", "/api%2fv1/system/status"]) {
+      const response = await get(url, headers);
+      const before = await reference.app.inject({ url, headers });
+      expect(response.statusCode, url).toBe(404);
+      expect(response.json(), url).toEqual(before.json());
+      expect(response.body, url).not.toContain("csrfToken");
+      expect(response.headers["content-security-policy"], url).toBe(LOCKED);
+      expect(response.headers["cache-control"], url).toBe("no-store");
+    }
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  // T3.
+  it("never decodes a double-encoded path into a file", async () => {
+    const { dist, html } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const urls = [
+      "/%252e%252e/package.json",
+      "/assets/%252e%252e%252f%252e%252e%252fbuild-info.json",
+      "/%252eenv",
+    ];
+    for (const url of urls) {
+      const response = await get(url);
+      for (const marker of [PARENT_MARKER, BUILD_MARKER, DOT_MARKER]) {
+        expect(response.body, url).not.toContain(marker);
+      }
+      const status = response.statusCode;
+      const ok = status === 404 || (status === 200 && response.body === html);
+      expect(ok, `${url} answered ${status}`).toBe(true);
+    }
+  });
+
+  // T4.
+  it("answers asset-shaped misses with the 404 JSON", async () => {
+    const { dist } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    reference = await testApp({ extraEnv: { WEB_DIST: NO_WEB } });
+    const urls = ["/assets/missing.js%3Fv=1", "/MISSING.JS", "/assets/Missing"];
+    for (const url of urls) {
+      const response = await get(url);
+      const before = await reference.app.inject({ url });
+      expect(response.statusCode, url).toBe(404);
+      expect(response.json(), url).toEqual(before.json());
+      expect(response.headers["content-security-policy"], url).toBe(LOCKED);
+      expect(response.headers["content-type"], url).not.toContain("text/html");
+    }
+    // Accepted (I1): an empty last segment is a client route, served as the
+    // page with nosniff, so a browser never runs it as a script.
+    const slash = await get("/missing.js/");
+    const policy = pagePolicy(`'self' ${hashOf(THEME)}`);
+    expect(slash.statusCode).toBe(200);
+    expect(slash.headers["content-type"]).toBe(HTML_TYPE);
+    expect(slash.headers["x-content-type-options"]).toBe("nosniff");
+    expect(slash.headers["content-security-policy"]).toBe(policy);
+  });
+
+  // T5.
+  it("answers non-canonical API spellings with the page only", async () => {
+    const { dist, html } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const owner = await setupOwner(current.app);
+    const resolve = vi.spyOn(current.app.ctx.sessions, "resolve");
+    for (const url of ["//api/v1/auth/session", "/API/v1/auth/session"]) {
+      const response = await get(url, { cookie: owner.cookie });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).toBe(html);
+      expect(response.body, url).not.toContain("csrfToken");
+      expect(response.headers["set-cookie"], url).toBeUndefined();
+    }
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  // T6.
+  it("never sets a cookie on the web route", async () => {
+    const { dist } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const owner = await setupOwner(current.app);
+    for (const url of ["/", "/settings/licence", "/assets/app-abc.js"]) {
+      const response = await get(url, { cookie: owner.cookie });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.headers["set-cookie"], url).toBeUndefined();
+    }
+  });
+
+  // T7.
+  it("keeps the page headers on a 304 for the page", async () => {
+    const { dist } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const first = await get("/");
+    const etag = String(first.headers.etag);
+    const cached = await get("/", { "if-none-match": etag });
+    const policy = pagePolicy(`'self' ${hashOf(THEME)}`);
+    expect(cached.statusCode).toBe(304);
+    expect(cached.body).toBe("");
+    expect(cached.headers["content-security-policy"]).toBe(policy);
+    expect(cached.headers["x-frame-options"]).toBe("DENY");
+    expect(cached.headers).toMatchObject(COMMON_HEADERS);
+  });
+
+  // T8.
+  it("hashes an inline script with CR LF as the browser does", async () => {
+    const { dist } = await fixture();
+    const html = page([THEME]).replace(/\n/g, "\r\n");
+    writeFileSync(join(dist, "index.html"), html);
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const response = await get("/");
+    expect(response.body).toBe(html);
+    const policy = String(response.headers["content-security-policy"]);
+    expect(policy).toBe(pagePolicy(`'self' ${hashOf(THEME)}`));
+    expect(policy).not.toContain(hashOf(THEME.replace(/\n/g, "\r\n")));
+  });
+
+  // T9 (with the correction at the end of the review).
+  it("answers other methods on static paths like the API-only server", async () => {
+    const { dist } = await fixture();
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    reference = await testApp({ extraEnv: { WEB_DIST: NO_WEB } });
+    const headers = { cookie: (await setupOwner(current.app)).cookie };
+    const referenceOwner = await setupOwner(reference.app);
+    const referenceHeaders = { cookie: referenceOwner.cookie };
+    for (const [method, url] of STATIC_WRITES) {
+      const name = `${method} ${url}`;
+      // T9a: no session, the 404 JSON.
+      const anonymous = await current.app.inject({ method, url });
+      const before = await reference.app.inject({ method, url });
+      expect(anonymous.statusCode, name).toBe(404);
+      expect(anonymous.json(), name).toEqual(before.json());
+      // T9b: a session without the CSRF header. No route matched, so the
+      // guard reads the session and refuses first, as without a web build.
+      const signed = await current.app.inject({ method, url, headers });
+      const expected = await reference.app.inject({
+        method,
+        url,
+        headers: referenceHeaders,
+      });
+      expect(signed.statusCode, name).toBe(403);
+      expect(signed.statusCode, name).toBe(expected.statusCode);
+      expect(signed.json(), name).toEqual({ error: "csrf" });
+      expect(signed.json(), name).toEqual(expected.json());
+      expect(signed.headers["content-type"], name).not.toContain("text/html");
     }
   });
 });
