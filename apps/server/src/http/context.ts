@@ -8,6 +8,7 @@ import type {
   EntitlementGate,
   FeatureKey,
 } from "@dialwarden/entitlement";
+import type { Pack } from "@dialwarden/packs-schema";
 import type { ActivityService } from "../activity/service.js";
 import type { AuthService } from "../auth/service.js";
 import type { SetupToken } from "../auth/first-run.js";
@@ -40,6 +41,8 @@ export interface AppContext {
   /** The one-time first-run setup token (DATA_DIR/setup-token). */
   setupToken: SetupToken;
   backups: BackupService;
+  /** The game packs loaded at start, by pack id (contract C3). */
+  packs: ReadonlyMap<string, Pack>;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */

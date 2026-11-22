@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { bytes, edited, errorCode, text } from "../test/harness.js";
-import { fixture } from "../test/kits.js";
+import {
+  bytes,
+  checkDocument,
+  edited,
+  errorCode,
+  text,
+} from "../test/harness.js";
+import { fixture, luaKit } from "../test/kits.js";
 import { luaAdapter as lua, type LuaLocator } from "./index.js";
 
 function path(...keys: (string | number)[]): LuaLocator {
@@ -175,6 +181,20 @@ describe("Lua: errors and duplicates", () => {
     expect(codes("x = { a }")).toEqual(["unsupported"]);
     expect(codes("x = - y")).toEqual(["unsupported"]);
     expect(codes("x = { a = 1 b = 2 }")).toEqual(["syntax"]);
+    expect(codes("x = 1 return { a = 1 }")).toEqual(["unsupported"]);
+  });
+
+  it("refuses globals mixed with return { ... }", () => {
+    // Fuzz seed 55001267: SandboxVars was listed but set found no such key.
+    const seed = text(fixture("lua/sandbox-like.lua"));
+    const mixed = seed.replace("true,\n", "true,}return {\n");
+    const doc = lua.parse(bytes(mixed));
+    expect(lua.lint(doc).map((issue) => issue.code)).toEqual(["unsupported"]);
+    for (const locator of [sandbox("Zombies"), path("Disabled")]) {
+      expect(errorCode(() => lua.set(doc, locator, 1))).toBe("parse-error");
+      expect(errorCode(() => lua.remove(doc, locator))).toBe("parse-error");
+    }
+    checkDocument(luaKit, bytes(mixed), null, 1073741826);
   });
 
   it("warns about duplicates and reads the last one", () => {

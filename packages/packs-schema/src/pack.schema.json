@@ -1,0 +1,432 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dialwarden.theriark.dev/schemas/pack.json",
+  "title": "Dialwarden game pack (contract C3)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "displayName",
+    "steamAppId",
+    "builds",
+    "os",
+    "detection",
+    "files",
+    "settings",
+    "rules",
+    "presets",
+    "probes",
+    "hooksSupported",
+    "sources"
+  ],
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 200 },
+    "id": { "$ref": "#/$defs/packId" },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})$"
+    },
+    "displayName": { "$ref": "#/$defs/plainText80" },
+    "steamAppId": { "type": "integer", "minimum": 1, "maximum": 99999999 },
+    "builds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from"],
+      "properties": {
+        "from": { "type": "integer", "minimum": 0 },
+        "to": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "os": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "$ref": "#/$defs/os" }
+    },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["markers"],
+      "properties": {
+        "markers": {
+          "type": "array",
+          "maxItems": 20,
+          "items": { "$ref": "#/$defs/marker" }
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "message"],
+            "properties": {
+              "path": { "$ref": "#/$defs/relativePath" },
+              "os": { "$ref": "#/$defs/osList" },
+              "message": { "$ref": "#/$defs/ownWords" }
+            }
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "settings": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2000,
+      "items": { "$ref": "#/$defs/setting" }
+    },
+    "rules": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "presets": {
+      "type": "array",
+      "maxItems": 50,
+      "items": { "$ref": "#/$defs/preset" }
+    },
+    "probes": {
+      "type": "array",
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/probe" }
+    },
+    "hooksSupported": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["save", "stop", "start", "restart"]
+      }
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "string",
+        "maxLength": 500,
+        "pattern": "^https?://[^\\s<>\"]+$"
+      }
+    }
+  },
+  "$defs": {
+    "packId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,39}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,39}$"
+    },
+    "settingKey": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]*(\\.[A-Za-z0-9_-]+)*$"
+    },
+    "plainText80": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^<>\\u0000-\\u001f]+$"
+    },
+    "ownWords": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "^[^<>\\u0000-\\u001f]+$"
+    },
+    "os": { "enum": ["linux", "windows"] },
+    "osList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "$ref": "#/$defs/os" }
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300,
+      "pattern": "^[^/\\\\\\u0000-\\u001f][^\\\\\\u0000-\\u001f]*$"
+    },
+    "marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "os": { "$ref": "#/$defs/osList" }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "paths", "adapter", "encoding", "applyPolicy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "linux": { "$ref": "#/$defs/pathList" },
+            "windows": { "$ref": "#/$defs/pathList" }
+          }
+        },
+        "adapter": {
+          "enum": [
+            "ueini",
+            "ini",
+            "json",
+            "jsonc",
+            "xml",
+            "lua",
+            "cfg",
+            "shellvar",
+            "shellvar-systemd",
+            "launch"
+          ]
+        },
+        "encoding": { "enum": ["utf-8"] },
+        "applyPolicy": { "enum": ["anytime", "stopped-only"] }
+      }
+    },
+    "pathList": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": { "$ref": "#/$defs/relativePath" }
+    },
+    "locator": {
+      "type": "object",
+      "required": ["kind"],
+      "discriminator": { "propertyName": "kind" },
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "section", "key"],
+          "properties": {
+            "kind": { "const": "ini" },
+            "section": { "type": ["string", "null"], "maxLength": 200 },
+            "key": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "index": { "type": "integer", "minimum": 0, "maximum": 1000 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "key", "field"],
+          "properties": {
+            "kind": { "const": "struct" },
+            "key": { "type": "string", "minLength": 1, "maxLength": 200 },
+            "field": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "pointer"],
+          "properties": {
+            "kind": { "const": "json" },
+            "pointer": {
+              "type": "string",
+              "maxLength": 300,
+              "pattern": "^(/[^/]*)+$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "property"],
+          "properties": {
+            "kind": { "const": "xml" },
+            "property": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "path"],
+          "properties": {
+            "kind": { "const": "lua" },
+            "path": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "items": {
+                "anyOf": [
+                  { "type": "string", "minLength": 1, "maxLength": 200 },
+                  { "type": "integer", "minimum": 1 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "command"],
+          "properties": {
+            "kind": { "const": "cfg" },
+            "command": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "shellvar" },
+            "name": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "flag"],
+          "properties": {
+            "kind": { "const": "launch" },
+            "flag": { "type": "string", "pattern": "^[-+?][^\\s=?]{1,127}$" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "setting"],
+          "properties": {
+            "kind": { "const": "codec" },
+            "setting": { "type": "string", "minLength": 1, "maxLength": 200 }
+          }
+        }
+      ]
+    },
+    "enumOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "label"],
+      "properties": {
+        "value": { "type": ["string", "number"] },
+        "label": { "$ref": "#/$defs/plainText80" }
+      }
+    },
+    "setting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "file", "locator", "type", "description"],
+      "properties": {
+        "key": { "$ref": "#/$defs/settingKey" },
+        "label": { "$ref": "#/$defs/plainText80" },
+        "file": { "$ref": "#/$defs/id" },
+        "locator": { "$ref": "#/$defs/locator" },
+        "type": {
+          "enum": [
+            "bool",
+            "int",
+            "float",
+            "enum",
+            "string",
+            "duration",
+            "list",
+            "struct"
+          ]
+        },
+        "default": true,
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number", "exclusiveMinimum": 0 },
+        "unit": { "type": "string", "minLength": 1, "maxLength": 16 },
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/enumOption" }
+        },
+        "group": { "$ref": "#/$defs/plainText80" },
+        "tags": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 300,
+          "pattern": "^[^<>\\u0000-\\u001f]+$"
+        },
+        "restartRequired": { "type": "boolean" },
+        "secret": { "type": "boolean" },
+        "since": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "removedIn": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "panelManaged": { "type": "boolean" },
+        "liveReloadable": { "type": "boolean" },
+        "overrideNote": { "$ref": "#/$defs/ownWords" }
+      },
+      "if": { "properties": { "type": { "const": "enum" } } },
+      "then": { "required": ["enum"] }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "message", "settings", "when"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "severity": { "enum": ["error", "warning", "info"] },
+        "message": { "$ref": "#/$defs/ownWords" },
+        "settings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": { "type": "string", "$ref": "#/$defs/settingKey" }
+        },
+        "when": { "type": "object" }
+      }
+    },
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/plainText80" },
+        "description": { "$ref": "#/$defs/ownWords" },
+        "values": {
+          "type": "object",
+          "maxProperties": 2000,
+          "propertyNames": { "$ref": "#/$defs/settingKey" }
+        }
+      }
+    },
+    "probe": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "palworldRest",
+            "sourceRcon",
+            "rustWebRcon",
+            "telnet7dtd",
+            "sshCommand",
+            "dockerProxy"
+          ]
+        }
+      }
+    }
+  }
+}

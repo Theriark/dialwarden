@@ -1,0 +1,341 @@
+{
+  "id": "testpack",
+  "version": "1.0.0",
+  "displayName": "Synthetic test game",
+  "steamAppId": 4000001,
+  "builds": {
+    "from": 100,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      { "path": "TestServer.sh", "os": ["linux"] },
+      { "path": "TestServer.exe", "os": ["windows"] }
+    ],
+    "warnings": [
+      {
+        "path": "Saved/override.sav",
+        "message": "An override save file exists: the game reads it instead of most of Game.ini."
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "game",
+      "paths": {
+        "linux": ["Config/LinuxServer/Game.ini"],
+        "windows": ["Config/WindowsServer/Game.ini"]
+      },
+      "adapter": "ueini",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "engine",
+      "paths": {
+        "linux": ["Config/LinuxServer/Engine.ini"],
+        "windows": ["Config/WindowsServer/Engine.ini"]
+      },
+      "adapter": "ueini",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["launch.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "lgsm",
+      "paths": {
+        "linux": ["lgsm/config-lgsm/testserver/testserver.cfg"]
+      },
+      "adapter": "shellvar",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    }
+  ],
+  "settings": [
+    {
+      "key": "MaxPlayers",
+      "label": "Player slots",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxPlayers"
+      },
+      "type": "int",
+      "default": 16,
+      "min": 1,
+      "max": 64,
+      "group": "Server",
+      "tags": ["players"],
+      "description": "How many players can be connected to the test server at the same time.",
+      "restartRequired": true
+    },
+    {
+      "key": "Difficulty",
+      "label": "Difficulty",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "Difficulty"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.5,
+      "max": 5,
+      "step": 0.5,
+      "group": "Gameplay",
+      "description": "A multiplier for how hard the synthetic game is; higher is harder."
+    },
+    {
+      "key": "PvP",
+      "label": "Player combat",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PvP"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "description": "When on, players can damage each other on the synthetic server."
+    },
+    {
+      "key": "Mode",
+      "label": "Game mode",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "Mode"
+      },
+      "type": "enum",
+      "default": "Normal",
+      "enum": [
+        { "value": "Casual", "label": "Casual" },
+        { "value": "Normal", "label": "Normal" },
+        { "value": "Hardcore", "label": "Hardcore" }
+      ],
+      "group": "Gameplay",
+      "description": "The overall rule set of the synthetic game, from relaxed to strict."
+    },
+    {
+      "key": "ServerName",
+      "label": "Server name",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerName"
+      },
+      "type": "string",
+      "default": "Synthetic Test Server",
+      "max": 64,
+      "group": "Server",
+      "description": "The name players see for this server in the synthetic server list."
+    },
+    {
+      "key": "AdminPassword",
+      "label": "Admin password",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AdminPassword"
+      },
+      "type": "string",
+      "default": "",
+      "secret": true,
+      "group": "Server",
+      "description": "The password that gives admin commands in the synthetic game; empty means none."
+    },
+    {
+      "key": "DayLength",
+      "label": "Day length",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DayLength"
+      },
+      "type": "duration",
+      "default": 60,
+      "min": 10,
+      "max": 240,
+      "unit": "min",
+      "group": "World",
+      "description": "How many real minutes one full in-game day lasts on the synthetic server."
+    },
+    {
+      "key": "Options.ExpRate",
+      "label": "Experience rate",
+      "file": "game",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "ExpRate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 20,
+      "group": "Gameplay",
+      "description": "A multiplier for the experience players earn in the synthetic game."
+    },
+    {
+      "key": "Options.DeathPenalty",
+      "label": "Death penalty",
+      "file": "game",
+      "locator": {
+        "kind": "struct",
+        "key": "OptionSettings",
+        "field": "DeathPenalty"
+      },
+      "type": "enum",
+      "default": "All",
+      "enum": [
+        { "value": "None", "label": "Keep everything" },
+        { "value": "Item", "label": "Drop items" },
+        { "value": "All", "label": "Drop everything" }
+      ],
+      "group": "Gameplay",
+      "description": "What a player loses on death in the synthetic game."
+    },
+    {
+      "key": "NetRate",
+      "label": "Network rate",
+      "file": "engine",
+      "locator": {
+        "kind": "ini",
+        "section": "Net",
+        "key": "NetRate"
+      },
+      "type": "int",
+      "default": 30,
+      "min": 10,
+      "max": 120,
+      "unit": "Hz",
+      "group": "Network",
+      "description": "How many network updates per second the synthetic server sends."
+    },
+    {
+      "key": "Port",
+      "label": "Game port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-port"
+      },
+      "type": "int",
+      "default": 7777,
+      "min": 1024,
+      "max": 65535,
+      "group": "Network",
+      "description": "The UDP port the synthetic server listens on for players.",
+      "restartRequired": true
+    },
+    {
+      "key": "Log",
+      "label": "Console log",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-log"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Server",
+      "description": "When on, the synthetic server writes its log to the console window."
+    },
+    {
+      "key": "StartParameters",
+      "label": "Start parameters",
+      "file": "lgsm",
+      "locator": {
+        "kind": "shellvar",
+        "name": "startparameters"
+      },
+      "type": "string",
+      "default": "-port=7777 -log",
+      "group": "Server",
+      "description": "The extra arguments LinuxGSM passes to the synthetic server when it starts.",
+      "panelManaged": true
+    },
+    {
+      "key": "LgsmName",
+      "label": "LinuxGSM server name",
+      "file": "lgsm",
+      "locator": {
+        "kind": "shellvar",
+        "name": "servername"
+      },
+      "type": "string",
+      "default": "Synthetic Test Server",
+      "group": "Server",
+      "description": "The server name LinuxGSM shows in its own status output."
+    }
+  ],
+  "rules": [
+    {
+      "id": "hardcore-needs-pvp",
+      "severity": "warning",
+      "message": "Hardcore mode is meant to be played with player combat on.",
+      "settings": ["Mode", "PvP"],
+      "when": {
+        "and": [
+          { "==": [{ "var": "Mode" }, "Hardcore"] },
+          { "!": [{ "var": "PvP" }] }
+        ]
+      }
+    },
+    {
+      "id": "short-days",
+      "severity": "info",
+      "message": "Days shorter than 20 minutes leave little time to build.",
+      "settings": ["DayLength"],
+      "when": { "<": [{ "var": "DayLength" }, 20] }
+    },
+    {
+      "id": "fast-experience",
+      "severity": "warning",
+      "message": "An experience rate above 10 skips most of the synthetic game.",
+      "settings": ["Options.ExpRate"],
+      "when": { ">": [{ "var": "Options.ExpRate" }, 10] }
+    }
+  ],
+  "presets": [
+    {
+      "id": "casual",
+      "label": "Casual",
+      "description": "Relaxed rules for new players of the synthetic game.",
+      "values": {
+        "Mode": "Casual",
+        "Difficulty": 0.5,
+        "PvP": false
+      }
+    },
+    {
+      "id": "hardcore",
+      "label": "Hardcore",
+      "values": {
+        "Mode": "Hardcore",
+        "Difficulty": 3,
+        "PvP": true,
+        "AdminPassword": "hardcore"
+      }
+    }
+  ],
+  "probes": [],
+  "hooksSupported": ["stop", "start", "restart"],
+  "sources": ["https://example.com/dialwarden/synthetic-test-game"]
+}

@@ -247,6 +247,12 @@ class Parser {
     const assignments: Assignment[] = [];
     while (!this.atEnd()) {
       if (this.is("return")) {
+        // Paths start at the returned table or at a global, so one file
+        // cannot have both: a global would be listed but not reachable.
+        if (assignments.length > 0) {
+          const message = "name = value and return { ... } cannot be mixed";
+          throw new ParseFail(this.current.start, "unsupported", message);
+        }
         this.advance();
         const value = this.expression();
         if (this.is(";")) this.advance();

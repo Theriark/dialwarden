@@ -2,7 +2,7 @@
   "name": "@dialwarden/packs-schema",
   "version": "27.0.0",
   "private": true,
-  "description": "Game pack schema and validation (contract C3). P0: skeleton; P3 adds the schema.",
+  "description": "Game pack schema (contract C3): pack.json validator, values validation, JSONLogic rules, presets, detection and the pack loader.",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "exports": {
@@ -10,13 +10,27 @@
       "source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./node": {
+      "source": "./src/node.ts",
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "generate": "node scripts/generate-validator.mjs",
+    "build": "node scripts/generate-validator.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "node scripts/generate-validator.mjs && tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@dialwarden/formats": "workspace:*",
+    "json-logic-js": "^2.0.5"
+  },
+  "devDependencies": {
+    "@types/json-logic-js": "^2.0.8",
+    "ajv": "^8.20.0"
   }
 }

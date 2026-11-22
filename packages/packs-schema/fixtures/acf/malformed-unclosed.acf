@@ -1,0 +1,9 @@
+"AppState"
+{
+	"appid"		"4000001"
+	"buildid"		"12345"
+	"InstalledDepots"
+	{
+		"4000002"
+		{
+			"manifest"		"1111222233334444555"
