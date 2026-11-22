@@ -286,9 +286,17 @@ function IntegrityBadge({
   className?: string | undefined;
 }) {
   if (integrity === "ok") {
-    return <Badge kind="success" className={className}>Verified</Badge>;
+    return (
+      <Badge kind="success" className={className}>
+        Verified
+      </Badge>
+    );
   }
-  return <Badge kind="error" className={className}>Incomplete</Badge>;
+  return (
+    <Badge kind="error" className={className}>
+      Incomplete
+    </Badge>
+  );
 }
 
 interface BackupRowProps {
