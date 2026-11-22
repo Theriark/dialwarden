@@ -12,6 +12,7 @@ import {
 } from "./edits.js";
 import {
   applySplices,
+  decodeUtf8,
   own,
   Source,
   sortedIssues,
@@ -224,6 +225,11 @@ class Parser {
     return token;
   }
 
+  /** A method, so the compiler reads the current token again after advance. */
+  private atEnd(): boolean {
+    return this.current.type === "eof";
+  }
+
   private is(text: string): boolean {
     const { type } = this.current;
     return (type === "symbol" || type === "name") && this.current.text === text;
@@ -239,12 +245,12 @@ class Parser {
 
   chunk(): { assignments: Assignment[]; returned: LuaTable | undefined } {
     const assignments: Assignment[] = [];
-    while (this.current.type !== "eof") {
+    while (!this.atEnd()) {
       if (this.is("return")) {
         this.advance();
         const value = this.expression();
         if (this.is(";")) this.advance();
-        if (value.kind !== "table" || this.current.type !== "eof") {
+        if (value.kind !== "table" || !this.atEnd()) {
           const message = "only return { ... } at the end is supported";
           throw new ParseFail(value.start, "unsupported", message);
         }
@@ -416,7 +422,7 @@ function luaString(src: Source, node: LuaScalar): string {
       bytes.push(raw.charCodeAt(i));
     }
   }
-  return new TextDecoder().decode(new Uint8Array(bytes));
+  return decodeUtf8(new Uint8Array(bytes));
 }
 
 function nodeValue(src: Source, node: LuaNode): Value {

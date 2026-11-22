@@ -368,7 +368,7 @@ function structValue(src: Source, value: StructValue): Value {
   if (value.kind === "quoted") {
     return unescapeQuoted(src.slice(value.start + 1, value.end - 1));
   }
-  if (value.kind === "bare") return src.slice(value.start, value.end);
+  if (value.kind !== "struct") return src.slice(value.start, value.end);
   if (value.items.every((item) => item.name === undefined)) {
     return value.items.map((item) => structValue(src, item.value));
   }
