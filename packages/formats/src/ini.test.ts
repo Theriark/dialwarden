@@ -444,10 +444,20 @@ describe("plain INI: duplicates, CRLF and malformed files", () => {
     const doc = ini.parse(fixture("ini/malformed-section.ini"));
     expect(ini.lint(doc)).toMatchObject([
       { code: "unclosed-section", severity: "error", line: 2, column: 1 },
+      { code: "key-outside-section", severity: "warning", line: 3 },
     ]);
     expect(errorCode(() => ini.set(doc, key(null, "Name"), "x"))).toBe(
       "parse-error",
     );
+  });
+
+  it("keeps a U+FEFF inside the file as part of a key", () => {
+    const doc = ini.parse(bytes("\n\u{FEFF}=1\n"));
+    expect(ini.get(doc, key(null, "\u{FEFF}"))).toBe("1");
+    const out = edited(ini, "\n\u{FEFF}=1\n", (d) =>
+      ini.set(d, key(null, "\u{FEFF}"), 2),
+    );
+    expect(out).toBe("\n\u{FEFF}=2\n");
   });
 
   it("reports lines that are not key=value", () => {
