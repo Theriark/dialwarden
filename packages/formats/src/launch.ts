@@ -339,8 +339,8 @@ function setArg(doc: LaunchDoc, arg: Arg, value: Value): Splice[] {
  * A lone \ at the end of the file is literal, but text written right after
  * it would be escaped by it, so it is rewritten as \\ (the same text) first.
  */
-function isLoneBackslash(char: Char | undefined): char is Char {
-  return char?.byte === 92 && char.to - char.from === 1 && char.context === 0;
+function isLoneBackslash(char: Char): boolean {
+  return char.byte === 92 && char.to - char.from === 1 && char.context === 0;
 }
 
 function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
@@ -356,7 +356,7 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     }
     const option = text === undefined ? flag : `${flag}=${text}`;
     const last = chain.chars.at(-1);
-    if (isLoneBackslash(last)) {
+    if (last !== undefined && isLoneBackslash(last)) {
       const raw = `\\\\${encodeIn(0, option)}`;
       return [{ start: last.from, end: last.to, text: raw }];
     }
@@ -382,7 +382,7 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     return [{ start: at, end: at, text }];
   }
   const tail = last.chars.at(-1);
-  if (isLoneBackslash(tail)) {
+  if (tail !== undefined && isLoneBackslash(tail)) {
     return [{ start: tail.from, end: tail.to, text: `\\\\ ${token}` }];
   }
   return [{ start: last.end, end: last.end, text: ` ${token}` }];
