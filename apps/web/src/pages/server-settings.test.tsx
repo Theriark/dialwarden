@@ -4,7 +4,7 @@
 // wipe of the stored password - and the server's lint of the stored values,
 // including the server-evaluated rules, shows inline (the code review
 // findings H2 and M3 of THE-2518).
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { entitlement, OWNER } from "../test/fixtures";
 import {
@@ -86,8 +86,8 @@ function settingsAnswer(overrides: Record<string, unknown> = {}) {
 }
 
 function stubWorld(extra?: Handler) {
-  return stubFetch((route) => {
-    const special = extra?.(route);
+  return stubFetch((route, init) => {
+    const special = extra?.(route, init);
     if (special !== undefined) {
       return special;
     }
@@ -129,8 +129,10 @@ describe("ServerSettingsPage", () => {
     expect(screen.getByText("Edited")).toBeTruthy();
     expect(screen.getByText("1 setting changed")).toBeTruthy();
 
-    screen.getByRole("button", { name: "Reset" }).click();
-    expect(screen.queryByText("Edited")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Edited")).toBeNull();
+    });
     expect(
       screen.queryByRole("button", { name: "Review and save" }),
     ).toBeNull();
