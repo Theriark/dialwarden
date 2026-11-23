@@ -4,13 +4,23 @@ import { queryOptions } from "@tanstack/react-query";
 import { api, ApiError, setCsrf } from "./client";
 import type {
   BackupList,
+  ChangeSet,
   EditableServers,
   Entitlement,
+  GameList,
   Health,
+  History,
+  InstanceKey,
+  RawFile,
   Registry,
+  Server,
+  ServerList,
+  ServerSettings,
+  SettingsMeta,
   SetupStatus,
   SignedIn,
   SystemStatus,
+  UserPresetList,
 } from "./schema";
 
 export const keys = {
@@ -95,4 +105,98 @@ export const backupsQuery = () =>
     queryKey: keys.backups,
     queryFn: () => api<BackupList>("/api/v1/system/backups"),
     staleTime: 15_000,
+  });
+
+// ---- P4/P5: servers, packs, change sets and history (contracts C3 and C5) ----
+
+export const p4keys = {
+  servers: ["servers"] as const,
+  server: (slug: string) => ["servers", slug] as const,
+  settings: (slug: string) => ["servers", slug, "settings"] as const,
+  rawFile: (slug: string, fileId: string) =>
+    ["servers", slug, "files", fileId] as const,
+  history: (slug: string) => ["servers", slug, "history"] as const,
+  changeSet: (id: string) => ["change-sets", id] as const,
+  games: ["games"] as const,
+  settingsMeta: (packId: string) =>
+    ["games", packId, "settings-meta"] as const,
+  instanceKey: ["connectors", "ssh-key"] as const,
+  presets: ["presets"] as const,
+};
+
+/** The fleet wall; also the plan page's server list. */
+export const serversQuery = () =>
+  queryOptions({
+    queryKey: p4keys.servers,
+    queryFn: () => api<ServerList>("/api/v1/servers"),
+    staleTime: 15_000,
+  });
+
+export const serverQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p4keys.server(slug),
+    queryFn: () => api<Server>(`/api/v1/servers/${slug}`),
+    staleTime: 15_000,
+  });
+
+export const serverSettingsQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p4keys.settings(slug),
+    queryFn: () => api<ServerSettings>(`/api/v1/servers/${slug}/settings`),
+    staleTime: 10_000,
+  });
+
+export const rawFileQuery = (slug: string, fileId: string) =>
+  queryOptions({
+    queryKey: p4keys.rawFile(slug, fileId),
+    queryFn: () => api<RawFile>(`/api/v1/servers/${slug}/files/${fileId}`),
+    staleTime: 10_000,
+  });
+
+export const historyQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p4keys.history(slug),
+    queryFn: () => api<History>(`/api/v1/servers/${slug}/history`),
+    staleTime: 10_000,
+  });
+
+export const changeSetQuery = (id: string) =>
+  queryOptions({
+    queryKey: p4keys.changeSet(id),
+    queryFn: () => api<ChangeSet>(`/api/v1/change-sets/${id}`),
+    staleTime: 0,
+  });
+
+export const gamesQuery = () =>
+  queryOptions({
+    queryKey: p4keys.games,
+    queryFn: () => api<GameList>("/api/v1/games"),
+    staleTime: 5 * 60_000,
+  });
+
+export const settingsMetaQuery = (packId: string) =>
+  queryOptions({
+    queryKey: p4keys.settingsMeta(packId),
+    queryFn: () => api<SettingsMeta>(`/api/v1/games/${packId}/settings-meta`),
+    staleTime: 5 * 60_000,
+  });
+
+/** This instance's public key, shown by the add-server wizard. */
+export const instanceKeyQuery = () =>
+  queryOptions({
+    queryKey: p4keys.instanceKey,
+    queryFn: () => api<InstanceKey>("/api/v1/connectors/ssh-key"),
+    staleTime: 5 * 60_000,
+  });
+
+/**
+ * The presets list (screen 7). P4 ships no endpoint for it: the page answers
+ * the 404 with its designed state and the e2e preset flow skips.
+ */
+export const presetsQuery = () =>
+  queryOptions({
+    queryKey: p4keys.presets,
+    queryFn: () => api<UserPresetList>("/api/v1/presets"),
+    staleTime: 15_000,
+    retry: false,
   });
