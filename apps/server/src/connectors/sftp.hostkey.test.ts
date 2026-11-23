@@ -10,11 +10,11 @@ import {
   type HostKeyPair,
   type SshServer,
 } from "../../test/ssh-server.js";
-import { testApp, type TestApp } from "../../test/helpers.js";
+import { randomPassword, testApp, type TestApp } from "../../test/helpers.js";
 import { SftpConnector, type SftpAuth } from "./sftp.js";
 import { ConnectorError } from "./types.js";
 
-const PASSWORD = "synthetic-pw-1";
+const PASSWORD = randomPassword();
 
 let hostKey: HostKeyPair;
 let server: SshServer;

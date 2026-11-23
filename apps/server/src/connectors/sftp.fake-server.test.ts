@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { loadPacks } from "@dialwarden/packs-schema/node";
 import type { Attributes, SFTPWrapper } from "ssh2";
 import { afterEach, describe, expect, it } from "vitest";
+import { randomPassword } from "../../test/helpers.js";
 import {
   hostKeyPair,
   startSshServer,
@@ -19,7 +20,7 @@ import { ConnectorError } from "./types.js";
 const PACKS = fileURLToPath(new URL("../../../../packs/", import.meta.url));
 const packs = loadPacks(PACKS).packs;
 const ROOT = "/srv/game";
-const PASSWORD = "synthetic-pw-9";
+const PASSWORD = randomPassword();
 const SAVES = `${ROOT}/Pal/Saved/SaveGames/0`;
 const MANIFEST =
   '"AppState"\n{\n\t"appid"\t\t"2394010"\n\t"buildid"\t\t"16521234"\n}\n';

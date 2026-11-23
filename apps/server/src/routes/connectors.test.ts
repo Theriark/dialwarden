@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   headersOf,
+  randomPassword,
   setupOwner,
   tempDir,
   testApp,
@@ -450,7 +451,7 @@ describe("connector endpoints: threat tests of the security review", () => {
   it("never puts the panel password in a response or a log line (T7)", async () => {
     const log = logCapture();
     const { app, headers } = await signedIn({ logStream: log.stream });
-    const password = "synthetic-pw-2";
+    const password = randomPassword();
     const unpinned = await sshServer(hostKeyPair());
     const pinnedWrong = await sshServer(hostKeyPair());
     app.ctx.connectors.knownHosts.pin(
