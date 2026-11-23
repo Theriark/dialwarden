@@ -6,8 +6,8 @@ name: CI
 #
 # Dialwarden is a single-image product (founder rule): one repository, one image
 # ghcr.io/theriark/dialwarden, the Free and Paid plans in the same build, Paid
-# unlocked by an offline signed licence key checked inside the image. There is no
-# CE/EE split and no second image.
+# unlocked by an offline signed licence key checked inside the image. There is
+# no CE/EE split and no second image.
 #
 # STRICT is "true" since phase P0 added the application: every check must run
 # and succeed, and a skipped check fails the gate. ("false" was the setup mode: a
@@ -152,7 +152,10 @@ jobs:
         run: |
           set -euo pipefail
           data="$(mktemp -d)"
-          game="$data/game/palworld-home"
+          # The game folder must sit outside the data dir: the Local connector
+          # refuses any root that overlaps it (connectors/service.ts deny).
+          games="$(mktemp -d)"
+          game="$games/palworld-home"
           mkdir -p "$game/Pal/Saved/Config/LinuxServer"
           : > "$game/PalServer.sh"
           cp packs/palworld/fixtures/PalWorldSettings.ini "$game/Pal/Saved/Config/LinuxServer/"
@@ -261,7 +264,7 @@ jobs:
               [[ "${name}" == "SYNTHETIC.md" ]] && continue
               # A whole entry only (bounded by line start or end, a pipe, a space
               # or a backtick), so r.ini is not taken as listed by server.ini.
-              escaped="$(printf '%s' "${name}" | sed -e 's/[][\.*^$+?(){}|]/\\&/g')"
+              escaped="$(printf '%s' "${name}" | sed -e 's/[]\[\.*^$+?(){}|]/\\&/g')"
               grep -qE -- '(^|[|[:space:]`])'"${escaped}"'($|[|[:space:]`])' "${dir}/SYNTHETIC.md" || {
                 echo "::error file=${file}::${name} is not listed in ${dir}/SYNTHETIC.md"
                 status=1
