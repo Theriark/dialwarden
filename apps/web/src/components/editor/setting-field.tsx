@@ -195,7 +195,7 @@ export const SettingField = memo(function SettingField({
           setting={setting}
           value={value}
           issue={issue}
-          disabled={disabled}
+          disabled={locked}
           onChange={onChange}
         />
       ) : setting.type === "int" ||
