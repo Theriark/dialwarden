@@ -42,8 +42,9 @@ describe("splitUnifiedDiff", () => {
     ].join("\n");
     const sides = splitUnifiedDiff(diff);
     expect(sides.hunks).toBe(2);
-    expect(sides.before).toBe(" keep\ngone\ntail\n end");
-    expect(sides.after).toBe(" keep\nnew\ntail\n end2");
+    // The first column is the marker; the rest is the line, blanks included.
+    expect(sides.before).toBe("keep\n gone\ntail\n end");
+    expect(sides.after).toBe("keep\n new\ntail\n end2");
   });
 
   it("returns empty sides for a diff without hunks", () => {

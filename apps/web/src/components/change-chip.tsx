@@ -54,7 +54,8 @@ export function chipText(chip: Chip): string {
     const lines = typeof chip.to === "string" ? chip.to : "";
     return `${chip.label} ${lines} (${what})`.replace("  ", " ");
   }
-  const label = chip.settingKey ?? chip.label;
+  // The pack's label is the human name; the key is the fallback only.
+  const label = chip.label === "" ? (chip.settingKey ?? "") : chip.label;
   const from = formatChipValue(chip.from);
   const to = formatChipValue(chip.to);
   if (from === "not set") {

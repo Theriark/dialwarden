@@ -69,7 +69,7 @@ describe("second sign-in step", () => {
       return { status: 200, body: OWNER };
     });
     stubWorld(state);
-    const { router, client } = startRouter("/login?redirect=%2Fpresets");
+    const { router, client } = startRouter("/login?redirect=%2Fschedules");
     const user = userEvent.setup();
     await user.type(
       await screen.findByLabelText("E-mail address"),
@@ -79,14 +79,14 @@ describe("second sign-in step", () => {
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     await screen.findByRole("heading", { name: "Second step" });
     expect(router.state.location.pathname).toBe("/login/2fa");
-    expect(router.state.location.search).toEqual({ redirect: "/presets" });
+    expect(router.state.location.search).toEqual({ redirect: "/schedules" });
     expect(router.state.location.href).not.toContain("c-1");
     expect(readPendingChallenge()).toBe("c-1");
 
     await user.type(screen.getByLabelText(CODE_LABEL), "123 456");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Coming in a later phase");
-    expect(router.state.location.pathname).toBe("/presets");
+    expect(router.state.location.pathname).toBe("/schedules");
     expect(state.bodies).toEqual([{ challenge: "c-1", code: "123456" }]);
     expect(client.getQueryData(keys.session)).toEqual(OWNER);
     expect(readPendingChallenge()).toBeNull();

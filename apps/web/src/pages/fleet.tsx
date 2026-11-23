@@ -202,12 +202,18 @@ export function FleetPage() {
 
   if (servers.isError) {
     return (
-      <ErrorState
-        message="The server list could not be loaded."
-        onRetry={() => {
-          void servers.refetch();
-        }}
-      />
+      <>
+        <PageHeader
+          title="Fleet"
+          description="Your game servers, their settings and their state."
+        />
+        <ErrorState
+          message="The server list could not be loaded."
+          onRetry={() => {
+            void servers.refetch();
+          }}
+        />
+      </>
     );
   }
 
