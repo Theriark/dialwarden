@@ -222,10 +222,7 @@ export function ServerSettingsPage() {
         // nothing to reset.
         const edited =
           key in current &&
-          !sameJson(
-            (current[key] ?? null) as JsonValue,
-            original as JsonValue,
-          );
+          !sameJson((current[key] ?? null) as JsonValue, original as JsonValue);
         if (!edited) {
           // fromEntries instead of delete: no dynamically computed property
           // removal (eslint no-dynamic-delete).
