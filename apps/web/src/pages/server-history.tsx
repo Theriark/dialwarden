@@ -80,7 +80,7 @@ function statusWord(status: ChangeSetStatus): string {
   }
 }
 
-function TimelineRow({
+export function TimelineRow({
   entry,
   last,
   onRestore,

@@ -118,8 +118,7 @@ export const p4keys = {
   history: (slug: string) => ["servers", slug, "history"] as const,
   changeSet: (id: string) => ["change-sets", id] as const,
   games: ["games"] as const,
-  settingsMeta: (packId: string) =>
-    ["games", packId, "settings-meta"] as const,
+  settingsMeta: (packId: string) => ["games", packId, "settings-meta"] as const,
   instanceKey: ["connectors", "ssh-key"] as const,
   presets: ["presets"] as const,
 };
