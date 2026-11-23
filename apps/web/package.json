@@ -13,9 +13,9 @@
   },
   "dependencies": {
     "@dialwarden/packs-schema": "workspace:*",
-    "@fontsource/inter": "5.2.0",
-    "@fontsource/jetbrains-mono": "5.2.0",
-    "@fontsource/space-grotesk": "5.2.0",
+    "@fontsource/inter": "^5.2.0",
+    "@fontsource/jetbrains-mono": "^5.2.0",
+    "@fontsource/space-grotesk": "^5.2.0",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-alert-dialog": "^1.1.0",
     "@radix-ui/react-checkbox": "^1.1.0",

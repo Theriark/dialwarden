@@ -1,0 +1,237 @@
+// @vitest-environment jsdom
+// The editor fields (screen 3) and the 400-setting performance smoke of
+// dev-work-plan P5: the controls that fit each type, the badges, the inline
+// validation, the secret masking, and the group accordion staying responsive.
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import type { Setting } from "@dialwarden/packs-schema";
+import { GroupSection } from "../../pages/server-settings";
+import { SettingField } from "./setting-field";
+
+afterEach(cleanup);
+
+const LOCATOR = { kind: "ini", section: null, key: "k" } as const;
+
+function setting(overrides: Partial<Setting> = {}): Setting {
+  return {
+    key: "expRate",
+    label: "Exp rate",
+    file: "settings",
+    locator: LOCATOR,
+    type: "float",
+    description: "How fast the experience grows.",
+    ...overrides,
+  };
+}
+
+describe("SettingField", () => {
+  it("renders a number field with the unit and the validation message", () => {
+    render(
+      <SettingField
+        setting={setting({ unit: "×", min: 0, max: 5, step: 0.5 })}
+        value={9}
+        edited
+        issue="Must be at most 5 ×."
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const input = screen.getByLabelText("Exp rate") as HTMLInputElement;
+    expect(input.type).toBe("number");
+    expect(input.value).toBe("9");
+    expect(screen.getByText("Unit: ×.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Must be at most 5 ×.",
+    );
+  });
+
+  it("shows the edited marker and resets to the default", () => {
+    const onReset = vi.fn();
+    render(
+      <SettingField
+        setting={setting({ default: 1 })}
+        value={2}
+        edited
+        issue={undefined}
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={onReset}
+      />,
+    );
+    expect(screen.getByText("Edited")).toBeTruthy();
+    screen.getByRole("button", { name: "Reset" }).click();
+    expect(onReset).toHaveBeenCalledWith("expRate");
+  });
+
+  it("masks a secret and keeps the stored value unless typed", () => {
+    const onChange = vi.fn();
+    render(
+      <SettingField
+        setting={setting({
+          key: "adminPassword",
+          label: "Admin password",
+          type: "string",
+          secret: true,
+          default: null,
+        })}
+        value="••••••"
+        edited={false}
+        issue={undefined}
+        disabled={false}
+        onChange={onChange}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const input = screen.getByLabelText("Admin password") as HTMLInputElement;
+    expect(input.type).toBe("password");
+    expect(input.value).toBe("");
+    expect(screen.getByText("Secret")).toBeTruthy();
+    expect(
+      screen.getByText(/Leave empty to keep the stored value/),
+    ).toBeTruthy();
+    fireEvent.change(input, { target: { value: "new-secret" } });
+    expect(onChange).toHaveBeenCalledWith("adminPassword", "new-secret");
+  });
+
+  it("disables a panel-managed setting and keeps it visible", () => {
+    render(
+      <SettingField
+        setting={setting({ panelManaged: true })}
+        value={2}
+        edited={false}
+        issue={undefined}
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const input = screen.getByLabelText("Exp rate") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+    expect(screen.getByText("Panel-managed")).toBeTruthy();
+  });
+
+  it("carries the restart badge and the gone-in warning", () => {
+    render(
+      <SettingField
+        setting={setting({ restartRequired: true, removedIn: "28.0.0" })}
+        value={2}
+        edited={false}
+        issue={undefined}
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    expect(screen.getByText("Restart")).toBeTruthy();
+    expect(screen.getByText("Gone in 28.0.0")).toBeTruthy();
+  });
+});
+
+describe("GroupSection", () => {
+  const group = {
+    name: "Rates",
+    settings: [setting(), setting({ key: "palCapture", label: "Pal capture" })],
+  };
+
+  it("collapses and expands on phones and shows every field open on desktop", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(
+      <GroupSection
+        group={group}
+        values={{ expRate: 1, palCapture: 1 }}
+        draft={{}}
+        issues={new Map()}
+        disabled={false}
+        phone
+        onChange={onChange}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    expect(screen.queryByLabelText("Exp rate")).toBeNull();
+    screen.getByRole("button", { name: /Rates/ }).click();
+    expect(screen.getByLabelText("Exp rate")).toBeTruthy();
+    unmount();
+
+    render(
+      <GroupSection
+        group={group}
+        values={{ expRate: 1, palCapture: 1 }}
+        draft={{}}
+        issues={new Map()}
+        disabled={false}
+        phone={false}
+        onChange={onChange}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    expect(screen.getByLabelText("Exp rate")).toBeTruthy();
+    expect(screen.getByText("2 settings")).toBeTruthy();
+  });
+
+  it("stays responsive with 400 settings (the P10 target is 200 ms)", () => {
+    const many: Setting[] = Array.from({ length: 400 }, (_, index) =>
+      setting({
+        key: `rate${index}`,
+        label: `Rate ${index}`,
+        type: "int",
+        min: 0,
+        max: 100,
+      }),
+    );
+    const values: Record<string, unknown> = {};
+    for (const item of many) {
+      values[item.key] = 1;
+    }
+    // The harness holds the draft the way the page does, so the keystroke
+    // re-renders all 400 fields like it does in the real editor.
+    function Harness() {
+      const [draft, setDraft] = useState<Record<string, unknown>>({});
+      return (
+        <GroupSection
+          group={{ name: "Big", settings: many }}
+          values={values}
+          draft={draft}
+          issues={new Map()}
+          disabled={false}
+          phone={false}
+          onChange={(key, value) => {
+            setDraft((current) => ({ ...current, [key]: value }));
+          }}
+          onReset={() => {
+            /* not used here */
+          }}
+        />
+      );
+    }
+    render(<Harness />);
+    const input = screen.getByLabelText("Rate 217");
+    fireEvent.change(input, { target: { value: "4" } });
+    const start = performance.now();
+    fireEvent.change(input, { target: { value: "42" } });
+    const took = performance.now() - start;
+    expect((input as HTMLInputElement).value).toBe("42");
+    expect(took).toBeLessThan(200);
+  });
+});
