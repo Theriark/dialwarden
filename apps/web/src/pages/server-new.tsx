@@ -124,7 +124,7 @@ export function NewServerPage() {
 
   const [tested, setTested] = useState<TestResult | null>(null);
   const [keyTrusted, setKeyTrusted] = useState(false);
-  const [detected, setDetected] = useState<Detection[] | null>(null);
+  const [detected, setDetected] = useState<readonly Detection[] | null>(null);
   const [packId, setPackId] = useState<string | null>(null);
 
   const portNumber = Number(port);
@@ -219,8 +219,8 @@ export function NewServerPage() {
     mutationFn: (value: { spec: ConnectionSpec; packId: string | null }) =>
       addServer({
         name: name.trim(),
-        packId: value.packId ?? undefined,
         connector: value.spec,
+        ...(value.packId === null ? {} : { packId: value.packId }),
       }),
     onSuccess: (server) => {
       toast.push({ kind: "success", title: `${server.name} added` });
