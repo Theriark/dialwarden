@@ -4,6 +4,7 @@
 // messages, with restart-required, panel-managed and secret badges, masked
 // secret fields, and unknown keys shown as unknown and kept. Saving goes
 // through a change set (contract C5) and the save dialog.
+/* eslint-disable security/detect-object-injection -- the keys are the pack's setting keys and the server's own JSON answer, never free-form input */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import * as Collapsible from "@radix-ui/react-collapsible";
@@ -16,16 +17,16 @@ import {
   Save,
   SlidersHorizontal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   sameAsDefault,
   sameJson,
+  type JsonValue,
   type Setting,
 } from "@dialwarden/packs-schema";
 import { createChangeSet, type EditInput } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import {
-  p4keys,
   serverQuery,
   serverSettingsQuery,
   settingsMetaQuery,
@@ -126,8 +127,8 @@ export function GroupSection({
             const edited =
               setting.key in draft &&
               !sameJson(
-                draft[setting.key] ?? null,
-                values[setting.key] ?? null,
+                (draft[setting.key] ?? null) as JsonValue,
+                (values[setting.key] ?? null) as JsonValue,
               );
             const issue = issues.get(setting.key);
             return (
@@ -191,7 +192,10 @@ export function ServerSettingsPage() {
     () =>
       Object.keys(draft).filter(
         (key) =>
-          !sameJson(draft[key] ?? null, settings.data?.values[key] ?? null),
+          !sameJson(
+            (draft[key] ?? null) as JsonValue,
+            (settings.data?.values[key] ?? null) as JsonValue,
+          ),
       ).length,
     [draft, settings.data],
   );
@@ -202,13 +206,48 @@ export function ServerSettingsPage() {
       ),
     [settings.data, byKey, draft],
   );
+  // Stable handlers: SettingField is memoised, so a keystroke re-renders the
+  // one field it touches, not the whole 400-setting file.
+  const serverValues = settings.data?.values;
+  const onFieldChange = useCallback((key: string, value: unknown) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }, []);
+  const onFieldReset = useCallback(
+    (key: string) => {
+      setDraft((current) => {
+        const setting = byKey.get(key);
+        const original = serverValues?.[key] ?? null;
+        // A secret never resets to its default unless it was edited: the
+        // server only ever shows its mask, so an untouched secret has
+        // nothing to reset.
+        const edited =
+          key in current &&
+          !sameJson(
+            (current[key] ?? null) as JsonValue,
+            original as JsonValue,
+          );
+        if (!edited) {
+          // fromEntries instead of delete: no dynamically computed property
+          // removal (eslint no-dynamic-delete).
+          return Object.fromEntries(
+            Object.entries(current).filter(([k]) => k !== key),
+          );
+        }
+        return { ...current, [key]: setting?.default ?? null };
+      });
+    },
+    [byKey, serverValues],
+  );
 
   const save = useMutation({
     mutationFn: () => {
       const edits: EditInput[] = Object.keys(draft)
         .filter(
           (key) =>
-            !sameJson(draft[key] ?? null, settings.data?.values[key] ?? null),
+            !sameJson(
+              (draft[key] ?? null) as JsonValue,
+              (settings.data?.values[key] ?? null) as JsonValue,
+            ),
         )
         .map((key) => ({ settingKey: key, value: draft[key] ?? null }));
       return createChangeSet(slug, { edits });
@@ -271,7 +310,7 @@ export function ServerSettingsPage() {
         }
       }
       if (changedOnly) {
-        const value = effective[setting.key] ?? null;
+        const value = (effective[setting.key] ?? null) as JsonValue;
         return !sameAsDefault(setting, value, setting.default ?? null);
       }
       return true;
@@ -367,26 +406,8 @@ export function ServerSettingsPage() {
               issues={issues}
               disabled={!editable}
               phone={phone}
-              onChange={(key, value) => {
-                setDraft((current) => ({ ...current, [key]: value }));
-              }}
-              onReset={(key) => {
-                setDraft((current) => {
-                  const setting = byKey.get(key);
-                  const original = settings.data.values[key] ?? null;
-                  // A secret never resets to its default unless it was
-                  // edited: the server only ever shows its mask, so an
-                  // untouched secret has nothing to reset.
-                  const edited =
-                    key in current && !sameJson(current[key] ?? null, original);
-                  if (!edited) {
-                    const next = { ...current };
-                    delete next[key];
-                    return next;
-                  }
-                  return { ...current, [key]: setting?.default ?? null };
-                });
-              }}
+              onChange={onFieldChange}
+              onReset={onFieldReset}
             />
           ))}
         </div>
