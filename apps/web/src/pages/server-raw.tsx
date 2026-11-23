@@ -8,11 +8,7 @@ import { FileText, History, Save, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { createChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
-import {
-  rawFileQuery,
-  serverQuery,
-  serverSettingsQuery,
-} from "../api/queries";
+import { rawFileQuery, serverQuery, serverSettingsQuery } from "../api/queries";
 import type { ChangeSet, LintEntry } from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
