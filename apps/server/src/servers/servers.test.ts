@@ -16,6 +16,8 @@ import {
   addServer,
   apiOf,
   change,
+  draft,
+  history,
   palworldFolder,
   type Api,
 } from "../../test/servers.js";
@@ -188,6 +190,22 @@ describe("server limits (contract C1)", () => {
     });
   });
 
+  it("lets only one of two adds sent together past the Free limit", async () => {
+    const api = await owner();
+    await addMany(api, ["one", "two"]);
+    const add = async (name: string) => {
+      const root = await palworldFolder(base, name);
+      return api.post("/api/v1/servers", {
+        name,
+        connector: { kind: "local", root },
+      });
+    };
+    const both = await Promise.all([add("three"), add("four")]);
+    const codes = both.map((response) => response.statusCode).sort();
+    expect(codes).toEqual([201, 402]);
+    expect(await listed(api)).toHaveLength(3);
+  });
+
   it("allows the licence maxServers on Paid, all editable", async () => {
     const licence = customerLicence({ maxServers: 4 });
     const api = await owner({ DIALWARDEN_LICENCE: licence });
@@ -210,6 +228,12 @@ describe("server limits (contract C1)", () => {
     for (const slug of [b, c, d]) {
       await change(api, slug ?? "", { ExpRate: 2 });
     }
+    // Made on a while Paid; after the licence goes, a is read-only for
+    // apply and restore too, not only for new change sets.
+    const pending = await draft(api, a ?? "", { ExpRate: 5 });
+    const imported = (await history(api, a ?? "")).entries.at(-1);
+    const snapshot = imported?.snapshots.at(0)?.id ?? "";
+    expect(snapshot).not.toBe("");
     const removed = await api.delete("/api/v1/licence");
     expect(removed.json()).toMatchObject({ plan: "free" });
 
@@ -221,6 +245,13 @@ describe("server limits (contract C1)", () => {
     });
     expect(blocked.statusCode).toBe(402);
     expect(blocked.json()).toMatchObject({ limit: "servers", max: 3 });
+    const applyUrl = `/api/v1/change-sets/${pending.id}/apply`;
+    const restoreUrl = `/api/v1/snapshots/${snapshot}/restore`;
+    for (const url of [applyUrl, restoreUrl]) {
+      const refusedHere = await api.post(url);
+      expect(refusedHere.statusCode).toBe(402);
+      expect(refusedHere.json()).toMatchObject({ limit: "servers", max: 3 });
+    }
     // Read-only, not hidden: the settings and history still answer.
     const settings = await api.get(`/api/v1/servers/${a}/settings`);
     expect(settings.statusCode).toBe(200);

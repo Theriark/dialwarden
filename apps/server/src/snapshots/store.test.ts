@@ -2,9 +2,9 @@
 // blobs under DATA_DIR/snapshots/AB/SHA256.gz, written once, checked on
 // read, recorded per server file, and measured against the 1 GB cap.
 import { createHash } from "node:crypto";
-import { readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { tempDir } from "../../test/helpers.js";
 import { servers } from "../db/schema.js";
@@ -67,9 +67,15 @@ describe("snapshot blobs", () => {
   it("refuses a blob that does not match its name, or is missing", async () => {
     const snapshots = new SnapshotStore(store, dataDir);
     const name = await snapshots.put(bytes("original"));
-    await writeFile(snapshots.pathOf(name), Buffer.from("not gzip"));
+    // Valid gzip of other bytes: only the hash check can refuse it.
+    await writeFile(snapshots.pathOf(name), gzipSync(bytes("swapped")));
     const read = snapshots.get(name);
     await expect(read).rejects.toBeInstanceOf(SnapshotBlobError);
+    await expect(snapshots.get(name)).rejects.toThrow(
+      "does not match its name",
+    );
+    await writeFile(snapshots.pathOf(name), Buffer.from("not gzip"));
+    await expect(snapshots.get(name)).rejects.toThrow("is unreadable");
     const missing = snapshots.get(sha("never stored"));
     await expect(missing).rejects.toBeInstanceOf(SnapshotBlobError);
     const escape = () => snapshots.pathOf("../../etc/passwd");
@@ -84,12 +90,17 @@ describe("snapshot blobs", () => {
       blobs: 0,
       overCap: false,
     });
-    await small.put(bytes("first version"));
-    await small.put(bytes("second version"));
+    const first = await small.put(bytes("first version"));
+    const second = await small.put(bytes("second version"));
+    const onDisk =
+      (await stat(small.pathOf(first))).size +
+      (await stat(small.pathOf(second))).size;
+    expect(small.meter().usedBytes).toBe(onDisk);
+    // A repeated put stores and counts nothing more.
     await small.put(bytes("first version"));
     const meter = small.meter();
     expect(meter.blobs).toBe(2);
-    expect(meter.usedBytes).toBeGreaterThan(10);
+    expect(meter.usedBytes).toBe(onDisk);
     expect(meter.overCap).toBe(true);
     const fresh = new SnapshotStore(store, dataDir);
     expect(fresh.meter().capBytes).toBe(SNAPSHOT_CAP_BYTES);

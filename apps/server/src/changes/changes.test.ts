@@ -30,6 +30,7 @@ import {
   type Api,
   type ChangeSetBody,
 } from "../../test/servers.js";
+import { ConnectorError } from "../connectors/types.js";
 import { canMove, CHANGE_SET_STATUSES, isApplicable } from "./types.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
@@ -68,6 +69,30 @@ const settingsText = (root: string) => fileText(root, PALWORLD_SETTINGS);
 /** Replaces text in the Palworld settings file, as an outside editor. */
 const outside = (root: string, from: string, to: string) =>
   editOutside(root, PALWORLD_SETTINGS, from, to);
+
+/** The Palworld launch file (dialwarden-args.txt), the pack's second file. */
+const PALWORLD_LAUNCH = "dialwarden-args.txt";
+
+/** One outside edit per Palworld file, on a setting no test change edits. */
+const OUTSIDE_EDITS = {
+  settings: {
+    path: PALWORLD_SETTINGS,
+    from: "ServerPlayerMaxNum=32",
+    to: "ServerPlayerMaxNum=40",
+    key: "ServerPlayerMaxNum",
+    value: 40,
+  },
+  launch: {
+    path: PALWORLD_LAUNCH,
+    from: "-publicip=203.0.113.10",
+    to: "-publicip=203.0.113.20",
+    key: "Launch.PublicIp",
+    value: "203.0.113.20",
+  },
+} as const;
+
+const outsideEditOf = (fileId: string) =>
+  fileId === "launch" ? OUTSIDE_EDITS.launch : OUTSIDE_EDITS.settings;
 
 async function values(api: Api, slug: string) {
   const response = await api.get(`/api/v1/servers/${slug}/settings`);
@@ -136,6 +161,56 @@ describe("change sets (contract C5)", () => {
     expect(raw.json<{ text: string }>().text).toContain(admin);
     const missing = await api.get(`/api/v1/servers/${slug}/files/nope`);
     expect(missing.statusCode).toBe(404);
+  });
+
+  it("masks a secret that the file holds escaped, in drafts and history", async () => {
+    const { api, slug } = await palworld();
+    const tail = randomUUID();
+    // The UE INI writer stores \ and " escaped, so the file text differs
+    // from the value; masking by value alone would miss it.
+    const made = await draft(api, slug, { AdminPassword: `pass\\${tail}` });
+    const [text] = made.diff.text;
+    expect(text?.unifiedDiff).toContain(SECRET_MASK);
+    expect(JSON.stringify(made)).not.toContain(tail);
+    const done = await apply(api, made.id);
+    expect(done.status).toBe("applied");
+    const shown = await api.get(`/api/v1/change-sets/${made.id}`);
+    expect(shown.body).not.toContain(tail);
+    expect(JSON.stringify(await history(api, slug))).not.toContain(tail);
+
+    // A double quote: the pack refuses it on apply (quote-in-text-secret),
+    // and neither the draft nor the failed change set shows it.
+    const quoted = `quote"${randomUUID()}`;
+    const refused = await draft(api, slug, { ServerPassword: quoted });
+    expect(JSON.stringify(refused)).not.toContain(quoted.slice(6));
+    const failed = await apply(api, refused.id);
+    expect(failed.status).toBe("failed");
+    expect(JSON.stringify(failed)).not.toContain(quoted.slice(6));
+  });
+
+  it("hides the text diff of a broken file with secrets, never the secret", async () => {
+    const { api, root, slug } = await palworld();
+    const tail = randomUUID();
+    // A new password on a line whose closing ) is gone: the file no longer
+    // parses, so the password cannot be located by the format adapter.
+    const breakLine = (line: string) => {
+      if (!line.startsWith("OptionSettings=")) return line;
+      const set = line.replace('AdminPassword=""', `AdminPassword="${tail}"`);
+      return set.replace(/\)$/, "");
+    };
+    const original = await settingsText(root);
+    const broken = original.split("\n").map(breakLine).join("\n");
+    expect(broken).toContain(tail);
+    const made = await patch(api, slug, broken);
+    expect(made.status).toBe("draft");
+    const [text] = made.diff.text;
+    expect(text?.unifiedDiff).toContain("diff hidden");
+    expect(JSON.stringify(made)).not.toContain(tail);
+    const shown = await api.get(`/api/v1/change-sets/${made.id}`);
+    expect(shown.body).not.toContain(tail);
+    const failed = await apply(api, made.id);
+    expect(failed.status).toBe("failed");
+    expect(JSON.stringify(failed)).not.toContain(tail);
   });
 
   it("records an outside edit on read once, with cause external", async () => {
@@ -282,6 +357,59 @@ describe("the write path (rnd-report-1 2.7)", () => {
     });
   });
 
+  it("undoes the files already written when a later file changes, then merges", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await draft(api, slug, { ExpRate: 2, "Launch.Players": 40 });
+    let calls = 0;
+    const seen: { fileId?: string } = {};
+    app.ctx.changes.beforeWrite = async (_server, fileId) => {
+      calls += 1;
+      if (calls !== 2) return;
+      // The second file of the pass: the first one is already written.
+      seen.fileId = fileId;
+      const edit = outsideEditOf(fileId);
+      await editOutside(root, edit.path, edit.from, edit.to);
+    };
+    const done = await apply(api, made.id);
+    expect(done.status).toBe("applied");
+    expect(seen.fileId).toBeDefined();
+    const edit = outsideEditOf(seen.fileId ?? "");
+    expect(await values(api, slug)).toMatchObject({
+      ExpRate: 2,
+      "Launch.Players": 40,
+      [edit.key]: edit.value,
+    });
+    const past = await history(api, slug);
+    expect(past.entries.map((entry) => [entry.cause, entry.status])).toEqual([
+      ["app", "applied"],
+      ["external", "applied"],
+      ["import", "applied"],
+    ]);
+  });
+
+  it("applies a failed change set again over its own partial write", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await draft(api, slug, { ExpRate: 2, "Launch.Players": 40 });
+    let calls = 0;
+    app.ctx.changes.beforeWrite = async (_server, fileId) => {
+      calls += 1;
+      if (calls !== 2) return;
+      throw new ConnectorError("Connection", `disk gone before ${fileId}`);
+    };
+    const failed = await apply(api, made.id);
+    expect(failed.status).toBe("failed");
+    // One file holds the new value; applying again is no conflict with
+    // itself (both sides made the same change).
+    app.ctx.changes.beforeWrite = null;
+    const again = await apply(api, made.id);
+    expect(again.status).toBe("applied");
+    expect(await values(api, slug)).toMatchObject({
+      ExpRate: 2,
+      "Launch.Players": 40,
+    });
+    expect(await fileText(root, PALWORLD_LAUNCH)).toContain("-players 40");
+  });
+
   it("merges a raw patch with an outside edit of other lines, not of the same line", async () => {
     const { api, root, slug } = await palworld();
     const original = await settingsText(root);
@@ -301,6 +429,8 @@ describe("the write path (rnd-report-1 2.7)", () => {
     expect(merged).toContain("; Edited Palworld");
     expect(merged).toContain("ExpRate=3.000000");
 
+    // Every Palworld value sits on the one OptionSettings line, so an edit of
+    // ExpRate and an outside edit of ServerPlayerMaxNum touch the same line.
     const clash = await patch(
       api,
       slug,
@@ -443,6 +573,52 @@ describe("the change set state machine", () => {
     expect(again.statusCode).toBe(409);
     const missing = await api.post(`/api/v1/snapshots/${randomUUID()}/restore`);
     expect(missing.statusCode).toBe(404);
+  });
+
+  it("marks a multi-file change reverted only when every file is restored", async () => {
+    const { api, root, slug } = await palworld();
+    const launch = await fileText(root, PALWORLD_LAUNCH);
+    const made = await change(api, slug, { ExpRate: 2, "Launch.Players": 40 });
+    expect(made.status).toBe("applied");
+    const past = await history(api, slug);
+    const entry = past.entries.find((item) => item.changeSetId === made.id);
+    const before = (fileId: string) => {
+      const found = entry?.snapshots.find(
+        (item) => item.kind === "before" && item.fileId === fileId,
+      );
+      return found?.id ?? "";
+    };
+    const restore = (id: string) => api.post(`/api/v1/snapshots/${id}/restore`);
+    const status = async () => {
+      const response = await api.get(`/api/v1/change-sets/${made.id}`);
+      return response.json<ChangeSetBody>().status;
+    };
+
+    const first = await restore(before("settings"));
+    expect(first.json()).toMatchObject({ status: "applied" });
+    expect(await status()).toBe("applied");
+    expect(await fileText(root, PALWORLD_LAUNCH)).toContain("-players 40");
+
+    const second = await restore(before("launch"));
+    expect(second.json()).toMatchObject({ status: "applied" });
+    expect(await status()).toBe("reverted");
+    expect(await fileText(root, PALWORLD_LAUNCH)).toBe(launch);
+  });
+
+  it("refuses to apply a change set in conflict again", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await draft(api, slug, { ExpRate: 2 });
+    app.ctx.changes.beforeWrite = async () => {
+      app.ctx.changes.beforeWrite = null;
+      await outside(root, "ExpRate=1.000000", "ExpRate=3.000000");
+    };
+    expect((await apply(api, made.id)).status).toBe("conflict");
+    const again = await api.post(`/api/v1/change-sets/${made.id}/apply`);
+    expect(again.statusCode).toBe(409);
+    expect(again.json()).toEqual({
+      error: "invalid_state",
+      status: "conflict",
+    });
   });
 });
 
