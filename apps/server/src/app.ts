@@ -1,8 +1,9 @@
 // The Dialwarden server (dev-work-plan P1-A): Fastify 5 with zod schemas,
 // OpenAPI 3.1 at /api/v1/openapi.json, pino with redaction, SQLite through the
 // store, authentication, the licence and entitlement gate, activity, the
-// backup engine, and the built web app with its security headers (contract
-// C8). buildApp() opens everything; app.close() closes it again.
+// backup engine, connectors, servers, change sets and snapshots (P4), and the
+// built web app with its security headers (contract C8). buildApp() opens
+// everything; app.close() closes it again.
 import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import fastifyCookie from "@fastify/cookie";
@@ -23,6 +24,7 @@ import { AuthService } from "./auth/service.js";
 import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
 import { loadBuildInfo } from "./build-info.js";
+import { ChangeSetService } from "./changes/service.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { ConnectorService } from "./connectors/service.js";
 import { createAead } from "./crypto/aead.js";
@@ -44,11 +46,16 @@ import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { activityRoutes } from "./routes/activity.js";
 import { authRoutes } from "./routes/auth.js";
+import { changeRoutes } from "./routes/changes.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { licenceRoutes } from "./routes/licence.js";
+import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
+import { seedDemoServers } from "./servers/demo.js";
+import { ServerService } from "./servers/service.js";
+import { SnapshotStore } from "./snapshots/store.js";
 import { VERSION } from "./version.js";
 
 export { VERSION };
@@ -85,6 +92,30 @@ function cookieSecret(config: AppConfig, appKey: Buffer): string {
     32,
   );
   return Buffer.from(derived).toString("hex");
+}
+
+/**
+ * The demo seed of DEMO_SEED (dev-work-plan P4-B step 5), before the server
+ * listens. A failure is logged and never stops the server.
+ */
+async function seedDemo(app: FastifyInstance): Promise<void> {
+  const { config, packs, servers, changes, connectors } = app.ctx;
+  try {
+    const created = await seedDemoServers({
+      demoSeed: config.demoSeed,
+      demoServersDir: config.demoServersDir,
+      packsDir: config.packsDir,
+      packs,
+      servers,
+      changes,
+      connectors,
+    });
+    if (created.length > 0) {
+      app.log.info({ servers: created }, "demo servers seeded");
+    }
+  } catch (error) {
+    app.log.error({ err: error }, "demo seed failed");
+  }
 }
 
 export async function buildApp(
@@ -149,6 +180,36 @@ export async function buildApp(
     () => licences.current(),
     () => editable.effective(),
   );
+  const connectors = new ConnectorService({
+    store,
+    aead,
+    dataDir: config.dataDir,
+    now,
+  });
+  const servers = new ServerService({
+    store,
+    aead,
+    connectors,
+    packs: packs.packs,
+    entitlement,
+    now,
+  });
+  // The Free fallback of P1 learns which servers exist and which were
+  // edited last (rnd-report-1 3.4).
+  editable.setProviders({
+    recentlyEdited: () => servers.recentlyEdited(),
+    exists: (id) => servers.exists(id),
+  });
+  const snapshots = new SnapshotStore(store, config.dataDir, now);
+  const changes = new ChangeSetService({
+    store,
+    aead,
+    servers,
+    snapshots,
+    activity,
+    entitlement,
+    now,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -174,13 +235,11 @@ export async function buildApp(
       revision: build.revision,
       now,
     }),
-    connectors: new ConnectorService({
-      store,
-      aead,
-      dataDir: config.dataDir,
-      now,
-    }),
+    connectors,
     packs: packs.packs,
+    servers,
+    changes,
+    snapshots,
     maintenance: false,
     importing: false,
     routes: [],
@@ -190,6 +249,7 @@ export async function buildApp(
   // setup token while no owner exists (R&D decision THE-2141).
   await bootstrapOwner(ctx, env, app.log, now);
   openFirstRunSetup(ctx, options.out ?? process.stdout);
+  await seedDemo(app);
   app.addHook("onRoute", (route) => {
     const methods = Array.isArray(route.method) ? route.method : [route.method];
     for (const method of methods) {
@@ -241,6 +301,8 @@ export async function buildApp(
   systemRoutes(app);
   gameRoutes(app);
   connectorRoutes(app);
+  serverRoutes(app);
+  changeRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
