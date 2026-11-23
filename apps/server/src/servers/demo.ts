@@ -129,7 +129,8 @@ async function seedPack(pack: Pack, options: DemoSeedOptions) {
   }
   const id = `demo-${pack.id}`;
   const name = `Demo ${pack.displayName}`;
-  const server = servers.insert({ id, name, packId: pack.id, os, spec });
+  const packId = pack.id;
+  const server = servers.insert({ id, name, packId, os, spec, demo: true });
   await changes.importServer(server, DEMO_AUTHOR);
   const [first, second] = await demoEdits(pack, server, changes);
   if (first !== undefined) {

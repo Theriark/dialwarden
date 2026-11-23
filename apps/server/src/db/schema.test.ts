@@ -44,6 +44,10 @@ interface ForeignKeyRow {
 const byName = <T extends { name: string }>(items: T[]): T[] =>
   [...items].sort((a, b) => a.name.localeCompare(b.name));
 
+// SQLite lists the foreign keys of a table in reverse order of declaration.
+const byFrom = <T extends { from: string | undefined }>(items: T[]): T[] =>
+  [...items].sort((a, b) => (a.from ?? "").localeCompare(b.from ?? ""));
+
 /** PRAGMA rows; the table name comes from the Drizzle schema, never input. */
 function pragma<T>(name: string, table: string): T[] {
   return sqlite.prepare(`PRAGMA ${name}("${table}")`).all() as T[];
@@ -143,7 +147,7 @@ describe("Drizzle schema and migrations", () => {
             onDelete: (key.onDelete ?? "no action").toUpperCase(),
           };
         });
-        expect(declared).toEqual(migrated);
+        expect(byFrom(declared)).toEqual(byFrom(migrated));
       });
     });
   }
