@@ -273,7 +273,12 @@ export interface TestResult {
   readonly ok: boolean;
   readonly root: string | null;
   readonly hostKey?: HostKeyState;
-  readonly error?: "PathEscape" | "HostKeyChanged" | "HashMismatch" | "Connection" | "NotFound";
+  readonly error?:
+    | "PathEscape"
+    | "HostKeyChanged"
+    | "HashMismatch"
+    | "Connection"
+    | "NotFound";
   readonly message?: string;
 }
 

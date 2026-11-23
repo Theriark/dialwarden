@@ -18,11 +18,7 @@ import {
   serversQuery,
   settingsMetaQuery,
 } from "../api/queries";
-import type {
-  ChangeSet,
-  PaymentRequiredBody,
-  UserPreset,
-} from "../api/schema";
+import type { ChangeSet, PaymentRequiredBody, UserPreset } from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { SaveDialog } from "../components/save-dialog";
