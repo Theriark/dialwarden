@@ -5,6 +5,7 @@
 // the choice is shown disabled, never hidden.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { RotateCw } from "lucide-react";
+import { useState } from "react";
 import { applyChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import { p4keys } from "../api/queries";
@@ -40,16 +41,27 @@ export interface SaveDialogProps {
   onClose: () => void;
   /** Called after a successful apply, with the applied change set. */
   onApplied: (changeSet: ChangeSet) => void;
+  /**
+   * The Monaco language of a text diff by file id; ini when not given (the
+   * presets flow has no file paths).
+   */
+  fileLanguage?: ((fileId: string) => string) | undefined;
 }
 
 export function SaveDialog({
   slug,
   changeSet,
+  fileLanguage,
   onClose,
   onApplied,
 }: SaveDialogProps) {
   const client = useQueryClient();
   const toast = useToast();
+  // The change set the dialog shows: the draft it opened with until the
+  // apply answers, then the returned one - the server also answers HTTP 200
+  // with conflict or failed, and those must change this dialog, not vanish.
+  const [returned, setReturned] = useState<ChangeSet | null>(null);
+  const current = returned ?? changeSet;
 
   const apply = useMutation({
     mutationFn: () => applyChangeSet(changeSet.id, "none"),
@@ -61,6 +73,7 @@ export function SaveDialog({
       });
     },
     onSuccess: (applied) => {
+      setReturned(applied);
       void client.invalidateQueries({ queryKey: p4keys.settings(slug) });
       void client.invalidateQueries({ queryKey: p4keys.history(slug) });
       void client.invalidateQueries({ queryKey: p4keys.servers });
@@ -75,17 +88,30 @@ export function SaveDialog({
               : "The files hold the new values.",
         });
         onApplied(applied);
+        return;
       }
+      toast.push({
+        kind: "error",
+        title:
+          applied.status === "conflict"
+            ? "The save ended in a conflict"
+            : "The save failed",
+        description:
+          applied.error?.message ??
+          (applied.status === "conflict"
+            ? "The file changed outside Dialwarden. Start again from the editor."
+            : "A failed change set can be applied again."),
+      });
     },
   });
 
-  const restarts = changeSet.diff.semantic.filter(
+  const restarts = current.diff.semantic.filter(
     (chip) => chip.restartRequired,
   ).length;
-  const applied = changeSet.status === "applied";
-  const pending = changeSet.status === "pending";
-  const conflict = changeSet.status === "conflict";
-  const failed = changeSet.status === "failed";
+  const applied = current.status === "applied";
+  const pending = current.status === "pending";
+  const conflict = current.status === "conflict";
+  const failed = current.status === "failed";
   const done = applied || pending || conflict;
 
   return (
@@ -107,9 +133,9 @@ export function SaveDialog({
                 ? "The save failed"
                 : "Save these changes?"
       }
-      description={`Change set of ${changeSet.diff.semantic.length} ${
-        changeSet.diff.semantic.length === 1 ? "setting" : "settings"
-      }, created ${formatDateTime(changeSet.createdAt)}.`}
+      description={`Change set of ${current.diff.semantic.length} ${
+        current.diff.semantic.length === 1 ? "setting" : "settings"
+      }, created ${formatDateTime(current.createdAt)}.`}
       className="max-w-3xl"
       footer={
         conflict ? (
@@ -152,12 +178,12 @@ export function SaveDialog({
         <Alert kind="error">
           {conflict
             ? "Another writer changed the file while this change set was open. The change set is closed: copy anything you need, reload the editor and save a new change set."
-            : `The last try failed: ${changeSet.error?.message ?? "the server could not write the files"}. A failed change set can be applied again.`}
+            : `The last try failed: ${current.error?.message ?? "the server could not write the files"}. A failed change set can be applied again.`}
         </Alert>
       ) : null}
-      {conflict && changeSet.conflict !== null ? (
+      {conflict && current.conflict !== null ? (
         <div className="flex flex-col gap-3">
-          {changeSet.conflict.files.map((file) =>
+          {current.conflict.files.map((file) =>
             file.kind === "settings" ? (
               <div
                 key={file.fileId}
@@ -197,8 +223,8 @@ export function SaveDialog({
         </div>
       ) : null}
       <ul className="flex flex-wrap gap-1.5">
-        {changeSet.diff.semantic.map((chip, index) => (
-          <ChangeChip key={`${changeSet.id}-${index}`} chip={chip} />
+        {current.diff.semantic.map((chip, index) => (
+          <ChangeChip key={`${current.id}-${index}`} chip={chip} />
         ))}
       </ul>
       {restarts > 0 ? (
@@ -214,13 +240,13 @@ export function SaveDialog({
           </p>
         </Alert>
       ) : null}
-      {changeSet.lint.length > 0 ? (
+      {current.lint.length > 0 ? (
         <div className="flex flex-col gap-1.5">
-          {changeSet.lint.map((entry, index) => {
+          {current.lint.map((entry, index) => {
             const kind = lintKind(entry.severity);
             return (
               <p
-                key={`${changeSet.id}-lint-${index}`}
+                key={`${current.id}-lint-${index}`}
                 className="flex items-start gap-2 text-sm"
               >
                 {kind === undefined ? null : (
@@ -235,14 +261,18 @@ export function SaveDialog({
           })}
         </div>
       ) : null}
-      {changeSet.diff.text.map((part) => {
+      {current.diff.text.map((part) => {
         const sides = splitUnifiedDiff(part.unifiedDiff);
         return (
           <div key={part.fileId} className="flex flex-col gap-1">
             <p className="text-xs font-medium text-fg-muted uppercase">
               {part.fileId}
             </p>
-            <LazyDiffEditor before={sides.before} after={sides.after} />
+            <LazyDiffEditor
+              before={sides.before}
+              after={sides.after}
+              language={fileLanguage?.(part.fileId) ?? "ini"}
+            />
           </div>
         );
       })}

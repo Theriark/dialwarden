@@ -170,4 +170,95 @@ describe("SaveDialog", () => {
     ).toBeNull();
     expect(screen.getByRole("button", { name: "Start again" })).toBeTruthy();
   });
+
+  it("turns into the failed view when the apply answers failed", async () => {
+    const onApplied = vi.fn();
+    stubFetch(([method, path]) => {
+      if (method === "POST" && path === "/api/v1/change-sets/cs-1/apply") {
+        return {
+          status: 200,
+          body: changeSet({
+            status: "failed",
+            error: {
+              code: "write_failed",
+              message: "The folder is read-only.",
+            },
+          }),
+        };
+      }
+      return { status: 404, body: { error: "not_found" } };
+    });
+    renderWithProviders(
+      <SaveDialog
+        slug="home"
+        changeSet={changeSet()}
+        onClose={() => {
+          /* not used here */
+        }}
+        onApplied={onApplied}
+      />,
+    );
+    expect(screen.getByText("Save these changes?")).toBeTruthy();
+    screen.getByRole("button", { name: "Save without restart" }).click();
+    await waitFor(() => {
+      expect(screen.getByText(/The last try failed/)).toBeTruthy();
+    });
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: "Save without restart" }),
+    ).toBeTruthy();
+  });
+
+  it("turns into the conflict view when the apply answers a conflict", async () => {
+    const onApplied = vi.fn();
+    stubFetch(([method, path]) => {
+      if (method === "POST" && path === "/api/v1/change-sets/cs-1/apply") {
+        return {
+          status: 200,
+          body: changeSet({
+            status: "conflict",
+            conflict: {
+              files: [
+                {
+                  kind: "settings",
+                  fileId: "settings",
+                  settings: [
+                    {
+                      settingKey: "expRate",
+                      label: "Exp rate",
+                      base: 1,
+                      ours: 2,
+                      theirs: 3,
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        };
+      }
+      return { status: 404, body: { error: "not_found" } };
+    });
+    renderWithProviders(
+      <SaveDialog
+        slug="home"
+        changeSet={changeSet()}
+        onClose={() => {
+          /* not used here */
+        }}
+        onApplied={onApplied}
+      />,
+    );
+    expect(screen.getByText("Save these changes?")).toBeTruthy();
+    screen.getByRole("button", { name: "Save without restart" }).click();
+    await waitFor(() => {
+      expect(screen.getByText(/On the server now: 3/)).toBeTruthy();
+    });
+    expect(screen.getByText("The save ended in a conflict")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start again" })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Save without restart" }),
+    ).toBeNull();
+    expect(onApplied).not.toHaveBeenCalled();
+  });
 });
