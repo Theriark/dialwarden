@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { HistoryEntry } from "../api/schema";
-import { TimelineRow } from "./server-history";
+import type { HistoryEntry, HistorySnapshot } from "../api/schema";
+import { snapshotsToRestore, TimelineRow } from "./server-history";
 
 afterEach(cleanup);
 
@@ -104,5 +104,51 @@ describe("TimelineRow", () => {
     expect(
       screen.getByText("No stored version to restore for this entry."),
     ).toBeTruthy();
+  });
+});
+
+describe("snapshotsToRestore", () => {
+  const snap = (id: string, fileId: string, kind: string): HistorySnapshot => ({
+    id,
+    fileId,
+    kind,
+    at: "2026-11-23T12:00:00Z",
+  });
+
+  it("restores the before snapshot of an applied change, never the after", () => {
+    const applied = entry({
+      snapshots: [
+        snap("s-before", "settings", "before"),
+        snap("s-after", "settings", "after"),
+      ],
+    });
+    expect(snapshotsToRestore(applied)).toEqual([
+      snap("s-before", "settings", "before"),
+    ]);
+  });
+
+  it("keeps the one snapshot of a first import", () => {
+    const imported = entry({
+      cause: "import",
+      snapshots: [snap("s-import", "settings", "after")],
+    });
+    expect(snapshotsToRestore(imported)).toEqual([
+      snap("s-import", "settings", "after"),
+    ]);
+  });
+
+  it("restores one snapshot per file of a multi-file change", () => {
+    const change = entry({
+      snapshots: [
+        snap("a-before", "ini", "before"),
+        snap("a-after", "ini", "after"),
+        snap("b-before", "json", "before"),
+        snap("b-after", "json", "after"),
+      ],
+    });
+    expect(snapshotsToRestore(change)).toEqual([
+      snap("a-before", "ini", "before"),
+      snap("b-before", "json", "before"),
+    ]);
   });
 });

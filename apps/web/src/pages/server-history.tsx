@@ -21,8 +21,10 @@ import { errorMessage } from "../api/errors";
 import { historyQuery, p4keys, serverQuery } from "../api/queries";
 import type {
   Cause,
+  ChangeSet,
   ChangeSetStatus,
   HistoryEntry as Entry,
+  HistorySnapshot,
 } from "../api/schema";
 import { PageHeader } from "../components/layout/page-header";
 import { ChangeChip } from "../components/change-chip";
@@ -78,6 +80,27 @@ function statusWord(status: ChangeSetStatus): string {
     default:
       return "Applied";
   }
+}
+
+/**
+ * The snapshots one click restores: at most one per file, and for an applied
+ * change the before snapshot - the write path records before then after per
+ * file, so restoring both would write the change right back. Entries with a
+ * single snapshot per file (first import, outside edit) keep theirs.
+ */
+export function snapshotsToRestore(entry: Entry): HistorySnapshot[] {
+  const wanted = new Map<string, HistorySnapshot>();
+  for (const snapshot of entry.snapshots) {
+    const chosen = wanted.get(snapshot.fileId);
+    if (chosen === undefined) {
+      wanted.set(snapshot.fileId, snapshot);
+      continue;
+    }
+    if (chosen.kind !== "before" && snapshot.kind === "before") {
+      wanted.set(snapshot.fileId, snapshot);
+    }
+  }
+  return [...wanted.values()];
 }
 
 export function TimelineRow({
@@ -160,26 +183,49 @@ export function ServerHistoryPage() {
 
   const restore = useMutation({
     mutationFn: async (entry: Entry) => {
-      // One click restores every file of the entry, one change set per file.
-      for (const snapshot of entry.snapshots) {
-        await restoreSnapshot(snapshot.id);
+      // One click puts every file back to this version: one restore per
+      // file, of its before snapshot. The first answer that does not end
+      // applied stops the loop - conflict and failed also come back with
+      // HTTP 200, and a partial restore must not claim success.
+      let last: ChangeSet | null = null;
+      for (const snapshot of snapshotsToRestore(entry)) {
+        last = await restoreSnapshot(snapshot.id);
+        if (last.status !== "applied" && last.status !== "pending") {
+          break;
+        }
       }
+      return last;
     },
     onMutate: (entry) => {
       setRestoringId(entry.changeSetId);
     },
     onSettled: () => {
       setRestoringId(null);
-    },
-    onSuccess: () => {
-      toast.push({
-        kind: "success",
-        title: "Version restored",
-        description: "The files hold the older values again.",
-      });
       void client.invalidateQueries({ queryKey: p4keys.history(slug) });
       void client.invalidateQueries({ queryKey: p4keys.settings(slug) });
       void client.invalidateQueries({ queryKey: p4keys.servers });
+    },
+    onSuccess: (last) => {
+      if (
+        last === null ||
+        last.status === "applied" ||
+        last.status === "pending"
+      ) {
+        toast.push({
+          kind: "success",
+          title: "Version restored",
+          description: "The files hold the older values again.",
+        });
+        return;
+      }
+      toast.push({
+        kind: "error",
+        title: "The version was not restored",
+        description:
+          last.status === "conflict"
+            ? "The file changed outside Dialwarden. Restore the newest version again from the timeline."
+            : (last.error?.message ?? "The server could not write the files."),
+      });
     },
     onError: (error) => {
       toast.push({
@@ -269,7 +315,6 @@ export function ServerHistoryPage() {
                   error: "payment_required",
                   plan: "free",
                   limit: "historyVisible",
-                  current: visibleLimit,
                   max: visibleLimit,
                 }}
               />
