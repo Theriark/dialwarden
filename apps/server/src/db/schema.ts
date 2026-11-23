@@ -126,6 +126,108 @@ export const knownHosts = sqliteTable(
   (table) => [uniqueIndex("known_hosts_host_port").on(table.host, table.port)],
 );
 
+/** Game servers (P4-B); the slug is the id. */
+export const servers = sqliteTable("servers", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  packId: text("pack_id").notNull(),
+  os: text("os").notNull(),
+  /** The connection spec as JSON, without the password. */
+  connector: text("connector").notNull(),
+  /** The panel SFTP password, encrypted with APP_SECRET_KEY. */
+  passwordEnc: text("password_enc"),
+  /** 1 for a demo server of DEMO_SEED. */
+  demo: integer("demo").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  /** When a change set of the app was last applied (the Free fallback). */
+  lastEditedAt: text("last_edited_at"),
+});
+
+/** The SHA-256 the app last saw per pack file (outside-edit detection). */
+export const serverFiles = sqliteTable(
+  "server_files",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => servers.id, { onDelete: "cascade" }),
+    fileId: text("file_id").notNull(),
+    path: text("path").notNull(),
+    /** null: the file did not exist. */
+    sha256: text("sha256"),
+    checkedAt: text("checked_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("server_files_server_file").on(table.serverId, table.fileId),
+  ],
+);
+
+/** Change sets and history entries (contract C5). */
+export const changeSets = sqliteTable(
+  "change_sets",
+  {
+    id: text("id").primaryKey(),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => servers.id, { onDelete: "cascade" }),
+    status: text("status").notNull(),
+    cause: text("cause").notNull(),
+    author: text("author").notNull(),
+    /** The edits or patches as JSON, encrypted with APP_SECRET_KEY. */
+    payloadEnc: text("payload_enc"),
+    /** JSON: the path and SHA-256 of every file the change was made on. */
+    base: text("base").notNull(),
+    /** JSON: the semantic and text diff, secrets masked. */
+    diff: text("diff").notNull(),
+    /** JSON: the lint and validation issues. */
+    lint: text("lint").notNull(),
+    /** JSON: the conflict view, when the status is conflict. */
+    conflict: text("conflict"),
+    /** JSON: the error code and message, when the status is failed. */
+    error: text("error"),
+    /** The snapshot a rollback restores. */
+    restoreOf: text("restore_of"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    appliedAt: text("applied_at"),
+  },
+  (table) => [index("change_sets_server").on(table.serverId, table.createdAt)],
+);
+
+/** Snapshots of server files; the bytes are blobs under DATA_DIR/snapshots. */
+export const snapshots = sqliteTable(
+  "snapshots",
+  {
+    id: text("id").primaryKey(),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => servers.id, { onDelete: "cascade" }),
+    changeSetId: text("change_set_id").references(() => changeSets.id, {
+      onDelete: "set null",
+    }),
+    fileId: text("file_id").notNull(),
+    path: text("path").notNull(),
+    /** import, external, before or after. */
+    kind: text("kind").notNull(),
+    sha256: text("sha256").notNull(),
+    size: integer("size").notNull(),
+    at: text("at").notNull(),
+  },
+  (table) => [
+    index("snapshots_server").on(table.serverId, table.fileId, table.at),
+    index("snapshots_change_set").on(table.changeSetId),
+  ],
+);
+
+/** Each snapshot blob once, with its size on disk (the 1 GB meter). */
+export const snapshotBlobs = sqliteTable("snapshot_blobs", {
+  sha256: text("sha256").primaryKey(),
+  size: integer("size").notNull(),
+  stored: integer("stored").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const schema = {
   users,
   recoveryCodes,
@@ -135,4 +237,9 @@ export const schema = {
   activityEvents,
   instanceSshKey,
   knownHosts,
+  servers,
+  serverFiles,
+  changeSets,
+  snapshots,
+  snapshotBlobs,
 };

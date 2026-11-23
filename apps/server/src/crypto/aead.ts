@@ -123,4 +123,10 @@ export const ENCRYPTED_COLUMNS = [
     column: "private_key_enc",
     context: "instance_ssh_key.private_key",
   },
+  { table: "servers", column: "password_enc", context: "servers.password" },
+  {
+    table: "change_sets",
+    column: "payload_enc",
+    context: "change_sets.payload",
+  },
 ] as const;
