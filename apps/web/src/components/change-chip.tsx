@@ -40,17 +40,15 @@ export function formatChipValue(value: unknown): string {
 
 /** The full sentence of a chip, also its title and accessible name. */
 export function chipText(chip: Chip): string {
-  if (
-    chip.kind === "lines" ||
-    chip.kind === "external" ||
-    chip.kind === "import"
-  ) {
+  if (chip.kind === "lines") {
+    // The server's line count already ends with the word changed, so the
+    // chip never repeats it.
+    const lines = typeof chip.to === "string" ? chip.to : "";
+    return `${chip.label} ${lines}`.replace("  ", " ");
+  }
+  if (chip.kind === "external" || chip.kind === "import") {
     const what =
-      chip.kind === "external"
-        ? "edited outside Dialwarden"
-        : chip.kind === "import"
-          ? "imported"
-          : "changed";
+      chip.kind === "external" ? "edited outside Dialwarden" : "imported";
     const lines = typeof chip.to === "string" ? chip.to : "";
     return `${chip.label} ${lines} (${what})`.replace("  ", " ");
   }

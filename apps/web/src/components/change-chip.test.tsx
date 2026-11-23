@@ -83,6 +83,18 @@ describe("ChangeChip", () => {
     expect(text).toBe("ini 41 lines (imported)");
   });
 
+  it("counts the lines of a text change without repeating itself", () => {
+    const text = chipText(
+      chip({
+        kind: "lines",
+        settingKey: null,
+        label: "PalWorldSettings.ini",
+        to: "3 lines changed",
+      }),
+    );
+    expect(text).toBe("PalWorldSettings.ini 3 lines changed");
+  });
+
   it("truncates long values but keeps them in the title", () => {
     const long = "x".repeat(80);
     render(
