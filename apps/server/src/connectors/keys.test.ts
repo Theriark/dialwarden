@@ -11,6 +11,7 @@ import { reencrypt } from "../backup/import.js";
 import { createAead, ENCRYPTED_COLUMNS } from "../crypto/aead.js";
 import { DB_FILE } from "../db/store.js";
 import { publicKeyFingerprint } from "./host-key.js";
+import { InstanceKey, KEY_CONTEXT } from "./keys.js";
 
 let current: TestApp | undefined;
 
@@ -59,5 +60,38 @@ describe("instance SSH key", () => {
       db.close();
     }
     await app.ctx.store.open();
+  });
+
+  // Threat test T10 of the security review (THE-2398).
+  it("is stored only under its own context, the one ENCRYPTED_COLUMNS names", async () => {
+    expect(ENCRYPTED_COLUMNS).toContainEqual({
+      table: "instance_ssh_key",
+      column: "private_key_enc",
+      context: KEY_CONTEXT,
+    });
+    current = await testApp();
+    const { app } = current;
+    app.ctx.connectors.key.publicKey();
+    const row = app.ctx.store.sqlite
+      .prepare("SELECT private_key_enc AS v FROM instance_ssh_key")
+      .get() as { v: string };
+    const { aead } = app.ctx;
+    expect(aead.decryptText(row.v, KEY_CONTEXT)).toContain("PRIVATE KEY");
+    expect(() => aead.decryptText(row.v, "users.totp_secret")).toThrow();
+  });
+
+  it("works under the new key after an import re-encrypts it (T10)", async () => {
+    current = await testApp();
+    const { app, dataDir } = current;
+    const before = app.ctx.connectors.key.publicKey();
+    const other = createAead(randomBytes(32));
+    app.ctx.store.close();
+    reencrypt(join(dataDir, DB_FILE), app.ctx.aead, other);
+    await app.ctx.store.open();
+    const moved = new InstanceKey(app.ctx.store, other);
+    const parsed = ssh2.utils.parseKey(moved.privateKey());
+    if (parsed instanceof Error) throw parsed;
+    expect(parsed.type).toBe("ssh-ed25519");
+    expect(moved.publicKey()).toEqual(before);
   });
 });

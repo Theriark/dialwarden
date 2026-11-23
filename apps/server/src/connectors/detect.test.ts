@@ -3,7 +3,14 @@
 // WorldOption.sav warning that needs list() (the P3 gap), and the import
 // stores the first read of every pack file with cause import.
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,6 +180,24 @@ describe("import of existing files", () => {
       missing: [{ fileId: "launch", paths: ["dialwarden-args.txt"] }],
     });
   });
+
+  it.skipIf(process.getuid?.() === 0)(
+    "fails the import on a file it cannot read, and stores nothing",
+    async () => {
+      await palworldServer();
+      await chmod(join(base, SETTINGS), 0o000);
+      const stored: ImportedFile[] = [];
+      const sink = {
+        store: (file: ImportedFile) => {
+          stored.push(file);
+        },
+      };
+      await expect(
+        importFiles(packOf("palworld"), "linux", local, sink),
+      ).rejects.toMatchObject({ code: "Connection" });
+      expect(stored).toEqual([]);
+    },
+  );
 
   it("fails the import when the sink fails, instead of skipping the file", async () => {
     await palworldServer();

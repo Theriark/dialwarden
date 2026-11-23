@@ -4,10 +4,14 @@
 //
 // Confinement: the root is resolved once with realpath, and every path is
 // checked as text (paths.ts) and again after realpath, so a symbolic link
-// that leads out of the root is refused with PathEscape. The final open uses
-// O_NOFOLLOW, so a link swapped in after the check is refused too. The root
-// may not be / and may not overlap a denied folder (the data folder, which
-// holds the app secret key and the database).
+// that leads out of the root is refused with PathEscape. O_NOFOLLOW on the
+// final open covers only the last part of the path: a folder swapped for a
+// link between the check and the open is caught by checking the file the
+// open descriptor reached (assertOpenedInside), and a write checks the real
+// path of its target again after the rename. Reads open with O_NONBLOCK, so
+// a FIFO in a server folder cannot hang the request (security review
+// THE-2398). The root may not be / and may not overlap a denied folder (the
+// data folder, which holds the app secret key and the database).
 //
 // Writes: a temp file in the same folder (created exclusively, mode 0600),
 // the bytes, the owner and group, the mode, fsync, rename over the target,
@@ -21,6 +25,7 @@ import {
   lstat,
   open,
   readdir,
+  readlink,
   realpath,
   rename,
   unlink,
@@ -46,6 +51,11 @@ export interface LocalOptions {
   readonly root: string;
   /** Folders the root may not be, contain or sit inside (the data folder). */
   readonly deny?: readonly string[];
+  /**
+   * Tests only: runs after a write resolved its target and before it opens
+   * the temp file (the folder swap threat test).
+   */
+  readonly beforeTempOpen?: () => Promise<void>;
 }
 
 export function sha256Hex(bytes: Uint8Array): string {
@@ -93,22 +103,55 @@ function fileStat(stats: Stats): FileStat {
   };
 }
 
-const READ_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW;
+// O_NONBLOCK: opening a FIFO returns at once (then isFile() refuses it)
+// instead of holding a thread pool thread until a writer appears.
+const READ_FLAGS =
+  constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 const TEMP_FLAGS =
   constants.O_WRONLY |
   constants.O_CREAT |
   constants.O_EXCL |
   constants.O_NOFOLLOW;
 
+/**
+ * Refuses with PathEscape when an open descriptor reached a file outside
+ * root, for example through a folder swapped for a symbolic link after the
+ * realpath check. Linux names the file of a descriptor in /proc/self/fd;
+ * without /proc, the descriptor's device and inode must match those of the
+ * checked path.
+ */
+export async function assertOpenedInside(
+  handle: FileHandle,
+  root: string,
+  checked: string,
+  rel: string,
+): Promise<void> {
+  let reached: string | null;
+  try {
+    reached = await readlink(`/proc/self/fd/${handle.fd}`);
+  } catch {
+    reached = null;
+  }
+  if (reached !== null) {
+    if (insideRoot(root, reached)) return;
+  } else {
+    const [opened, named] = await Promise.all([handle.stat(), lstat(checked)]);
+    if (opened.dev === named.dev && opened.ino === named.ino) return;
+  }
+  throw new ConnectorError("PathEscape", `${rel} leads out of the server root`);
+}
+
 export class LocalConnector implements Connector {
   readonly kind = "local" as const;
   readonly #root: string;
   readonly #deny: readonly string[];
+  readonly #beforeTempOpen: (() => Promise<void>) | undefined;
   #real: string | null = null;
 
   constructor(options: LocalOptions) {
     this.#root = options.root;
     this.#deny = options.deny ?? [];
+    this.#beforeTempOpen = options.beforeTempOpen;
   }
 
   /** The real path of the root, checked once. */
@@ -229,6 +272,7 @@ export class LocalConnector implements Connector {
   }
 
   async read(rel: string): Promise<ReadResult> {
+    const root = await this.#rootReal();
     const real = await this.#existing(rel);
     let handle: FileHandle;
     try {
@@ -237,6 +281,7 @@ export class LocalConnector implements Connector {
       throw fsError(error, rel);
     }
     try {
+      await assertOpenedInside(handle, root, real, rel);
       const stats = await handle.stat();
       if (!stats.isFile()) {
         throw new ConnectorError("NotFound", `${rel} is not a file`);
@@ -267,6 +312,7 @@ export class LocalConnector implements Connector {
         `${rel}: the new content is too large`,
       );
     }
+    const root = await this.#rootReal();
     const target = await this.#target(rel);
     let current: Stats | null = null;
     try {
@@ -291,6 +337,7 @@ export class LocalConnector implements Connector {
     const uid = options.uid ?? existing?.uid;
     const gid = options.gid ?? existing?.gid;
 
+    await this.#beforeTempOpen?.();
     const temp = tempName(target, randomBytes(6).toString("hex"));
     let handle: FileHandle | null;
     try {
@@ -299,6 +346,7 @@ export class LocalConnector implements Connector {
       throw fsError(error, rel);
     }
     try {
+      await assertOpenedInside(handle, root, temp, rel);
       await handle.writeFile(bytes);
       const made = await handle.stat();
       if (
@@ -316,6 +364,16 @@ export class LocalConnector implements Connector {
       if (handle !== null) await handle.close().catch(() => undefined);
       await unlink(temp).catch(() => undefined);
       throw fsError(error, rel);
+    }
+    // A folder swapped after the descriptor check moves the rename out of the
+    // root: the target's real path then differs, and the file is removed.
+    const landed = await realpath(target).catch(() => null);
+    if (landed !== target) {
+      if (landed !== null) await unlink(target).catch(() => undefined);
+      throw new ConnectorError(
+        "PathEscape",
+        `${rel} leads out of the server root`,
+      );
     }
     await syncFolder(dirname(target));
     return sha256Hex(bytes);

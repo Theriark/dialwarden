@@ -11,7 +11,8 @@ import { instanceSshKey, knownHosts } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { publicKeyFingerprint, type HostKeyId } from "./host-key.js";
 
-const KEY_CONTEXT = "instance_ssh_key.private_key";
+/** The AEAD context of the private key (its ENCRYPTED_COLUMNS entry). */
+export const KEY_CONTEXT = "instance_ssh_key.private_key";
 export const KEY_ALGORITHM = "ssh-ed25519";
 const KEY_COMMENT = "dialwarden";
 

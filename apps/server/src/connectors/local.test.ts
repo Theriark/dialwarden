@@ -1,14 +1,20 @@
 // The Local connector (contract C4, dev-work-plan P4-A step 1 and the P4
 // tests): confinement under the root (.. paths, absolute paths, symbolic
 // links out of the root), atomic writes that keep mode and owner, the hash
-// check and the typed errors.
+// check and the typed errors. T1 to T4 are the threat tests of the security
+// review (THE-2398): a FIFO, the descriptor check after open, denied folders
+// reached through links, and a dangling link out of the root.
+// eslint-disable-next-line security/detect-child-process -- mkfifo, a fixed program, for the FIFO threat test
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   readdir,
+  rename,
   rm,
   stat,
   symlink,
@@ -17,7 +23,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { LocalConnector } from "./local.js";
+import { assertOpenedInside, LocalConnector } from "./local.js";
 import { ConnectorError, LIMITS, type Connector } from "./types.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
@@ -52,6 +58,19 @@ async function codeOf(promise: Promise<unknown>): Promise<string | null> {
     return null;
   } catch (error) {
     return error instanceof ConnectorError ? error.code : String(error);
+  }
+}
+
+/** The promise, or a rejection once ms passed (a call that never settles). */
+async function within<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -151,8 +170,65 @@ describe("Local connector: confinement", () => {
     });
   });
 
+  it("refuses a denied folder reached through links (T3)", async () => {
+    const data = join(base, "data");
+    await mkdir(join(data, "inner"), { recursive: true });
+    await symlink(data, join(base, "alias"));
+    await symlink("/", join(base, "up"));
+    await symlink(data, join(base, "datalink"));
+    const cases = [
+      { root: join(base, "alias"), deny: [data] },
+      { root: join(base, "up"), deny: [data] },
+      { root: join(data, "inner"), deny: [join(base, "datalink")] },
+      { root: `${data}/../data/inner`, deny: [data] },
+    ];
+    for (const { root: candidate, deny } of cases) {
+      const connector = new LocalConnector({ root: candidate, deny });
+      expect(await connector.test(), candidate).toMatchObject({
+        ok: false,
+        error: "PathEscape",
+      });
+      expect(await codeOf(connector.read("x")), candidate).toBe("PathEscape");
+    }
+  });
+
   it("tests a good root and names its real path", async () => {
     expect(await local.test()).toEqual({ ok: true, root: await realRoot() });
+  });
+
+  it("refuses a descriptor that reached a file outside the root (T2)", async () => {
+    const real = await realRoot();
+    const inside = await open(join(root, "Config", "game.ini"), "r");
+    const escaped = await open(join(outside, "secret.txt"), "r");
+    try {
+      const checked = join(real, "Config", "game.ini");
+      await expect(
+        assertOpenedInside(inside, real, checked, "Config/game.ini"),
+      ).resolves.toBeUndefined();
+      await expect(
+        assertOpenedInside(escaped, real, checked, "Config/game.ini"),
+      ).rejects.toMatchObject({ code: "PathEscape" });
+    } finally {
+      await inside.close();
+      await escaped.close();
+    }
+  });
+
+  it("refuses a write whose folder is swapped for a link after the check (T2)", async () => {
+    const swapped = new LocalConnector({
+      root,
+      beforeTempOpen: async () => {
+        await rename(join(root, "Config"), join(root, "Config.real"));
+        await symlink(outside, join(root, "Config"));
+      },
+    });
+    const write = swapped.writeAtomic("Config/game.ini", text("x"));
+    expect(await codeOf(write)).toBe("PathEscape");
+    expect(await readdir(outside)).toEqual(["secret.txt"]);
+    expect(await readdir(join(root, "Config.real"))).toEqual(["game.ini"]);
+    expect(await readFile(join(root, "Config.real", "game.ini"), "utf8")).toBe(
+      "[Game]\nName=One\n",
+    );
   });
 });
 
@@ -189,6 +265,23 @@ describe("Local connector: reading", () => {
     expect(await codeOf(local.list("Nope"))).toBe("NotFound");
     expect(await codeOf(local.read("Config"))).toBe("NotFound");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "refuses a FIFO at once instead of waiting for a writer (T1)",
+    async () => {
+      const fifo = join(root, "Config", "pipe.ini");
+      // eslint-disable-next-line security/detect-child-process -- mkfifo with a temporary test path
+      execFileSync("mkfifo", [fifo]);
+      expect(await within(codeOf(local.read("Config/pipe.ini")), 2000)).toBe(
+        "NotFound",
+      );
+      expect((await local.stat("Config/pipe.ini")).type).toBe("other");
+      const write = local.writeAtomic("Config/pipe.ini", text("x"), {
+        expectedSha256: sha("x"),
+      });
+      expect(await within(codeOf(write), 2000)).toBe("HashMismatch");
+    },
+  );
 
   it("lists a folder by name with entry types", async () => {
     await writeFile(join(root, "b.txt"), "b");
@@ -259,6 +352,19 @@ describe("Local connector: atomic writes", () => {
     expect(await codeOf(local.writeAtomic("Nope/a.ini", text("x")))).toBe(
       "NotFound",
     );
+  });
+
+  it("never writes through a dangling link out of the root (T4)", async () => {
+    await symlink(
+      join(outside, "new.txt"),
+      join(root, "Config", "dangling.ini"),
+    );
+    const code = await codeOf(
+      local.writeAtomic("Config/dangling.ini", text("x")),
+    );
+    // Either refused, or the link itself replaced inside the root.
+    expect([null, "PathEscape"]).toContain(code);
+    expect(await readdir(outside)).toEqual(["secret.txt"]);
   });
 
   it("refuses content over the size bound", async () => {

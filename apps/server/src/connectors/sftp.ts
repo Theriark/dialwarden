@@ -26,7 +26,10 @@
 //
 // Time and size bounds: the handshake has readyTimeout, every request has an
 // operation timeout after which the connection is dropped, files are at most
-// LIMITS.maxFileBytes. A dropped connection is opened again on the next call;
+// LIMITS.maxFileBytes. A drop is a request that timed out, or one that failed
+// without an SFTP status answer (ssh2 fails the requests in flight with "No
+// response from server" when the channel closes, sometimes before the client
+// reports the loss). A dropped connection is opened again on the next call;
 // reads (stat, read, list, realpath) are retried once after a drop, writes
 // never.
 import { randomBytes } from "node:crypto";
@@ -112,13 +115,34 @@ function sftpError(error: unknown, rel: string): ConnectorError {
   );
 }
 
+/**
+ * A folder entry that names one child. A real server never lists . and ..
+ * as children or a name with a /; a server that does is not followed.
+ */
+function plainName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && !name.includes("/");
+}
+
+/** The errors #request made for a drop; dropped() checks this, not text. */
+const DROPS = new WeakSet<ConnectorError>();
+
+function dropError(
+  rel: string,
+  reason: string,
+  cause?: unknown,
+): ConnectorError {
+  const error = new ConnectorError(
+    "Connection",
+    `${rel || "."}: ${reason}`,
+    cause,
+  );
+  DROPS.add(error);
+  return error;
+}
+
 /** True when the error means the connection itself is gone. */
 function dropped(error: unknown): boolean {
-  return (
-    error instanceof ConnectorError &&
-    error.code === "Connection" &&
-    error.message.endsWith("the connection was lost")
-  );
+  return error instanceof ConnectorError && DROPS.has(error);
 }
 
 export class SftpConnector implements Connector {
@@ -239,27 +263,21 @@ export class SftpConnector implements Connector {
           if (settled) return;
           settled = true;
           this.#drop();
-          reject(
-            new ConnectorError(
-              "Connection",
-              `${rel || "."}: the request timed out`,
-            ),
-          );
+          reject(dropError(rel, "the request timed out"));
         }, this.#operationMs);
         const done = (error: unknown, value?: T) => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
           if (error !== undefined && error !== null) {
-            reject(
-              this.#sftp === sftp
-                ? sftpError(error, rel)
-                : new ConnectorError(
-                    "Connection",
-                    `${rel || "."}: the connection was lost`,
-                    error,
-                  ),
-            );
+            // A status answer means the server is still there. Anything else
+            // is a drop, whichever of ssh2's close events came first.
+            if (this.#sftp === sftp && statusOf(error) !== undefined) {
+              reject(sftpError(error, rel));
+            } else {
+              if (this.#sftp === sftp) this.#drop();
+              reject(dropError(rel, "the connection was lost", error));
+            }
           } else {
             resolve(value as T);
           }
@@ -648,7 +666,7 @@ export class SftpConnector implements Connector {
       const real = await this.#existing(sftp, rel);
       const entries = await this.#readdir(sftp, real, rel);
       return entries
-        .filter((entry) => entry.filename !== "." && entry.filename !== "..")
+        .filter((entry) => plainName(entry.filename))
         .map((entry) => ({
           name: entry.filename,
           type: typeOfMode(entry.attrs.mode),
