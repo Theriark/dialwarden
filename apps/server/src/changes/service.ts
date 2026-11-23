@@ -1011,6 +1011,7 @@ export class ChangeSetService {
       }
       const check = await connector.read(state.path);
       if (check.sha256 !== sha256) {
+        await this.#undo(job, connector, done);
         throw new ConnectorError(
           "HashMismatch",
           `${state.path} changed right after the write`,
@@ -1086,15 +1087,31 @@ export class ChangeSetService {
       const result = this.#require(row.id);
       const undone = snapshot.changeSetId;
       if (result.status === "applied" && snapshot.kind === "before") {
-        if (undone !== null) this.#revert(undone);
+        if (undone !== null) this.#revert(undone, server.id);
       }
       return viewOf(result);
     });
   }
 
-  #revert(id: string): void {
+  /**
+   * Marks a change set reverted once every file it wrote holds its before
+   * version again; restoring one file of a multi-file change set leaves it
+   * applied until the others are restored too.
+   */
+  #revert(id: string, serverId: string): void {
     const row = this.#row(id);
     if (row === null || row.status !== "applied") return;
+    const before = new Map<string, string>();
+    const written = new Set<string>();
+    for (const snap of this.#snapshots.ofChangeSets([id])) {
+      if (snap.kind === "before") before.set(snap.fileId, snap.sha256);
+      if (snap.kind === "after") written.add(snap.fileId);
+    }
+    const known = this.#known(serverId);
+    for (const fileId of written) {
+      const sha256 = before.get(fileId);
+      if (sha256 === undefined || known.get(fileId)?.sha256 !== sha256) return;
+    }
     this.#finish(row, "reverted", {});
   }
 
