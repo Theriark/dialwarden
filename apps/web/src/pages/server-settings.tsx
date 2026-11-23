@@ -72,7 +72,7 @@ function groupsOf(settings: readonly Setting[]): Group[] {
   return groups;
 }
 
-function GroupSection({
+export function GroupSection({
   group,
   values,
   draft,
@@ -278,16 +278,16 @@ export function ServerSettingsPage() {
     }),
   );
   const emptyPack = (meta.data.settings as Setting[]).length === 0;
+  const packLine =
+    settings.data.packVersion === meta.data.version
+      ? "pack matches the server"
+      : `server files of pack ${settings.data.packVersion}`;
 
   return (
     <>
       <PageHeader
         title={`${server.data.name} settings`}
-        description={`${meta.data.displayName} ${meta.data.version} · ${
-          settings.data.packVersion === meta.data.version
-            ? "pack matches the server"
-            : `server files of pack ${settings.data.packVersion}`
-        }`}
+        description={`${meta.data.displayName} ${meta.data.version} · ${packLine}`}
         actions={
           <>
             <Link
