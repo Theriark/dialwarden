@@ -4,6 +4,7 @@
 // edited-from-original marker with reset. Everything the server cannot write
 // (a panel-managed field) renders disabled, never hidden.
 import { EyeOff, Lock, RotateCw, TriangleAlert, Zap } from "lucide-react";
+import { memo } from "react";
 import type { Setting } from "@dialwarden/packs-schema";
 import { PasswordField, SelectField, TextField } from "../ui/field";
 import { SwitchField } from "../ui/switch";
@@ -126,7 +127,12 @@ function ListField({
   );
 }
 
-export function SettingField({
+/**
+ * Memoised: a keystroke in one field re-renders that field only, so a
+ * 400-setting file stays under the P10 budget. The page passes stable
+ * handlers (useCallback) and the pack's own setting objects.
+ */
+export const SettingField = memo(function SettingField({
   setting,
   value,
   edited,
@@ -189,7 +195,7 @@ export function SettingField({
           setting={setting}
           value={value}
           issue={issue}
-          disabled={locked}
+          disabled={disabled}
           onChange={onChange}
         />
       ) : setting.type === "int" ||
@@ -268,4 +274,4 @@ export function SettingField({
       ) : null}
     </div>
   );
-}
+});

@@ -45,7 +45,7 @@ describe("SettingField", () => {
     const input = screen.getByLabelText("Exp rate") as HTMLInputElement;
     expect(input.type).toBe("number");
     expect(input.value).toBe("9");
-    expect(screen.getByText("Unit: ×.")).toBeTruthy();
+    expect(screen.getByText(/Unit: ×\./)).toBeTruthy();
     expect(screen.getByRole("alert").textContent).toContain(
       "Must be at most 5 ×.",
     );
@@ -168,7 +168,7 @@ describe("GroupSection", () => {
       />,
     );
     expect(screen.queryByLabelText("Exp rate")).toBeNull();
-    screen.getByRole("button", { name: /Rates/ }).click();
+    fireEvent.click(screen.getByRole("button", { name: /Rates/ }));
     expect(screen.getByLabelText("Exp rate")).toBeTruthy();
     unmount();
 
@@ -190,6 +190,9 @@ describe("GroupSection", () => {
     expect(screen.getByText("2 settings")).toBeTruthy();
   });
 
+  // The first render of 400 fields in jsdom is slow and not what is measured;
+  // the keystroke is. The field is memoised, so one keystroke re-renders one
+  // field, and the lookup goes by id because getByLabelText walks every label.
   it("stays responsive with 400 settings (the P10 target is 200 ms)", () => {
     const many: Setting[] = Array.from({ length: 400 }, (_, index) =>
       setting({
@@ -225,13 +228,16 @@ describe("GroupSection", () => {
         />
       );
     }
-    render(<Harness />);
-    const input = screen.getByLabelText("Rate 217");
+    const { container } = render(<Harness />);
+    const input = container.querySelector("#setting-rate217");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("the field of rate217 is missing");
+    }
     fireEvent.change(input, { target: { value: "4" } });
     const start = performance.now();
     fireEvent.change(input, { target: { value: "42" } });
     const took = performance.now() - start;
-    expect((input as HTMLInputElement).value).toBe("42");
+    expect(input.value).toBe("42");
     expect(took).toBeLessThan(200);
-  });
+  }, 120_000);
 });

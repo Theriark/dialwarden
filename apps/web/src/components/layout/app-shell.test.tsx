@@ -45,9 +45,9 @@ describe("AppShell", () => {
     // No viewport stub: jsdom has no matchMedia, which the shell treats as the
     // narrowest width.
     stubSignedIn();
-    const { router } = startRouter("/presets");
+    const { router } = startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
-    expect(router.state.location.pathname).toBe("/presets");
+    expect(router.state.location.pathname).toBe("/schedules");
     const nav = mainNav();
     for (const label of ["Fleet", "Activity", "Settings", "More"]) {
       expect(within(nav).getAllByText(label).length).toBeGreaterThan(0);
@@ -59,14 +59,14 @@ describe("AppShell", () => {
       expect(within(sheet).getByText(label)).toBeDefined();
     }
     await waitFor(() => {
-      expect(document.title).toBe("Presets · Dialwarden");
+      expect(document.title).toBe("Schedules · Dialwarden");
     });
   });
 
   it("renders the navigation column at 1440 and remembers the rail", async () => {
     stubViewport(1440);
     stubSignedIn();
-    startRouter("/presets");
+    startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     const links = within(mainNav()).getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
@@ -80,7 +80,7 @@ describe("AppShell", () => {
       "Settings",
     ]);
     const active = links.filter((link) => link.getAttribute("aria-current"));
-    expect(active.map((link) => link.textContent)).toEqual(["Presets"]);
+    expect(active.map((link) => link.textContent)).toEqual(["Schedules"]);
     expect(screen.queryByRole("button", { name: "More" })).toBeNull();
 
     const user = userEvent.setup();
@@ -100,7 +100,7 @@ describe("AppShell", () => {
     window.localStorage.setItem("dw.nav", "rail");
     stubViewport(1440);
     stubSignedIn();
-    startRouter("/presets");
+    startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     expect(
       screen.getByRole("button", { name: "Expand navigation" }),
@@ -110,15 +110,15 @@ describe("AppShell", () => {
   it("opens the navigation sheet at 768 and closes it on a choice", async () => {
     stubViewport(768);
     stubSignedIn();
-    const { router } = startRouter("/presets");
+    const { router } = startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     expect(screen.queryByRole("button", { name: "More" })).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
     const sheet = await screen.findByRole("dialog", { name: "Navigation" });
-    await user.click(within(sheet).getByRole("link", { name: "Schedules" }));
-    await screen.findByRole("heading", { name: "Schedules" });
-    expect(router.state.location.pathname).toBe("/schedules");
+    await user.click(within(sheet).getByRole("link", { name: "Matrix" }));
+    await screen.findByRole("heading", { name: "Matrix" });
+    expect(router.state.location.pathname).toBe("/matrix");
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: "Navigation" })).toBeNull();
     });
@@ -126,7 +126,7 @@ describe("AppShell", () => {
 
   it("shows the Development licence banner while an internal-dev licence is effective", async () => {
     stubSignedIn(paidFromEnvironment());
-    startRouter("/presets");
+    startRouter("/schedules");
     const banner = await screen.findByText(
       "Development licence, not for production",
     );
@@ -143,7 +143,7 @@ describe("AppShell", () => {
       }
       return undefined;
     });
-    const { router, client } = startRouter("/presets");
+    const { router, client } = startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     const user = userEvent.setup();
     await user.click(
@@ -162,11 +162,11 @@ describe("AppShell", () => {
         return { status: 500, body: { error: "internal" } };
       }
       if (method === "GET" && path === "/api/v1/plan/registry") {
-        return { status: 500, body: { error: "internal" } };
+        return { status: 500, body: { error: "internal" };
       }
       return undefined;
     });
-    const { router } = startRouter("/presets");
+    const { router } = startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     const user = userEvent.setup();
     await user.click(
@@ -179,7 +179,7 @@ describe("AppShell", () => {
 
   it("switches the theme from the menu and stores the choice", async () => {
     stubSignedIn();
-    startRouter("/presets");
+    startRouter("/schedules");
     await screen.findByText("Coming in a later phase");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     const user = userEvent.setup();
