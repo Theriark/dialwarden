@@ -8,6 +8,7 @@ export interface DiffSides {
   readonly hunks: number;
 }
 
+// eslint-disable-next-line security/detect-unsafe-regex -- two literal @@ markers around decimal counters; no nested quantifiers
 const HUNK_HEADER = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@/;
 
 export function splitUnifiedDiff(unifiedDiff: string): DiffSides {

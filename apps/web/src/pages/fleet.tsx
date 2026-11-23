@@ -17,7 +17,10 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { entitlementQuery, historyQuery, serversQuery } from "../api/queries";
-import type { History as ServerHistory, Server } from "../api/schema";
+import type {
+  History as ServerHistory,
+  Server as ServerData,
+} from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { Badge } from "../components/ui/badge";
@@ -60,10 +63,10 @@ export interface ServerPulse {
 
 /** Reads drift, pending and the last change out of a history answer. */
 export function pulseOf(history: ServerHistory | undefined): ServerPulse {
-  if (history === undefined || history.entries.length === 0) {
+  const [latest] = history?.entries ?? [];
+  if (latest === undefined) {
     return { drift: false, pending: false, lastChange: "No changes yet" };
   }
-  const latest = history.entries[0];
   const at = formatDateTime(latest.at);
   const drift = latest.cause === "external";
   const pending = latest.status === "pending";
@@ -89,7 +92,7 @@ function ServerCard({
   pulse,
   isOwner,
 }: {
-  server: Server;
+  server: ServerData;
   pulse: ServerPulse;
   isOwner: boolean;
 }) {
@@ -219,6 +222,7 @@ export function FleetPage() {
 
   const plan = entitlement.data?.plan === "paid" ? "Paid" : "Free";
   const driftCount = items.filter((_, index) => {
+    // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
     const history = histories[index]?.data;
     return history !== undefined && pulseOf(history).drift;
   }).length;
@@ -297,14 +301,18 @@ export function FleetPage() {
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((server, index) => (
-          <ServerCard
-            key={server.id}
-            server={server}
-            pulse={pulseOf(histories[index]?.data)}
-            isOwner={isOwner}
-          />
-        ))}
+        {items.map((server, index) => {
+          // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
+          const pulse = pulseOf(histories[index]?.data);
+          return (
+            <ServerCard
+              key={server.id}
+              server={server}
+              pulse={pulse}
+              isOwner={isOwner}
+            />
+          );
+        })}
       </div>
     </>
   );

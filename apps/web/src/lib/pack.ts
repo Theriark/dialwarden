@@ -8,6 +8,7 @@ import {
   type Pack,
   type Setting,
   type ValidationIssue,
+  type Values,
 } from "@dialwarden/packs-schema";
 import type { SettingsMeta } from "../api/schema";
 
@@ -47,7 +48,9 @@ export function issuesOf(
   values: Readonly<Record<string, unknown>>,
 ): Map<string, ValidationIssue> {
   const issues = new Map<string, ValidationIssue>();
-  for (const issue of validate(pack, values, {
+  // The values arrive from the settings JSON answer, so they are JsonValue by
+  // construction; the cast only satisfies the shared signature.
+  for (const issue of validate(pack, values as Values, {
     includeServerEvaluated: false,
   })) {
     if (!issues.has(issue.key)) {

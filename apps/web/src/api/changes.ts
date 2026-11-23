@@ -77,7 +77,9 @@ export function addServer(body: CreateServerBody): Promise<Server> {
 }
 
 export function removeServer(slug: string): Promise<void> {
-  return api<void>(`/api/v1/servers/${slug}`, { method: "DELETE" });
+  return api<unknown>(`/api/v1/servers/${slug}`, {
+    method: "DELETE",
+  }) as Promise<void>;
 }
 
 /** POST /api/v1/connectors/test: the connection test of the wizard. */
@@ -139,7 +141,9 @@ export function createPreset(body: {
 }
 
 export function deletePreset(id: string): Promise<void> {
-  return api<void>(`/api/v1/presets/${id}`, { method: "DELETE" });
+  return api<unknown>(`/api/v1/presets/${id}`, {
+    method: "DELETE",
+  }) as Promise<void>;
 }
 
 export function applyPreset(id: string, server: string): Promise<ChangeSet> {

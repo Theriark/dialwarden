@@ -23,7 +23,6 @@ import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { SaveDialog } from "../components/save-dialog";
 import { UpgradeHint } from "../components/upgrade-hint";
-import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";

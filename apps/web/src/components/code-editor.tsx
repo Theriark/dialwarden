@@ -80,7 +80,11 @@ export function LazyEditor({
             scrollBeyondLastLine: false,
             wordWrap: "on",
           }}
-          onChange={onChange}
+          onChange={(next) => {
+            if (onChange !== undefined && typeof next === "string") {
+              onChange(next);
+            }
+          }}
           onMount={(editor, monaco) => {
             const model = editor.getModel();
             if (model !== null && lint !== undefined) {
