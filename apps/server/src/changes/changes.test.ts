@@ -387,6 +387,36 @@ describe("the write path (rnd-report-1 2.7)", () => {
     ]);
   });
 
+  it("puts the files already written back when a later file of the pass conflicts", async () => {
+    const { app, api, root, slug } = await palworld();
+    const before = await settingsText(root);
+    const made = await draft(api, slug, { ExpRate: 2, "Launch.Players": 40 });
+    const seen: string[] = [];
+    app.ctx.changes.beforeWrite = async (_server, fileId) => {
+      seen.push(fileId);
+      if (seen.length !== 2) return;
+      // The second file of the pass (launch): the settings file is already
+      // written. An outside edit of the very setting the change set edits
+      // makes the retry a conflict, so the settings file must be put back.
+      await editOutside(root, PALWORLD_LAUNCH, "-players 32", "-players 48");
+    };
+    const done = await apply(api, made.id);
+    expect(done.status).toBe("conflict");
+    // The retry plans a conflict and writes nothing: two writes in total.
+    expect(seen).toEqual(["settings", "launch"]);
+    expect(await settingsText(root)).toBe(before);
+    expect(await values(api, slug)).toMatchObject({
+      ExpRate: 1,
+      "Launch.Players": 48,
+    });
+    const past = await history(api, slug);
+    expect(past.entries.map((entry) => [entry.cause, entry.status])).toEqual([
+      ["app", "conflict"],
+      ["external", "applied"],
+      ["import", "applied"],
+    ]);
+  });
+
   it("applies a failed change set again over its own partial write", async () => {
     const { app, api, root, slug } = await palworld();
     const made = await draft(api, slug, { ExpRate: 2, "Launch.Players": 40 });
