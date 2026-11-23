@@ -80,9 +80,34 @@ const recoveryKey = `
 ALTER TABLE users ADD COLUMN recovery_key_enc TEXT;
 `;
 
+// Connectors (P4-A, contract C4): the instance SSH key pair, its private key
+// encrypted with APP_SECRET_KEY (one row, made on first use), and the host
+// keys the owner confirmed, one per host and port.
+const connectors = `
+CREATE TABLE instance_ssh_key (
+  id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+  private_key_enc TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE known_hosts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  host TEXT NOT NULL,
+  port INTEGER NOT NULL,
+  algorithm TEXT NOT NULL,
+  fingerprint TEXT NOT NULL,
+  confirmed_at TEXT NOT NULL,
+  confirmed_by TEXT
+);
+CREATE UNIQUE INDEX known_hosts_host_port ON known_hosts (host, port);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
+  { id: "0003_connectors", sql: connectors },
 ];
 
 /** The id of the newest migration this build knows. */

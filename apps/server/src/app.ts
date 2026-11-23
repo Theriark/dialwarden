@@ -24,6 +24,7 @@ import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
 import { loadBuildInfo } from "./build-info.js";
 import { loadConfig, type AppConfig } from "./config.js";
+import { ConnectorService } from "./connectors/service.js";
 import { createAead } from "./crypto/aead.js";
 import { loadAppKey } from "./crypto/app-key.js";
 import { Settings } from "./db/settings.js";
@@ -43,6 +44,7 @@ import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { activityRoutes } from "./routes/activity.js";
 import { authRoutes } from "./routes/auth.js";
+import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { licenceRoutes } from "./routes/licence.js";
@@ -172,6 +174,12 @@ export async function buildApp(
       revision: build.revision,
       now,
     }),
+    connectors: new ConnectorService({
+      store,
+      aead,
+      dataDir: config.dataDir,
+      now,
+    }),
     packs: packs.packs,
     maintenance: false,
     importing: false,
@@ -232,6 +240,7 @@ export async function buildApp(
   activityRoutes(app);
   systemRoutes(app);
   gameRoutes(app);
+  connectorRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },

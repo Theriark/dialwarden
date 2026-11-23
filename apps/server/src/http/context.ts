@@ -15,6 +15,7 @@ import type { SetupToken } from "../auth/first-run.js";
 import type { ActiveSession, SessionService } from "../auth/sessions.js";
 import type { BackupService } from "../backup/service.js";
 import type { AppConfig } from "../config.js";
+import type { ConnectorService } from "../connectors/service.js";
 import type { Aead } from "../crypto/aead.js";
 import type { AppKey } from "../crypto/app-key.js";
 import type { Settings } from "../db/settings.js";
@@ -41,6 +42,8 @@ export interface AppContext {
   /** The one-time first-run setup token (DATA_DIR/setup-token). */
   setupToken: SetupToken;
   backups: BackupService;
+  /** Connectors, the instance SSH key and the pinned host keys (C4). */
+  connectors: ConnectorService;
   /** The game packs loaded at start, by pack id (contract C3). */
   packs: ReadonlyMap<string, Pack>;
   /** True while a first-run import replaces the database: the API answers 503. */
