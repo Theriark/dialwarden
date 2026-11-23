@@ -315,7 +315,7 @@ jobs:
               [[ "${name}" == "SYNTHETIC.md" ]] && continue
               # A whole entry only (bounded by line start or end, a pipe, a space
               # or a backtick), so r.ini is not taken as listed by server.ini.
-              escaped="$(printf '%s' "${name}" | sed -e 's/[][[\.*^$+?(){}|]/\\&/g')"
+              escaped="$(printf '%s' "${name}" | sed -e 's/[][\.*^$+?(){}|]/\\&/g')"
               grep -qE -- '(^|[|[:space:]`])'"${escaped}"'($|[|[:space:]`])' "${dir}/SYNTHETIC.md" || {
                 echo "::error file=${file}::${name} is not listed in ${dir}/SYNTHETIC.md"
                 status=1
