@@ -2,10 +2,13 @@
 // P1-A decision), and the workers are Vite worker files served from the app
 // origin, so the Content-Security-Policy (script-src 'self', worker-src
 // 'self') holds. The two themes use the brand tokens of tokens.css.
+// The worker paths go through the package's exports map ("./*.js" is
+// "./esm/vs/*.js" since monaco-editor 0.53), so the esm/vs prefix is
+// implied and a deep esm/ path would not resolve.
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
-import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
+import editorWorker from "monaco-editor/editor/editor.worker.js?worker";
+import jsonWorker from "monaco-editor/language/json/json.worker.js?worker";
 
 self.MonacoEnvironment = {
   getWorker(_workerId: string, label: string): Worker {
