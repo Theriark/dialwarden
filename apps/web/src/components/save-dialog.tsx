@@ -205,8 +205,8 @@ export function SaveDialog({
         <Alert kind="warning">
           <span className="flex items-center gap-1.5 font-medium">
             <RotateCw className="size-4 shrink-0" aria-hidden="true" />
-            {restarts} {restarts === 1 ? "setting" : "settings"} need a server
-            restart to take effect.
+            {restarts} {restarts === 1 ? "setting needs" : "settings need"} a
+            server restart to take effect.
           </span>
           <p className="mt-1">
             Restarting the server from Dialwarden arrives with phase P6; until
