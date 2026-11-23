@@ -37,7 +37,7 @@ async function firstRunSetup(page: Page): Promise<void> {
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/");
 }
@@ -106,7 +106,7 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
     .getByRole("button", { name: "Restore this version" })
     .first()
     .click();
-  await expect(page.getByText("Version restored")).toBeVisible();
+  await expect(page.getByText("Version restored").first()).toBeVisible();
   await expect(
     page.getByText("Rollback", { exact: true }).first(),
   ).toBeVisible();
