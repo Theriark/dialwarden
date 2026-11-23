@@ -17,19 +17,24 @@ import { SettingsLayout } from "./components/layout/settings-layout";
 import { AboutPage } from "./pages/about";
 import {
   ActivityPage,
-  FleetPage,
   MatrixPage,
-  PresetsPage,
   ReportsPage,
   SchedulesPage,
   UsersPage,
 } from "./pages/coming-soon";
+import { PresetsPage } from "./pages/presets";
 import { LoginPage, type LoginSearch } from "./pages/login";
 import { TwoFactorPage } from "./pages/login-2fa";
 import { NotFoundPage } from "./pages/not-found";
+import { FleetPage } from "./pages/fleet";
+import { NewServerPage } from "./pages/server-new";
+import { ServerHistoryPage } from "./pages/server-history";
+import { ServerRawPage } from "./pages/server-raw";
+import { ServerSettingsPage } from "./pages/server-settings";
 import { SetupPage } from "./pages/setup";
 import { BackupPage } from "./pages/settings/backup";
 import { LicencePage } from "./pages/settings/licence";
+import { PlanPage } from "./pages/settings/plan";
 import { ProfilePage } from "./pages/settings/profile";
 
 export interface RouterContext {
@@ -136,6 +141,39 @@ const presetsRoute = createRoute({
   component: PresetsPage,
 });
 
+const newServerRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/servers/new",
+  staticData: { title: "Add server" },
+  component: NewServerPage,
+});
+
+const serverRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/servers/$slug",
+});
+
+const serverSettingsRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/settings",
+  staticData: { title: "Settings" },
+  component: ServerSettingsPage,
+});
+
+const serverRawRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/raw",
+  staticData: { title: "Raw files" },
+  component: ServerRawPage,
+});
+
+const serverHistoryRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/history",
+  staticData: { title: "History" },
+  component: ServerHistoryPage,
+});
+
 const schedulesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/schedules",
@@ -194,6 +232,13 @@ const settingsIndexRoute = createRoute({
   component: EmptyPage,
 });
 
+const planRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/plan",
+  staticData: { title: "Plan" },
+  component: PlanPage,
+});
+
 const profileRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/profile",
@@ -222,6 +267,12 @@ const routeTree = rootRoute.addChildren([
   appRoute.addChildren([
     fleetRoute,
     presetsRoute,
+    newServerRoute,
+    serverRoute.addChildren([
+      serverSettingsRoute,
+      serverRawRoute,
+      serverHistoryRoute,
+    ]),
     schedulesRoute,
     matrixRoute,
     reportsRoute,
@@ -232,6 +283,7 @@ const routeTree = rootRoute.addChildren([
       settingsIndexRoute,
       profileRoute,
       licenceRoute,
+      planRoute,
       backupRoute,
     ]),
   ]),
