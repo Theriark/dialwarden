@@ -230,6 +230,26 @@ describe("Local connector: confinement", () => {
       "[Game]\nName=One\n",
     );
   });
+
+  it("removes nothing outside when the folder is swapped after the rename (N1)", async () => {
+    await writeFile(join(outside, "game.ini"), "[Game]\nName=Other\n");
+    const swapped = new LocalConnector({
+      root,
+      afterRename: async () => {
+        await rename(join(root, "Config"), join(root, "Config.real"));
+        await symlink(outside, join(root, "Config"));
+      },
+    });
+    const write = swapped.writeAtomic("Config/game.ini", text("new"));
+    expect(await codeOf(write)).toBe("PathEscape");
+    expect(await readFile(join(outside, "game.ini"), "utf8")).toBe(
+      "[Game]\nName=Other\n",
+    );
+    expect((await readdir(outside)).sort()).toEqual(["game.ini", "secret.txt"]);
+    expect(await readFile(join(root, "Config.real", "game.ini"), "utf8")).toBe(
+      "new",
+    );
+  });
 });
 
 async function realRoot(): Promise<string> {
