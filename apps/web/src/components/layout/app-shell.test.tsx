@@ -162,7 +162,7 @@ describe("AppShell", () => {
         return { status: 500, body: { error: "internal" } };
       }
       if (method === "GET" && path === "/api/v1/plan/registry") {
-        return { status: 500, body: { error: "internal" };
+        return { status: 500, body: { error: "internal" } };
       }
       return undefined;
     });
