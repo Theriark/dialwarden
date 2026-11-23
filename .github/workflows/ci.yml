@@ -6,8 +6,8 @@ name: CI
 #
 # Dialwarden is a single-image product (founder rule): one repository, one image
 # ghcr.io/theriark/dialwarden, the Free and Paid plans in the same build, Paid
-# unlocked by an offline signed licence key checked inside the image. There is
-# no CE/EE split and no second image.
+# unlocked by an offline signed licence key checked inside the image. There is no
+# CE/EE split and no second image.
 #
 # STRICT is "true" since phase P0 added the application: every check must run
 # and succeed, and a skipped check fails the gate. ("false" was the setup mode: a
