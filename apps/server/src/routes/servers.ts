@@ -235,6 +235,9 @@ export function serverRoutes(app: FastifyInstance): void {
       const found = await withSpec(app, spec, (connector) =>
         inspect(app, connector, body.packId, body.os),
       );
+      // Checked again with no await before the insert: another add may have
+      // finished while this one tested its connection (C1 limit(servers)).
+      servers().assertCanAdd();
       const server = servers().insert({ id, name: body.name, spec, ...found });
       try {
         await app.ctx.changes.importServer(server, actorOf(request));

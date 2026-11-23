@@ -13,6 +13,7 @@ import {
   SECRET_MASK,
   settingsOfFile,
   validate,
+  writeFileValues,
   type FileValues,
   type JsonValue,
   type Pack,
@@ -104,6 +105,10 @@ export function lineChip(
   };
 }
 
+/** The diff shown instead when a secret in the file cannot be located. */
+export const HIDDEN_DIFF_LINE =
+  "diff hidden: the file holds secret settings and does not parse";
+
 /** The non-empty values of the file's secret settings, longest first. */
 function secretTexts(pack: Pack, fileId: string, versions: FileValues[]) {
   const found = new Set<string>();
@@ -120,8 +125,44 @@ function secretTexts(pack: Pack, fileId: string, versions: FileValues[]) {
 }
 
 /**
+ * The text of a version with the value of every secret setting replaced by
+ * the mask where the file holds it (by position, through the format adapter,
+ * so an escaped value is masked too). Null when a secret cannot be located:
+ * the file does not parse, or a secret's text does not fit its type.
+ */
+function maskedText(
+  pack: Pack,
+  fileId: string,
+  secrets: readonly Setting[],
+  bytes: Uint8Array | null,
+  values: FileValues,
+): string | null {
+  if (bytes === null) return "";
+  if (secrets.some((setting) => values.invalid.includes(setting.key))) {
+    return null;
+  }
+  try {
+    const broken = lintFile(pack, fileId, bytes).some(
+      (issue) => issue.severity === "error",
+    );
+    if (broken) return null;
+    const edits: SettingEdit[] = [];
+    for (const setting of secrets) {
+      const value = values.values.get(setting.key);
+      if (value === undefined || value === null || value === "") continue;
+      edits.push({ key: setting.key, value: SECRET_MASK });
+    }
+    return decodeText(writeFileValues(pack, fileId, bytes, edits));
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The unified diff of two versions of a file with every value of a secret
- * setting (as read from either version) replaced by the mask.
+ * setting masked: by position in each version, then by value as a second
+ * guard. A file with secret settings whose secrets cannot be located in
+ * either version gets a fixed line instead of its diff.
  */
 export function maskedDiff(
   pack: Pack,
@@ -129,13 +170,27 @@ export function maskedDiff(
   before: Uint8Array | null,
   after: Uint8Array | null,
 ): string {
-  const versions = [
-    valuesIn(pack, fileId, before),
-    valuesIn(pack, fileId, after),
-  ];
-  let diff = unifiedDiff(fileId, decodeText(before), decodeText(after));
-  for (const secret of secretTexts(pack, fileId, versions)) {
+  const then = valuesIn(pack, fileId, before);
+  const now = valuesIn(pack, fileId, after);
+  const secrets = settingsOfFile(pack, fileId).filter(
+    (setting) => setting.secret === true,
+  );
+  let oldText = decodeText(before);
+  let newText = decodeText(after);
+  if (secrets.length > 0) {
+    const maskedOld = maskedText(pack, fileId, secrets, before, then);
+    const maskedNew = maskedText(pack, fileId, secrets, after, now);
+    if (maskedOld === null || maskedNew === null) {
+      if (oldText === newText) return "";
+      return `--- a/${fileId}\n+++ b/${fileId}\n${HIDDEN_DIFF_LINE}\n`;
+    }
+    oldText = maskedOld;
+    newText = maskedNew;
+  }
+  let diff = unifiedDiff(fileId, oldText, newText);
+  for (const secret of secretTexts(pack, fileId, [then, now])) {
     diff = diff.replaceAll(secret, SECRET_MASK);
+    diff = diff.replaceAll(JSON.stringify(secret).slice(1, -1), SECRET_MASK);
   }
   return diff;
 }
@@ -236,6 +291,14 @@ export function blockingIssues(
   });
 }
 
+/** Whether the file already holds the edit's value (null: not set). */
+function holdsEdit(edit: SettingEdit, file: FileValues): boolean {
+  if (file.invalid.includes(edit.key)) return false;
+  const current = file.values.get(edit.key);
+  if (edit.value === null) return current === undefined;
+  return current !== undefined && sameJson(current, edit.value);
+}
+
 function sameValue(key: string, a: FileValues, b: FileValues): boolean {
   if (a.invalid.includes(key) !== b.invalid.includes(key)) return false;
   const left = a.values.get(key);
@@ -248,7 +311,9 @@ function sameValue(key: string, a: FileValues, b: FileValues): boolean {
  * The edited settings whose value an outside edit changed since the change
  * was made (base is the file then, current the file now). None means the
  * edits can be made again on the current file: the outside edit touched other
- * spans only (the automatic three-way merge of rnd-report-1 2.7).
+ * spans only (the automatic three-way merge of rnd-report-1 2.7). An edit
+ * whose value the file already holds is no conflict: both sides made the
+ * same change, as when a failed apply wrote part of a change set.
  */
 export function editConflicts(
   pack: Pack,
@@ -264,6 +329,7 @@ export function editConflicts(
   for (const edit of edits) {
     const setting = settings.get(edit.key);
     if (setting === undefined || sameValue(edit.key, then, now)) continue;
+    if (holdsEdit(edit, now)) continue;
     conflicts.push({
       settingKey: setting.key,
       label: setting.label ?? setting.key,
