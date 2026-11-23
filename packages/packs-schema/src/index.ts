@@ -2,7 +2,8 @@
 // validate(pack, values), JSONLogic rules, presets, detection, secret masking
 // and the wrong-file lint. Everything here runs in the browser and on the
 // server alike; the loader and the packs check that read files are in
-// @dialwarden/packs-schema/node.
+// @dialwarden/packs-schema/node. The file helpers (files.ts) read and write
+// setting values through the format adapters for the change sets of P4-B.
 
 export * from "./types.js";
 export { checkPack, referenceProblems, safeRelativePath } from "./check.js";
@@ -23,6 +24,16 @@ export type {
   DetectionProbe,
   KeyValues,
 } from "./detection.js";
+export {
+  lintFile,
+  packFileOf,
+  readFileValues,
+  settingsOfFile,
+  writeFileValues,
+} from "./files.js";
+export type { FileValues, SettingEdit } from "./files.js";
+export { FormatError } from "@dialwarden/formats";
+export type { LintIssue } from "@dialwarden/formats";
 export { lintPackFile } from "./lint.js";
 export { maskSecrets, maskValue, SECRET_MASK } from "./mask.js";
 export { applyPreset, sameJson } from "./presets.js";

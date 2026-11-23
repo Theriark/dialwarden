@@ -133,10 +133,10 @@ describe("backup", () => {
       missingBlobs: [],
       rowCounts: {
         users: 1,
-        servers: null,
-        change_sets: null,
+        servers: 0,
+        change_sets: 0,
         audit_events: null,
-        snapshots: null,
+        snapshots: 0,
       },
     });
     expect(manifest.migrationId).toEqual(expect.any(String));

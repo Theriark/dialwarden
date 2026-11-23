@@ -68,7 +68,7 @@ const hostKeySchema = z.object({
   status: z.enum(["pinned", "unpinned", "changed"]),
 });
 
-const testSchema = z.object({
+export const testSchema = z.object({
   ok: z.boolean(),
   root: z.string().nullable(),
   hostKey: hostKeySchema.optional(),
@@ -92,7 +92,7 @@ const pinnedSchema = z.object({
   confirmedAt: z.string(),
 });
 
-const detectionSchema = z.object({
+export const detectionSchema = z.object({
   packId: z.string(),
   displayName: z.string(),
   by: z.enum(["appmanifest", "markers"]),
@@ -104,9 +104,12 @@ const detectionSchema = z.object({
 
 /**
  * A spec the connector factory accepts: a password only for panel SFTP, and
- * panel SFTP only with one (dev-work-plan P4-A step 2).
+ * panel SFTP only with one (dev-work-plan P4-A step 2). The servers API of
+ * P4-B checks its specs the same way.
  */
-function specOf(body: z.infer<typeof connectionSpecSchema>): ConnectionSpec {
+export function specOf(
+  body: z.infer<typeof connectionSpecSchema>,
+): ConnectionSpec {
   if (body.kind === "local") return body;
   if (body.panel && body.password === undefined) {
     throw new ApiError(422, "password_required");
@@ -119,7 +122,7 @@ function specOf(body: z.infer<typeof connectionSpecSchema>): ConnectionSpec {
 }
 
 /** The C4 error of a failed connector call as an API error. */
-function connectorFailure(error: unknown): ApiError {
+export function connectorFailure(error: unknown): ApiError {
   if (!(error instanceof ConnectorError)) throw error;
   const status: Record<ConnectorErrorCode, number> = {
     PathEscape: 422,

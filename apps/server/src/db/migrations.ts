@@ -104,10 +104,83 @@ CREATE TABLE known_hosts (
 CREATE UNIQUE INDEX known_hosts_host_port ON known_hosts (host, port);
 `;
 
+// Servers, change sets and snapshots (P4-B, contract C5). A server's slug is
+// its id. server_files keeps the SHA-256 the app last saw per pack file, the
+// base of outside-edit detection. change_sets.payload_enc holds the edits or
+// patches, encrypted with APP_SECRET_KEY because they can carry passwords.
+// snapshots names the content-addressed blobs under DATA_DIR/snapshots, and
+// snapshot_blobs records each blob once with its size on disk (the meter).
+const servers = `
+CREATE TABLE servers (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  pack_id TEXT NOT NULL,
+  os TEXT NOT NULL,
+  connector TEXT NOT NULL,
+  password_enc TEXT,
+  demo INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_edited_at TEXT
+);
+
+CREATE TABLE server_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  file_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  sha256 TEXT,
+  checked_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX server_files_server_file
+  ON server_files (server_id, file_id);
+
+CREATE TABLE change_sets (
+  id TEXT PRIMARY KEY NOT NULL,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  cause TEXT NOT NULL,
+  author TEXT NOT NULL,
+  payload_enc TEXT,
+  base TEXT NOT NULL,
+  diff TEXT NOT NULL,
+  lint TEXT NOT NULL,
+  conflict TEXT,
+  error TEXT,
+  restore_of TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  applied_at TEXT
+);
+CREATE INDEX change_sets_server ON change_sets (server_id, created_at);
+
+CREATE TABLE snapshots (
+  id TEXT PRIMARY KEY NOT NULL,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  change_set_id TEXT REFERENCES change_sets(id) ON DELETE SET NULL,
+  file_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  sha256 TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE INDEX snapshots_server ON snapshots (server_id, file_id, at);
+CREATE INDEX snapshots_change_set ON snapshots (change_set_id);
+
+CREATE TABLE snapshot_blobs (
+  sha256 TEXT PRIMARY KEY NOT NULL,
+  size INTEGER NOT NULL,
+  stored INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
   { id: "0003_connectors", sql: connectors },
+  { id: "0004_servers", sql: servers },
 ];
 
 /** The id of the newest migration this build knows. */

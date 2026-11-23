@@ -10,6 +10,7 @@ import type {
 } from "@dialwarden/entitlement";
 import type { Pack } from "@dialwarden/packs-schema";
 import type { ActivityService } from "../activity/service.js";
+import type { ChangeSetService } from "../changes/service.js";
 import type { AuthService } from "../auth/service.js";
 import type { SetupToken } from "../auth/first-run.js";
 import type { ActiveSession, SessionService } from "../auth/sessions.js";
@@ -22,6 +23,8 @@ import type { Settings } from "../db/settings.js";
 import type { Store } from "../db/store.js";
 import type { LicenceService } from "../licence/service.js";
 import type { EditableServers } from "../plan/editable.js";
+import type { ServerService } from "../servers/service.js";
+import type { SnapshotStore } from "../snapshots/store.js";
 
 export type AuthLevel = "public" | "user" | "owner";
 
@@ -46,6 +49,12 @@ export interface AppContext {
   connectors: ConnectorService;
   /** The game packs loaded at start, by pack id (contract C3). */
   packs: ReadonlyMap<string, Pack>;
+  /** Game servers: the servers API, limits and connectors per server. */
+  servers: ServerService;
+  /** Change sets, the write path, outside edits and history (C5). */
+  changes: ChangeSetService;
+  /** Content-addressed snapshot blobs under DATA_DIR/snapshots. */
+  snapshots: SnapshotStore;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */

@@ -56,6 +56,11 @@ export interface LocalOptions {
    * the temp file (the folder swap threat test).
    */
   readonly beforeTempOpen?: () => Promise<void>;
+  /**
+   * Tests only: runs right after a write renamed its temp file over the
+   * target (the post-rename folder swap test, finding N1 of THE-2420).
+   */
+  readonly afterRename?: () => Promise<void>;
 }
 
 export function sha256Hex(bytes: Uint8Array): string {
@@ -146,12 +151,14 @@ export class LocalConnector implements Connector {
   readonly #root: string;
   readonly #deny: readonly string[];
   readonly #beforeTempOpen: (() => Promise<void>) | undefined;
+  readonly #afterRename: (() => Promise<void>) | undefined;
   #real: string | null = null;
 
   constructor(options: LocalOptions) {
     this.#root = options.root;
     this.#deny = options.deny ?? [];
     this.#beforeTempOpen = options.beforeTempOpen;
+    this.#afterRename = options.afterRename;
   }
 
   /** The real path of the root, checked once. */
@@ -365,11 +372,15 @@ export class LocalConnector implements Connector {
       await unlink(temp).catch(() => undefined);
       throw fsError(error, rel);
     }
-    // A folder swapped after the descriptor check moves the rename out of the
-    // root: the target's real path then differs, and the file is removed.
+    await this.#afterRename?.();
+    // The rename resolves both names through the same folder, so it cannot
+    // put the temp file outside the root. A folder swapped right after it
+    // makes the target's real path differ: the write is reported as escaped
+    // and nothing is removed, because unlinking by path would follow the
+    // swapped folder to a file outside the root (security review THE-2420,
+    // finding N1).
     const landed = await realpath(target).catch(() => null);
     if (landed !== target) {
-      if (landed !== null) await unlink(target).catch(() => undefined);
       throw new ConnectorError(
         "PathEscape",
         `${rel} leads out of the server root`,

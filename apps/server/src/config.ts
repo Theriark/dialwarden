@@ -23,6 +23,8 @@ export interface AppConfig {
   backupSchedule: string;
   backupTimezone: string;
   demoSeed: boolean;
+  /** DEMO_SERVERS_DIR: where the demo seed makes its game folders. */
+  demoServersDir: string;
   /** WEB_DIST: the built web app the server serves (contract C8). */
   webDist: string;
   /** PACKS_DIR: the game packs folder (default: @dialwarden/packs). */
@@ -104,6 +106,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     backupSchedule: nonEmpty(env["BACKUP_SCHEDULE"]) ?? "30 3 * * *",
     backupTimezone: nonEmpty(env["BACKUP_TZ"]) ?? "Europe/Lisbon",
     demoSeed: env["DEMO_SEED"] === "true",
+    demoServersDir: nonEmpty(env["DEMO_SERVERS_DIR"]) ?? "/demo-servers",
     webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,
     packsDir: nonEmpty(env["PACKS_DIR"]) ?? defaultPacksDir(),
   };
