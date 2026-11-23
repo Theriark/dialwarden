@@ -49,9 +49,11 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
 
   // The fleet wall is empty and offers the first server.
   await expect(page.getByRole("heading", { name: "Fleet" })).toBeVisible();
-  await expect(page.getByText("No servers yet")).toBeVisible();
+  await expect(page.getByText("No servers yet").first()).toBeVisible();
   await expect(
-    page.getByText("Add your first game server to edit its settings safely"),
+    page
+      .getByText("Add your first game server to edit its settings safely")
+      .first(),
   ).toBeVisible();
   await page.getByRole("link", { name: "Add server" }).first().click();
   await expect(page).toHaveURL("/servers/new");
@@ -60,9 +62,9 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.getByLabel("Server name").fill("Palworld Home");
   await page.getByLabel("Server folder").fill(SERVER_DIR);
   await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByText("Connected to")).toBeVisible();
+  await expect(page.getByText("Connected to").first()).toBeVisible();
   await page.getByRole("button", { name: "Detect the game" }).click();
-  await expect(page.getByText("Palworld")).toBeVisible();
+  await expect(page.getByText("Palworld").first()).toBeVisible();
   await page.getByRole("button", { name: "Add server" }).click();
   await expect(page).toHaveURL("/servers/palworld-home/settings");
 
@@ -70,7 +72,7 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(
     page.getByRole("heading", { name: "Palworld Home settings" }),
   ).toBeVisible();
-  await expect(page.getByText("pack matches the server")).toBeVisible();
+  await expect(page.getByText("pack matches the server").first()).toBeVisible();
   await expect(page.getByText("Rates", { exact: true }).first()).toBeVisible();
 
   // Search narrows to the Experience rate setting, keyboard-first.
@@ -78,14 +80,14 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.getByLabel("Search settings").fill("Experience rate");
   await expect(page.getByLabel("Experience rate")).toHaveCount(1);
   await page.getByLabel("Experience rate").fill("2");
-  await expect(page.getByText("1 setting changed")).toBeVisible();
+  await expect(page.getByText("1 setting changed").first()).toBeVisible();
 
   // Review shows the semantic chip and the restart warning, then applies.
   await page.getByRole("button", { name: "Review and save" }).click();
-  await expect(page.getByText("Save these changes?")).toBeVisible();
-  await expect(page.getByText("Experience rate: 1 → 2")).toBeVisible();
+  await expect(page.getByText("Save these changes?").first()).toBeVisible();
+  await expect(page.getByText("Experience rate: 1 → 2").first()).toBeVisible();
   await expect(
-    page.getByText("1 setting needs a server restart to take effect."),
+    page.getByText("1 setting needs a server restart to take effect.").first(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save without restart" }).click();
   await expect(page.getByText("Changes saved").first()).toBeVisible();
@@ -99,8 +101,8 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
     .first()
     .click();
   await expect(page).toHaveURL("/servers/palworld-home/history");
-  await expect(page.getByText("First import")).toBeVisible();
-  await expect(page.getByText("Changed in Dialwarden")).toBeVisible();
+  await expect(page.getByText("First import").first()).toBeVisible();
+  await expect(page.getByText("Changed in Dialwarden").first()).toBeVisible();
   await expect(page.getByText("Experience rate: 1 → 2").first()).toBeVisible();
   await page
     .getByRole("button", { name: "Restore this version" })
@@ -110,6 +112,13 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(
     page.getByText("Rollback", { exact: true }).first(),
   ).toBeVisible();
+
+  // The restore really rolled the file back: the before snapshot is the
+  // one restored, so the editor shows the old value again (finding H1).
+  await page.goto("/servers/palworld-home/settings");
+  await page.getByLabel("Search settings").fill("Experience rate");
+  await expect(page.getByLabel("Experience rate")).toHaveCount(1);
+  await expect(page.getByLabel("Experience rate")).toHaveValue("1");
 
   // The raw editor loads Monaco over the settings file, owner only.
   await page.goto("/servers/palworld-home/raw");
@@ -121,13 +130,13 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(
     page.getByRole("heading", { name: "Choose your three servers" }),
   ).toBeVisible();
-  await expect(page.getByText("Palworld Home")).toBeVisible();
+  await expect(page.getByText("Palworld Home").first()).toBeVisible();
   await expect(page.getByText("1 of 3 in use")).toBeVisible();
 
   // The presets screen holds its designed state while the API is missing.
   await page.goto("/presets");
   await expect(
-    page.getByText("Presets are not on this build yet"),
+    page.getByText("Presets are not on this build yet").first(),
   ).toBeVisible();
 });
 
@@ -153,7 +162,7 @@ test("the Paid plan: the licence page switches the entitlement", async ({
 
   // The history timeline shows everything; the Free line is gone.
   await page.goto("/servers/palworld-home/history");
-  await expect(page.getByText("First import")).toBeVisible();
+  await expect(page.getByText("First import").first()).toBeVisible();
   await expect(page.getByText("kept and visible on the Paid plan")).toHaveCount(
     0,
   );
