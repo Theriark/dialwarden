@@ -2,7 +2,7 @@
 // (screen 5), lazy-loaded so the typed editor, the tests and the first
 // paint never pull the editor bundle. The theme follows the app theme, and
 // the raw editor's lint reaches the Monaco gutter as markers.
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { useTheme } from "../theme/theme-provider";
 import { Skeleton } from "./ui/states";
 
@@ -63,6 +63,17 @@ export function LazyEditor({
   height?: string;
 }) {
   const { resolved } = useTheme();
+  const setMarkersRef = useRef<((lint: readonly LintMarker[]) => void) | null>(
+    null,
+  );
+
+  // The lint must reach the gutter whenever it changes, not only when the
+  // editor first mounts: the raw editor keeps one instance across files and
+  // saves.
+  useEffect(() => {
+    setMarkersRef.current?.(lint ?? []);
+  }, [lint]);
+
   return (
     <div className="overflow-hidden rounded-control border border-border">
       <Suspense fallback={FALLBACK}>
@@ -86,13 +97,19 @@ export function LazyEditor({
             }
           }}
           onMount={(editor, monaco) => {
-            const model = editor.getModel();
-            if (model !== null && lint !== undefined) {
-              monaco.editor.setModelMarkers(
-                model,
-                "dialwarden",
-                markersOf(lint),
-              );
+            const setMarkers = (next: readonly LintMarker[]) => {
+              const model = editor.getModel();
+              if (model !== null) {
+                monaco.editor.setModelMarkers(
+                  model,
+                  "dialwarden",
+                  markersOf(next),
+                );
+              }
+            };
+            setMarkersRef.current = setMarkers;
+            if (lint !== undefined) {
+              setMarkers(lint);
             }
           }}
         />

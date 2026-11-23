@@ -5,12 +5,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { FileText, History, Save, Settings2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import { rawFileQuery, serverQuery, serverSettingsQuery } from "../api/queries";
 import type { ChangeSet, LintEntry } from "../api/schema";
 import { useIsOwner } from "../api/session";
+import { languageOf } from "../lib/file-language";
 import { PageHeader } from "../components/layout/page-header";
 import { LazyEditor, type LintMarker } from "../components/code-editor";
 import { SaveDialog } from "../components/save-dialog";
@@ -22,17 +23,6 @@ import { useToast } from "../components/ui/toast";
 
 const FILE_LABEL =
   "flex items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft";
-
-function languageOf(path: string): string {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".json")) return "json";
-  if (lower.endsWith(".ini") || lower.endsWith(".acf")) return "ini";
-  if (lower.endsWith(".sh") || lower.endsWith(".bash")) return "shell";
-  if (lower.endsWith(".xml") || lower.endsWith(".html")) return "xml";
-  if (lower.endsWith(".yml") || lower.endsWith(".yaml")) return "yaml";
-  if (lower.endsWith(".toml")) return "ini";
-  return "plaintext";
-}
 
 function toMarkers(lint: readonly LintEntry[]): LintMarker[] {
   return lint
@@ -57,6 +47,7 @@ export function ServerRawPage() {
     ...rawFileQuery(slug, chosen ?? ""),
     enabled: isOwner && chosen !== null,
   });
+  const markers = useMemo(() => toMarkers(file.data?.lint ?? []), [file.data]);
   const toast = useToast();
   const [text, setText] = useState<string | null>(null);
   const [changeSet, setChangeSet] = useState<ChangeSet | null>(null);
@@ -137,6 +128,11 @@ export function ServerRawPage() {
   const current = chosen === null ? null : (text ?? file.data?.text ?? null);
   const dirty =
     current !== null && file.data !== undefined && current !== file.data.text;
+  // The save dialog's text diff highlights with the file's own language.
+  const fileLanguage = (fileId: string) =>
+    languageOf(
+      settings.data?.files.find((file) => file.fileId === fileId)?.path ?? "",
+    );
 
   return (
     <>
@@ -223,7 +219,7 @@ export function ServerRawPage() {
                   ? languageOf(file.data.path)
                   : "plaintext"
               }
-              lint={toMarkers(file.data?.lint ?? [])}
+              lint={markers}
               readOnly={!editable}
               onChange={(value) => {
                 setText(value);
@@ -236,6 +232,7 @@ export function ServerRawPage() {
         <SaveDialog
           slug={slug}
           changeSet={changeSet}
+          fileLanguage={fileLanguage}
           onClose={() => {
             setChangeSet(null);
           }}
