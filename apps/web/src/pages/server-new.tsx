@@ -3,7 +3,7 @@
 // key with a copy button, the connection test, the host-key fingerprint
 // confirm and the game detection. The launch source step is designed but
 // filled in by P6. Adding a server is owner only (the server enforces it).
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Check,
@@ -26,7 +26,7 @@ import {
   testConnection,
 } from "../api/changes";
 import { errorMessage } from "../api/errors";
-import { instanceKeyQuery } from "../api/queries";
+import { instanceKeyQuery, p4keys } from "../api/queries";
 import type { ConnectionSpec, Detection, TestResult } from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
@@ -110,6 +110,7 @@ export function NewServerPage() {
   const isOwner = useIsOwner();
   const navigate = useNavigate();
   const toast = useToast();
+  const client = useQueryClient();
   const key = useQuery(instanceKeyQuery());
 
   const [name, setName] = useState("");
@@ -126,6 +127,15 @@ export function NewServerPage() {
   const [keyTrusted, setKeyTrusted] = useState(false);
   const [detected, setDetected] = useState<readonly Detection[] | null>(null);
   const [packId, setPackId] = useState<string | null>(null);
+
+  // Any connection field change voids the test, the host-key trust and the
+  // detection, so a stale packId never reaches the add.
+  const connectionChanged = () => {
+    setTested(null);
+    setKeyTrusted(false);
+    setDetected(null);
+    setPackId(null);
+  };
 
   const portNumber = Number(port);
   const portOk =
@@ -224,6 +234,7 @@ export function NewServerPage() {
       }),
     onSuccess: (server) => {
       toast.push({ kind: "success", title: `${server.name} added` });
+      void client.invalidateQueries({ queryKey: p4keys.servers });
       void navigate({
         to: "/servers/$slug/settings",
         params: { slug: server.id },
@@ -297,7 +308,7 @@ export function NewServerPage() {
                     checked={kind === "local"}
                     onChange={() => {
                       setKind("local");
-                      setTested(null);
+                      connectionChanged();
                     }}
                   />
                   <span className="flex flex-col gap-0.5">
@@ -324,7 +335,7 @@ export function NewServerPage() {
                     checked={kind === "sftp"}
                     onChange={() => {
                       setKind("sftp");
-                      setTested(null);
+                      connectionChanged();
                     }}
                   />
                   <span className="flex flex-col gap-0.5">
@@ -345,6 +356,7 @@ export function NewServerPage() {
                 value={root}
                 onChange={(event) => {
                   setRoot(event.target.value);
+                  connectionChanged();
                 }}
               />
             ) : (
@@ -357,6 +369,7 @@ export function NewServerPage() {
                     value={host}
                     onChange={(event) => {
                       setHost(event.target.value);
+                      connectionChanged();
                     }}
                   />
                   <TextField
@@ -367,6 +380,7 @@ export function NewServerPage() {
                     error={portOk ? undefined : "Port must be 1 to 65535"}
                     onChange={(event) => {
                       setPort(event.target.value);
+                      connectionChanged();
                     }}
                   />
                 </div>
@@ -376,6 +390,7 @@ export function NewServerPage() {
                   value={username}
                   onChange={(event) => {
                     setUsername(event.target.value);
+                    connectionChanged();
                   }}
                 />
                 <TextField
@@ -385,6 +400,7 @@ export function NewServerPage() {
                   value={remoteRoot}
                   onChange={(event) => {
                     setRemoteRoot(event.target.value);
+                    connectionChanged();
                   }}
                 />
                 <SwitchField
@@ -394,7 +410,7 @@ export function NewServerPage() {
                   checked={panel}
                   onCheckedChange={(next) => {
                     setPanel(next);
-                    setTested(null);
+                    connectionChanged();
                   }}
                 />
                 {panel ? (
@@ -405,6 +421,7 @@ export function NewServerPage() {
                     value={password}
                     onChange={(event) => {
                       setPassword(event.target.value);
+                      connectionChanged();
                     }}
                   />
                 ) : null}
