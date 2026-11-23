@@ -390,7 +390,7 @@ jobs:
             SOURCE_DATE_EPOCH=${{ steps.epoch.outputs.epoch }}
             FEATURE_BASELINE_EPOCH=${{ steps.epoch.outputs.baseline }}
           cache-from: type=gha
-          cache-to: gha,mode=max
+          cache-to: type=gha,mode=max
       - name: Load the amd64 image for the checks
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         env:
@@ -503,9 +503,9 @@ jobs:
             echo "## Image smoke test (amd64)"
             echo
             echo "- User: ${user}, process UID ${uid}, Node ${node_version}, read-only root file system"
-            echo "- /healthz: `${body}`"
+            echo "- /healthz: \`${body}\`"
             echo "- Web UI from /app/public: / and /login 200 text/html, ${asset} 200 immutable, /api/v1/does-not-exist 404 JSON, /healthz nosniff"
-            echo "- Content-Security-Policy of /: `${csp}`"
+            echo "- Content-Security-Policy of /: \`${csp}\`"
           } >> "${GITHUB_STEP_SUMMARY}"
           docker rm -f smoke >/dev/null
 
@@ -556,7 +556,7 @@ jobs:
         run: |
           set -euo pipefail
           jq -e '.spdxVersion and (.packages | length > 0)' sbom.spdx.json >/dev/null || {
-            echo "::error file=sbom.spdx.json::sbom.spdx.json is not an SPDX document with packages"
+            echo "::error::sbom.spdx.json is not an SPDX document with packages"
             exit 1
           }
           packages="$(jq '.packages | length' sbom.spdx.json)"
@@ -574,7 +574,7 @@ jobs:
           path: sbom.spdx.json
           if-no-files-found: error
           retention-days: 90
-      - uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed23c00390a439 # v7.4.2
+      - uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439 # v7.4.2
         with:
           sbom: sbom.spdx.json
           fail-build: true
@@ -653,7 +653,7 @@ jobs:
             echo "| --- | --- |"
             echo "${RESULTS}" | jq -r 'to_entries[] | "| \(.key) | \(.value.result) |"'
             echo
-            echo "A result of `skipped` is not a pass. It is tolerated only while STRICT is false (see docs/ci-cd.md)."
+            echo "A result of \`skipped\` is not a pass. It is tolerated only while STRICT is false (see docs/ci-cd.md)."
           } >> "${GITHUB_STEP_SUMMARY}"
           if echo "${RESULTS}" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' >/dev/null; then
             echo "::error::at least one required check failed"
@@ -750,7 +750,7 @@ jobs:
             org.opencontainers.image.created=${{ steps.epoch.outputs.created }}
             org.opencontainers.image.licenses=LicenseRef-FCL-1.0-MIT
           cache-from: type=gha
-          cache-to: gha,mode=max
+          cache-to: type=gha,mode=max
       - name: Require a valid digest
         shell: bash
         env:
@@ -809,9 +809,9 @@ jobs:
           {
             echo "## dialwarden deployed to Development"
             echo
-            echo "- Source commit: `${SOURCE_SHA}` (build date ${CREATED}, SOURCE_DATE_EPOCH)"
-            echo "- Immutable image: `${IMAGE}@${DIGEST}` (linux/amd64 and linux/arm64, cosign signed, SBOM attested)"
-            echo "- Previous image (rollback target): `${PREVIOUS:-none}`"
+            echo "- Source commit: \`${SOURCE_SHA}\` (build date ${CREATED}, SOURCE_DATE_EPOCH)"
+            echo "- Immutable image: \`${IMAGE}@${DIGEST}\` (linux/amd64 and linux/arm64, cosign signed, SBOM attested)"
+            echo "- Previous image (rollback target): \`${PREVIOUS:-none}\`"
             echo "- URL: https://${DEV_HOST}/"
           } >> "${GITHUB_STEP_SUMMARY}"
 
@@ -872,8 +872,8 @@ jobs:
             -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth}" \
             push origin "HEAD:refs/heads/${BRANCH}"
           {
-            echo "## pnpm-lock.yaml committed to `${BRANCH}`"
+            echo "## pnpm-lock.yaml committed to \`${BRANCH}\`"
             echo
-            echo "- New head: `$(git rev-parse HEAD)`"
-            echo "- CI was NOT started. Request one run for this head with the CI request broker (label `ci-go`)."
+            echo "- New head: \`$(git rev-parse HEAD)\`"
+            echo "- CI was NOT started. Request one run for this head with the CI request broker (label \`ci-go\`)."
           } >> "${GITHUB_STEP_SUMMARY}"
