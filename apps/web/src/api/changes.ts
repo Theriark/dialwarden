@@ -88,18 +88,6 @@ export function testConnection(spec: ConnectionSpec): Promise<TestResult> {
   });
 }
 
-/** POST /api/v1/connectors/detect: the wizard's game detection. */
-export interface DetectionList {
-  readonly items: readonly Detection[];
-}
-
-export function detectGames(spec: ConnectionSpec): Promise<DetectionList> {
-  return api<DetectionList>("/api/v1/connectors/detect", {
-    method: "POST",
-    body: spec,
-  });
-}
-
 export function confirmHostKey(
   host: string,
   port: number,
@@ -109,6 +97,18 @@ export function confirmHostKey(
   return api<PinnedHostKey>("/api/v1/connectors/host-keys", {
     method: "POST",
     body: { host, port, fingerprint, replace },
+  });
+}
+
+/** POST /api/v1/connectors/detect: the wizard's game detection. */
+export interface DetectionList {
+  readonly items: readonly Detection[];
+}
+
+export function detectGames(spec: ConnectionSpec): Promise<DetectionList> {
+  return api<DetectionList>("/api/v1/connectors/detect", {
+    method: "POST",
+    body: spec,
   });
 }
 

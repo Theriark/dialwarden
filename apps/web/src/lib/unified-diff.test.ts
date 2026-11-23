@@ -24,9 +24,9 @@ describe("splitUnifiedDiff", () => {
 
   it("keeps the file headers out of the sides", () => {
     const sides = splitUnifiedDiff(PALWORLD_DIFF);
-    expect(sides.before.startsWith("a/") || sides.before.startsWith("---")).toBe(
-      false,
-    );
+    expect(
+      sides.before.startsWith("a/") || sides.before.startsWith("---"),
+    ).toBe(false);
   });
 
   it("handles several hunks and added or removed lines", () => {

@@ -83,7 +83,7 @@ describe("ChangeChip", () => {
     expect(text).toBe("ini 41 lines (imported)");
   });
 
-  it("truncates long values visually but keeps them in the title", () => {
+  it("truncates long values but keeps them in the title", () => {
     const long = "x".repeat(80);
     render(
       <ul>
