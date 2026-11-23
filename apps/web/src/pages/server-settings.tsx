@@ -46,6 +46,7 @@ import {
 import { TextField } from "../components/ui/field";
 import { SwitchField } from "../components/ui/switch";
 import { useToast } from "../components/ui/toast";
+import { languageOf } from "../lib/file-language";
 import { issuesOf, packOf, settingsByKey } from "../lib/pack";
 import { cn } from "../lib/cn";
 import type { ChangeSet } from "../api/schema";
@@ -176,17 +177,39 @@ export function ServerSettingsPage() {
     () => ({ ...(settings.data?.values ?? {}), ...draft }),
     [settings.data, draft],
   );
-  const issues = useMemo(
+  const browserIssues = useMemo(
     () => (pack === null ? new Map() : issuesOf(pack, effective)),
     [pack, effective],
   );
+  // The answer's lint covers the stored values, including the rules marked
+  // serverEvaluated that the browser cannot run on masked secrets; merged
+  // in, the editor shows them inline. A browser issue of the draft wins for
+  // its setting.
+  const issues = useMemo(() => {
+    const merged = new Map<string, { severity: string; message: string }>();
+    for (const entry of settings.data?.lint ?? []) {
+      if (entry.settingKey !== null) {
+        merged.set(entry.settingKey, {
+          severity: entry.severity,
+          message: entry.message,
+        });
+      }
+    }
+    for (const [key, issue] of browserIssues) {
+      merged.set(key, issue);
+    }
+    return merged;
+  }, [settings.data, browserIssues]);
   const byKey = useMemo(
     () => settingsByKey((meta.data?.settings ?? []) as Setting[]),
     [meta.data],
   );
+  // Only the draft's own issues block the save; the server's lint of the
+  // stored values informs, and the save dialog reviews the after-state.
   const blocked = useMemo(
-    () => [...issues.values()].some((issue) => issue.severity === "error"),
-    [issues],
+    () =>
+      [...browserIssues.values()].some((issue) => issue.severity === "error"),
+    [browserIssues],
   );
   const editedCount = useMemo(
     () =>
@@ -208,33 +231,21 @@ export function ServerSettingsPage() {
   );
   // Stable handlers: SettingField is memoised, so a keystroke re-renders the
   // one field it touches, not the whole 400-setting file.
-  const serverValues = settings.data?.values;
   const onFieldChange = useCallback((key: string, value: unknown) => {
     setDraft((current) => ({ ...current, [key]: value }));
   }, []);
-  const onFieldReset = useCallback(
-    (key: string) => {
-      setDraft((current) => {
-        const setting = byKey.get(key);
-        const original = serverValues?.[key] ?? null;
-        // A secret never resets to its default unless it was edited: the
-        // server only ever shows its mask, so an untouched secret has
-        // nothing to reset.
-        const edited =
-          key in current &&
-          !sameJson((current[key] ?? null) as JsonValue, original as JsonValue);
-        if (!edited) {
-          // fromEntries instead of delete: no dynamically computed property
-          // removal (eslint no-dynamic-delete).
-          return Object.fromEntries(
-            Object.entries(current).filter(([k]) => k !== key),
-          );
-        }
-        return { ...current, [key]: setting?.default ?? null };
-      });
-    },
-    [byKey, serverValues],
-  );
+  const onFieldReset = useCallback((key: string) => {
+    // Reset discards the edit: the key leaves the draft and the field
+    // falls back to the server answer. It never writes the pack default -
+    // the marker shows an edit against the server answer, so a default
+    // here would queue a wipe of an edited secret the user can no longer
+    // see (the server only refuses a secret edit that equals its mask).
+    // fromEntries instead of delete: no dynamically computed property
+    // removal (eslint no-dynamic-delete).
+    setDraft((current) =>
+      Object.fromEntries(Object.entries(current).filter(([k]) => k !== key)),
+    );
+  }, []);
 
   const save = useMutation({
     mutationFn: () => {
@@ -260,6 +271,12 @@ export function ServerSettingsPage() {
       setChangeSet(created);
     },
   });
+
+  // The save dialog's text diffs highlight with each file's own language.
+  const fileLanguage = (fileId: string) =>
+    languageOf(
+      settings.data?.files.find((file) => file.fileId === fileId)?.path ?? "",
+    );
 
   if (settings.isPending || server.isPending) {
     return (
@@ -355,7 +372,6 @@ export function ServerSettingsPage() {
               error: "payment_required",
               plan: "free",
               limit: "servers",
-              current: 3,
               max: 3,
             }}
           />
@@ -466,6 +482,7 @@ export function ServerSettingsPage() {
         <SaveDialog
           slug={slug}
           changeSet={changeSet}
+          fileLanguage={fileLanguage}
           onClose={() => {
             setChangeSet(null);
           }}
