@@ -188,3 +188,54 @@ export function TextAreaField({
     </FieldFrame>
   );
 }
+
+export interface SelectOption {
+  value: string;
+  label: string;
+}
+
+export interface SelectFieldProps {
+  id: string;
+  label: string;
+  help?: string | undefined;
+  error?: string | undefined;
+  value: string;
+  options: readonly SelectOption[];
+  onChange: (value: string) => void;
+  disabled?: boolean | undefined;
+}
+
+/** A labelled select, wired like the text fields. */
+export function SelectField({
+  id,
+  label,
+  help,
+  error,
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: SelectFieldProps) {
+  const invalid = error !== undefined && error !== "";
+  return (
+    <FieldFrame id={id} label={label} help={help} error={error}>
+      <select
+        id={id}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => {
+          onChange(event.target.value);
+        }}
+        className={cn(CONTROL, "h-10 disabled:opacity-60")}
+        aria-invalid={invalid ? true : undefined}
+        aria-describedby={describedBy(id, help, error)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </FieldFrame>
+  );
+}
