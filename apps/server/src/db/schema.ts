@@ -1,4 +1,4 @@
-// Drizzle schema of the P1 tables. The SQL that creates them is in
+// Drizzle schema of the P1 and P4 tables. The SQL that creates them is in
 // migrations.ts; schema.test.ts fails when the two disagree. Later phases add
 // their tables here and a new migration (never an edit of an applied one).
 import { sql } from "drizzle-orm";
@@ -96,6 +96,36 @@ export const activityEvents = sqliteTable(
   ],
 );
 
+/** The instance SSH key pair (P4-A): one row, made on first use. */
+export const instanceSshKey = sqliteTable(
+  "instance_ssh_key",
+  {
+    id: integer("id").primaryKey(),
+    /** OpenSSH private key, encrypted with APP_SECRET_KEY. */
+    privateKeyEnc: text("private_key_enc").notNull(),
+    /** OpenSSH public key line (ssh-ed25519 AAAA... comment). */
+    publicKey: text("public_key").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [check("instance_ssh_key_one_row", sql`${table.id} = 1`)],
+);
+
+/** SSH host keys the owner confirmed (P4-A), one per host and port. */
+export const knownHosts = sqliteTable(
+  "known_hosts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    host: text("host").notNull(),
+    port: integer("port").notNull(),
+    algorithm: text("algorithm").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    confirmedAt: text("confirmed_at").notNull(),
+    confirmedBy: text("confirmed_by"),
+  },
+  (table) => [uniqueIndex("known_hosts_host_port").on(table.host, table.port)],
+);
+
 export const schema = {
   users,
   recoveryCodes,
@@ -103,4 +133,6 @@ export const schema = {
   settings,
   licence,
   activityEvents,
+  instanceSshKey,
+  knownHosts,
 };

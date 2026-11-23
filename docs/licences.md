@@ -41,6 +41,7 @@ needs Legal's agreement in the pull request. Add a row only with a reason.
 | `caniuse-lite` | `CC-BY-4.0` | dev | Browser support data read by browserslist during the apps/web build (@vitejs/plugin-react, Babel); the data does not ship |
 | `@csstools/color-helpers` | `MIT-0` | dev | Colour helpers of jsdom's CSS parser (cssstyle), used by the apps/web unit tests only |
 | `isbot` | `Unlicense` | all | Dependency of @tanstack/react-router, the apps/web router, used only by its server-side rendering entry that apps/web does not import, so it is not expected in the built bundle; Unlicense is a public-domain dedication with no conditions. Pending Legal's agreement on the pull request (THE-2121) |
+| `tweetnacl` | `Unlicense` | all | Dependency of bcrypt-pbkdf, which ssh2 (the SFTP connector, dev-work-plan P4-A) requires to read passphrase-protected OpenSSH keys; the instance key Dialwarden makes has no passphrase, but ssh2 always loads the package. Unlicense is a public-domain dedication with no conditions (as for isbot). Agreed by Legal (THE-2389) |
 
 ## How to change this list
 

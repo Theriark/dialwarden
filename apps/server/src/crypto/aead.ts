@@ -118,4 +118,9 @@ export const ENCRYPTED_COLUMNS = [
   { table: "users", column: "totp_secret_enc", context: "users.totp_secret" },
   { table: "users", column: "totp_pending_enc", context: "users.totp_pending" },
   { table: "users", column: "recovery_key_enc", context: "users.recovery_key" },
+  {
+    table: "instance_ssh_key",
+    column: "private_key_enc",
+    context: "instance_ssh_key.private_key",
+  },
 ] as const;
