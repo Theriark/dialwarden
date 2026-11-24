@@ -66,9 +66,7 @@ const SCREENS: readonly Screen[] = [
     name: "presets",
     path: "/presets",
     ready: async (page) => {
-      await expect(
-        page.getByText("Presets are not on this build yet"),
-      ).toBeVisible();
+      await expect(page.getByText("No presets yet")).toBeVisible();
     },
   },
   {
