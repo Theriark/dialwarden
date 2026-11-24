@@ -122,9 +122,10 @@ function probeProblems(pack: Pack, probe: Probe): string[] {
   const problems: string[] = [];
   const at = `probe ${probe.kind}`;
   const settings = new Set(pack.settings.map((setting) => setting.key));
+  const fields = new Map(Object.entries(probe));
   const textFields = PROBE_TEXT_FIELDS.get(probe.kind) ?? [];
   for (const field of textFields) {
-    const value = probe[field];
+    const value = fields.get(field);
     if (value === undefined) continue;
     if (typeof value !== "string" || value === "") {
       problems.push(`${at}: ${field} must be text`);
@@ -142,7 +143,7 @@ function probeProblems(pack: Pack, probe: Probe): string[] {
     problems.push(`${at}: allow must list commands as text`);
   }
   for (const field of ["saveCommand", "stopCommand"]) {
-    const command = probe[field];
+    const command = fields.get(field);
     if (command === undefined) continue;
     if (
       typeof command !== "string" ||

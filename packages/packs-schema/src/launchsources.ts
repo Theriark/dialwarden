@@ -66,10 +66,9 @@ export function launchSourcePaths(
   source: LaunchSource,
   os: Os,
 ): readonly string[] {
-  if (source.kind === "args") {
-    return packFileOf(pack, fileId).paths[os] ?? [];
-  }
-  return source.paths[os] ?? [];
+  const paths =
+    source.kind === "args" ? packFileOf(pack, fileId).paths : source.paths;
+  return (os === "linux" ? paths.linux : paths.windows) ?? [];
 }
 
 /**
@@ -116,10 +115,15 @@ function locatorOf(setting: Setting): LaunchLocator {
   return locator;
 }
 
-const SHELLVAR = "shellvar";
-
-function shellAdapter(): FormatAdapter {
-  const adapter = getAdapter(SHELLVAR);
+/**
+ * The variable reader of a source. A LinuxGSM cfg is sourced by bash, so it
+ * follows the shell; a container env file is read line by line (Docker's
+ * env_file), where an unquoted value runs to the end of the line, which is
+ * the systemd EnvironmentFile reading of the shellvar-systemd adapter.
+ */
+function shellAdapter(source: LaunchSource): FormatAdapter {
+  const id = source.kind === "env" ? "shellvar-systemd" : "shellvar";
+  const adapter = getAdapter(id);
   if (adapter === undefined) {
     throw new FormatError("wrong-document", "no shell variable adapter");
   }
@@ -169,8 +173,10 @@ function targetVar(source: LaunchSource, setting: Setting): Target {
     source.flagVars !== undefined ? source.flagVars[locator.flag] : undefined;
   if (mapped !== undefined) return { target: "var", name: mapped };
   if (source.kind === "linuxgsm" && source.modifiersVar !== undefined) {
+    // The modifiers variable holds a launch line of its own
+    // (-preset casual -modifier combat easy), edited flag by flag.
     const family = locator.flag === "-preset" || locator.key !== undefined;
-    if (family) return { target: "var", name: source.modifiersVar };
+    if (family) return { target: "line", name: source.modifiersVar };
   }
   return { target: "line", name: source.argsVar };
 }
@@ -192,7 +198,7 @@ export function readLaunchSourceValues(
     const read = readFileValues(pack, fileId, sourceBytes);
     return read.values;
   }
-  const shell = shellAdapter();
+  const shell = shellAdapter(source);
   const doc = shell.parse(sourceBytes);
   const values = new Map<string, JsonValue>();
   for (const setting of settings) {
@@ -256,7 +262,7 @@ export function writeLaunchSourceValues(
   if (source.kind === "args") {
     return writeFileValues(pack, fileId, sourceBytes, edits);
   }
-  const shell = shellAdapter();
+  const shell = shellAdapter(source);
   const own = new Map(launchSettings(pack, fileId).map((s) => [s.key, s]));
   let bytes = sourceBytes;
   for (const edit of edits) {
