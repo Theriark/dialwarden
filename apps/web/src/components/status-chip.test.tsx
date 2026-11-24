@@ -22,6 +22,7 @@ describe("StatusChip", () => {
   it("says running with the player count", () => {
     render(<StatusChip status={status()} />);
     expect(screen.getByText("Running · 3 players")).toBeTruthy();
+    expect(screen.queryByText("Simulated")).toBeNull();
     expect(statusWord(status({ players: 1 }))).toBe("Running · 1 player");
     expect(statusWord(status({ players: null }))).toBe("Running");
   });
@@ -60,6 +61,7 @@ describe("StatusChip", () => {
     expect(container.querySelector("[title]")?.getAttribute("title")).toContain(
       "could not be checked",
     );
+    expect(screen.getByText(/could not be checked/)).toBeTruthy();
   });
 
   it("adds the simulated badge for a demo server", () => {

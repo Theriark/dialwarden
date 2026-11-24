@@ -49,6 +49,7 @@ import { EmptyState, ErrorState, RowsSkeleton } from "../components/ui/states";
 import { useToast } from "../components/ui/toast";
 import { formatDateTime } from "../lib/format";
 import { cn } from "../lib/cn";
+import { sourceWord } from "./server-hooks";
 
 const CAUSE_WORDS: Record<Cause, string> = {
   app: "Changed in Dialwarden",
@@ -291,7 +292,7 @@ export function PendingList({ slug }: { slug: string }) {
         <span className="text-sm text-fg-muted">
           {stopSource === null
             ? "No hook can stop this server from here: stop it the way you always do, and the next status check writes the changes."
-            : `The stop hook runs through the ${stopSource} client and writes the changes once the server is down.`}
+            : `The stop hook runs through the ${sourceWord(stopSource)} client and writes the changes once the server is down.`}
         </span>
         {stopSource !== null ? (
           <Button

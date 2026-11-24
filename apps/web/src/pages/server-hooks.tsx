@@ -19,7 +19,7 @@ import {
   Terminal,
   type LucideIcon,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { putHooks, runHook } from "../api/changes";
 import { ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
@@ -586,13 +586,11 @@ export function ServerHooksPage() {
   const canConfigure = useCanConfigureHooks();
   const canRun = useCanRunHooks();
   const [confirming, setConfirming] = useState<HookAction | null>(null);
-  const [formKey, setFormKey] = useState(0);
 
-  // The hook form starts from the stored configuration; a fresh answer from
-  // another writer resets it (the key remounts the form).
-  useEffect(() => {
-    setFormKey((value) => value + 1);
-  }, [hooks.data?.updatedAt]);
+  // The hook form starts from the stored configuration; a fresh answer that
+  // changes the stored hook resets it (the key remounts the form). A save of
+  // one probe leaves the hook card and the sibling probe cards as typed.
+  const hookKey = JSON.stringify(hooks.data?.hook ?? null);
 
   const run = useMutation({
     mutationFn: (action: HookAction) => runHook(slug, action),
@@ -729,7 +727,7 @@ export function ServerHooksPage() {
           ) : null}
         </Card>
         <HookForm
-          key={formKey}
+          key={hookKey}
           slug={slug}
           view={view}
           canConfigure={canConfigure}
@@ -742,7 +740,7 @@ export function ServerHooksPage() {
           >
             {view.probes.map((probe) => (
               <ProbeForm
-                key={`${probe.kind}-${view.updatedAt ?? ""}`}
+                key={`${probe.kind}-${probe.host ?? ""}-${probe.port ?? ""}-${probe.hasPassword ? "secret" : "open"}`}
                 slug={slug}
                 probe={probe}
                 canConfigure={canConfigure}

@@ -64,15 +64,14 @@ export function StatusChip({
       </span>
     );
   } else if (status === undefined) {
+    const reason =
+      error === undefined
+        ? "The status has not been checked yet."
+        : `The status could not be checked: ${errorMessage(error)}`;
     chip = (
-      <span
-        title={
-          error === undefined
-            ? "The status has not been checked yet."
-            : `The status could not be checked: ${errorMessage(error)}`
-        }
-      >
+      <span title={reason}>
         <Badge kind="info">Unknown</Badge>
+        <span className="sr-only">{reason}</span>
       </span>
     );
   } else if (status.state === "running") {
