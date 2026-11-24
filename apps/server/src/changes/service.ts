@@ -765,11 +765,16 @@ export class ChangeSetService {
     });
   }
 
-  /** A draft change set of setting edits or raw file patches. */
+  /**
+   * A draft change set of setting edits or raw file patches. The editor's
+   * own saves keep the default cause app; a preset applied to the server
+   * (P5 screen 7) passes preset, so its history entry says so.
+   */
   async create(
     server: ServerRecord,
     input: ChangeInput,
     author: string,
+    cause: Cause = "app",
   ): Promise<ChangeSetView> {
     this.#servers.assertEditable(server.id);
     const pack = this.#servers.pack(server);
@@ -808,7 +813,7 @@ export class ChangeSetService {
       const row = this.#insert({
         serverId: server.id,
         status: "draft",
-        cause: "app",
+        cause,
         author,
         payload,
         base,
