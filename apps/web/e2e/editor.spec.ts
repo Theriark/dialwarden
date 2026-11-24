@@ -23,7 +23,7 @@ const OWNER = {
 };
 
 async function firstRunSetup(page: Page): Promise<void> {
-  const token = readFileSync(join(DATA_DIR, "setup-token"), "utf-8").trim();
+  const token = readFileSync(join(DATA_DIR, "setup-token"), "utf8").trim();
   await page.goto("/setup");
   await page.getByLabel("Your name").fill(OWNER.name);
   await page.getByLabel("E-mail address").fill(OWNER.email);
