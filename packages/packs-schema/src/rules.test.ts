@@ -266,3 +266,24 @@ describe("rule evaluation", () => {
     );
   });
 });
+
+describe("strlen operator (P6)", () => {
+  it("measures the length of a setting's text", () => {
+    const logic = { "<": [{ strlen: { var: "ServerName" } }, 5] };
+    expect(checkLogic(logic)).toEqual({ problems: [], keys: ["ServerName"] });
+    const short = ruleData(
+      new Map<string, JsonValue>([["ServerName", "tiny"]]),
+    );
+    const long = ruleData(
+      new Map<string, JsonValue>([["ServerName", "a longer name"]]),
+    );
+    expect(ruleFires(rule(logic), short)).toBe(true);
+    expect(ruleFires(rule(logic), long)).toBe(false);
+  });
+
+  it("measures nothing but text", () => {
+    const logic = { "==": [{ strlen: { var: "PvP" } }, 0] };
+    const values = ruleData(new Map<string, JsonValue>([["PvP", true]]));
+    expect(ruleFires(rule(logic), values)).toBe(true);
+  });
+});

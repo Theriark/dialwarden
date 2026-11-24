@@ -18,7 +18,7 @@ import {
   writeSetting,
 } from "./kit.js";
 
-const PACKS = ["palworld", "enshrouded"];
+const PACKS = ["palworld", "enshrouded", "valheim"];
 
 function exactRestore(adapter: FormatAdapter, setting: Setting): boolean {
   if (adapter.id === "launch" && setting.type === "bool") return false;

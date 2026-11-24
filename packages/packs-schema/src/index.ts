@@ -35,6 +35,16 @@ export type { FileValues, SettingEdit } from "./files.js";
 export { FormatError } from "@dialwarden/formats";
 export type { LintIssue } from "@dialwarden/formats";
 export { lintPackFile } from "./lint.js";
+export {
+  launchPanelWarnings,
+  launchSnippets,
+  launchSourcePaths,
+  launchSourceViews,
+  readLaunchSourceValues,
+  renderLaunchLine,
+  writeLaunchSourceValues,
+} from "./launchsources.js";
+export type { LaunchSourceView } from "./launchsources.js";
 export { maskSecrets, maskValue, SECRET_MASK } from "./mask.js";
 export { applyPreset, sameJson } from "./presets.js";
 export type { PresetChange, PresetResult } from "./presets.js";

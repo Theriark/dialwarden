@@ -21,6 +21,7 @@ import {
   FormatError,
   type FormatAdapter,
   type LaunchLocator,
+  type LintIssue,
   type ParsedDoc,
   type Splice,
   type Value,
@@ -58,6 +59,12 @@ interface Arg {
   readonly word: Word;
   /** A separate value word (-port 8211). */
   readonly valueWord: Word | undefined;
+  /**
+   * A second value word, the shape of a keyed argument: -modifier combat
+   * veryhard names its key with the first word (combat) and holds the value
+   * in the second (veryhard).
+   */
+  readonly extraWord: Word | undefined;
   /** Decoded range of an inline value (-port=8211, ?Name=X). */
   readonly inline: Range | undefined;
   /** Decoded range of a chain option, from its ? to its end. */
@@ -186,7 +193,14 @@ function chainOptions(word: Word): Arg[] {
     const name = `?${decode(word.chars.slice(mark + 1, nameEnd))}`;
     const inline = hasValue ? { start: eq + 1, end } : undefined;
     const option = { start: mark, end };
-    out.push({ name, word, valueWord: undefined, inline, option });
+    out.push({
+      name,
+      word,
+      valueWord: undefined,
+      extraWord: undefined,
+      inline,
+      option,
+    });
     mark = next;
   }
   return out;
@@ -207,13 +221,139 @@ function classify(words: readonly Word[]): Arg[] {
       const inline = eq > 0 ? { start: eq + 1, end: text.length } : undefined;
       const takesNext = eq < 0 && next !== undefined && isValueWord(next.text);
       const valueWord = takesNext ? next : undefined;
-      args.push({ name, word, valueWord, inline, option: undefined });
-      if (takesNext) i++;
+      let extraWord: Word | undefined;
+      if (takesNext) {
+        i++;
+        const second = words.at(i + 1);
+        extraWord =
+          second !== undefined && isValueWord(second.text) ? second : undefined;
+        if (extraWord !== undefined) i++;
+      }
+      args.push({
+        name,
+        word,
+        valueWord,
+        extraWord,
+        inline,
+        option: undefined,
+      });
     } else if (text.includes("?")) {
       args.push(...chainOptions(word));
     }
   }
   return args;
+}
+
+/** Characters the shell acts on outside quotes. */
+const SHELL_UNQUOTED = new Set([";", "&", "|", "`", "$", "(", ")", "<", ">"]);
+/** Characters the shell still acts on inside double quotes. */
+const SHELL_DOUBLE = new Set(["`", "$"]);
+
+/**
+ * Shell characters in a launch line that is run through eval. The start
+ * snippets of the app-managed args file hand it to eval (packs-schema
+ * launchsources.ts launchSnippets), so that file is shell text: a command
+ * substitution, an operator or a line break between words would run as code
+ * at the next game start. Single quotes keep everything literal; the writer
+ * never emits any of these (it double-quotes words and the validator refuses
+ * shell characters in values), so only hand-edited or raw-patched text can
+ * hold them. A line break after the last word is fine. Not part of the
+ * adapter lint: a start script the user owns may use the shell on purpose;
+ * the pack lint applies this to the args file only.
+ *
+ * The words are read by this module's parser, so the bytes where the parser
+ * and the shell disagree are refused first (THE-2605 N1): the parser takes
+ * CR, FF and VT for blanks and skips a BOM, where sh and bash read them as
+ * word bytes, so a # after one of them would be a comment to the parser
+ * only. Every control byte but tab and LF is refused, CR too unless it ends
+ * a CRLF line, and so is a BOM.
+ */
+export function launchShellIssues(bytes: Uint8Array): LintIssue[] {
+  const src = new Source(bytes);
+  const flag = shellFlag(src);
+  controlBytes(src, flag);
+  let words: Word[] | undefined;
+  try {
+    words = readWords(src);
+  } catch (fail) {
+    // An unclosed quote is already an error of the adapter lint.
+    if (!(fail instanceof ParseFail)) throw fail;
+  }
+  if (words !== undefined) shellIssues(src, words, flag);
+  return sortedIssues(src.doc("launch")).filter(
+    (issue) => issue.code === "shell-character",
+  );
+}
+
+function shellFlag(src: Source): (at: number) => void {
+  const message =
+    "the launch line holds a shell character the start script would run";
+  return (at) => {
+    src.issue(at, "shell-character", "error", message);
+  };
+}
+
+/** Bytes the shell reads as part of a word where the parser sees a blank. */
+function controlBytes(src: Source, flag: (at: number) => void): void {
+  if (src.bom) flag(0);
+  const text = src.text;
+  for (let i = src.begin; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 0x09 || code === 0x0a) continue;
+    if (code === 0x0d && text.charAt(i + 1) === "\n") continue;
+    if (code < 0x20 || code === 0x7f) flag(i);
+  }
+}
+
+/**
+ * The first line break in the text between two words that ends the command
+ * under eval: one outside a comment that no backslash continues, or the one
+ * that ends a comment (a backslash in a comment continues nothing).
+ */
+function commandBreak(gap: string): number {
+  let comment = false;
+  for (let i = 0; i < gap.length; i++) {
+    const c = gap.charAt(i);
+    if (c === "#") comment = true;
+    else if (c === "\n" && (comment || gap.charAt(i - 1) !== "\\")) return i;
+  }
+  return -1;
+}
+
+function shellIssues(
+  src: Source,
+  words: readonly Word[],
+  flag: (at: number) => void,
+): void {
+  for (const word of words) {
+    for (const char of word.chars) {
+      const text = String.fromCharCode(char.byte);
+      if (char.context === 0 && SHELL_UNQUOTED.has(text)) flag(char.from);
+      else if (char.context === 1 && SHELL_DOUBLE.has(text)) flag(char.from);
+      else if (char.context === 0 && char.to - char.from === 2) {
+        // An unquoted backslash escape: the writer never emits one.
+        flag(char.from);
+      }
+    }
+  }
+  // A line break between words (or before the first) ends the command under
+  // eval, so the next word would run as a command of its own.
+  const text = src.text;
+  let from = src.begin;
+  for (const word of words) {
+    // A backslash line continuation joins the lines and is fine.
+    const at = commandBreak(text.slice(from, word.start));
+    if (at >= 0) flag(from + at);
+    from = word.end;
+  }
+}
+
+/**
+ * The unquoted words of a launch line, for tests: on a line the shell lint
+ * accepts they are the arguments the start snippet hands the game.
+ */
+export function launchWords(bytes: Uint8Array): string[] {
+  return readWords(new Source(bytes)).map((word) => decode(word.chars));
 }
 
 function parse(bytes: Uint8Array): LaunchDoc {
@@ -293,9 +433,44 @@ function removeWords(doc: LaunchDoc, first: Word, last: Word): Splice {
 function removeArg(doc: LaunchDoc, arg: Arg): Splice {
   const { option, word } = arg;
   if (option === undefined) {
-    return removeWords(doc, word, arg.valueWord ?? word);
+    return removeWords(doc, word, arg.extraWord ?? arg.valueWord ?? word);
   }
   return replaceIn(word, option.start, option.end, "");
+}
+
+/** set of a keyed argument: the second word holds the value, or is added. */
+function setKeyed(launch: LaunchDoc, arg: Arg, value: Value): Splice[] {
+  const { word, valueWord, extraWord } = arg;
+  if (extraWord === undefined) {
+    // The group holds only its key word: true keeps it, false removes it,
+    // and a value adds the second word after the key.
+    if (value === true) return [];
+    if (value === false) {
+      return [removeWords(launch, word, valueWord ?? word)];
+    }
+    if (valueWord === undefined) {
+      throw new FormatError("invalid-value", "the key word is missing");
+    }
+    const text = scalar(value, undefined);
+    if (!isValueWord(text)) {
+      throw new FormatError("invalid-value", `${text} would read as a flag`);
+    }
+    const at = valueWord.end;
+    return [{ start: at, end: at, text: ` ${encodeWord(text)}` }];
+  }
+  // The group holds its value word: every write replaces that word, the
+  // same way a plain flag with a value is rewritten.
+  const text = scalar(value, undefined);
+  if (!isValueWord(text)) {
+    throw new FormatError("invalid-value", `${text} would read as a flag`);
+  }
+  return [
+    {
+      start: extraWord.start,
+      end: extraWord.end,
+      text: encodeWord(text),
+    },
+  ];
 }
 
 function scalar(value: Value, previous: string | undefined): string {
@@ -343,7 +518,12 @@ function isLoneBackslash(char: Char): boolean {
   return char.byte === 92 && char.to - char.from === 1 && char.context === 0;
 }
 
-function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
+function insertArg(
+  doc: LaunchDoc,
+  flag: string,
+  value: Value,
+  before?: readonly string[],
+): Splice[] {
   if (value === false) return [];
   const text = value === true ? undefined : scalar(value, undefined);
   if (flag.startsWith("?")) {
@@ -375,11 +555,54 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     }
     token = `${flag} ${encodeWord(text)}`;
   }
+  return placeToken(doc, token, before);
+}
+
+/** insert of a keyed argument: the flag, its key word, and the value word. */
+function insertKeyed(
+  doc: LaunchDoc,
+  locator: LaunchLocator,
+  value: Value,
+): Splice[] {
+  if (value === false) return [];
+  const key = encodeWord(locator.key ?? "");
+  if (value === true) {
+    return placeToken(doc, `${locator.flag} ${key}`, locator.before);
+  }
+  const text = scalar(value, undefined);
+  if (!isValueWord(text)) {
+    throw new FormatError("invalid-value", `${text} would read as a flag`);
+  }
+  return placeToken(
+    doc,
+    `${locator.flag} ${key} ${encodeWord(text)}`,
+    locator.before,
+  );
+}
+
+/** Places one composed token: in front of a before-flag, else at the end. */
+function placeToken(
+  doc: LaunchDoc,
+  token: string,
+  before?: readonly string[],
+): Splice[] {
   const last = doc.words.at(-1);
   if (last === undefined) {
     const at = doc.source.begin;
     const text = at < doc.source.length ? `${token} ` : token;
     return [{ start: at, end: at, text }];
+  }
+  // A flag that must precede named others (LaunchLocator.before) is placed
+  // right in front of the first of them instead of the end of the line, so
+  // a game that wipes earlier arguments cannot wipe them (Valheim's -preset
+  // eats the -modifier and -setkey flags that follow it).
+  if (before !== undefined && before.length > 0) {
+    const wanted = new Set(before.map((name) => name.toLowerCase()));
+    const found = doc.args.find((arg) => wanted.has(arg.name.toLowerCase()));
+    if (found !== undefined) {
+      const at = found.word.start;
+      return [{ start: at, end: at, text: `${token} ` }];
+    }
   }
   const tail = last.chars.at(-1);
   if (tail !== undefined && isLoneBackslash(tail)) {
@@ -389,18 +612,37 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
 }
 
 const FLAG = /^[-+?][^\s=?]+$/;
+const KEY = /^\S+$/;
+
+/** The key word of a keyed argument, as text. */
+function keyOf(arg: Arg): string | undefined {
+  return arg.valueWord === undefined ? undefined : decode(arg.valueWord.chars);
+}
 
 function find(doc: LaunchDoc, locator: LaunchLocator): Arg[] {
   if (locator.kind !== "launch") throw wrongLocator("launch", locator);
-  const { flag } = locator;
+  const { flag, key } = locator;
   if (typeof flag !== "string" || !FLAG.test(flag)) {
     throw new FormatError(
       "invalid-locator",
       "launch: a flag starts with -, + or ? and has a name",
     );
   }
-  const key = flag.toLowerCase();
-  return doc.args.filter((arg) => arg.name.toLowerCase() === key);
+  if (key !== undefined && (typeof key !== "string" || !KEY.test(key))) {
+    throw new FormatError(
+      "invalid-locator",
+      "launch: a key is one word without spaces",
+    );
+  }
+  // Keys compare without case like flags: LinuxGSM documents the Valheim
+  // key as deathPenalty while the game's own examples write deathpenalty.
+  const name = flag.toLowerCase();
+  const keyName = key?.toLowerCase();
+  return doc.args.filter(
+    (arg) =>
+      arg.name.toLowerCase() === name &&
+      (keyName === undefined || keyOf(arg)?.toLowerCase() === keyName),
+  );
 }
 
 /** Launch argument adapter (dash flags, plus convars, ARK ? chains). */
@@ -409,7 +651,11 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
   parse,
   get(doc, locator) {
     const arg = find(own<LaunchDoc>(doc, "launch"), locator).at(-1);
-    return arg && argValue(arg);
+    if (arg === undefined) return undefined;
+    if (locator.key !== undefined) {
+      return arg.extraWord === undefined ? true : decode(arg.extraWord.chars);
+    }
+    return argValue(arg);
   },
   set(doc, locator, value) {
     const launch = own<LaunchDoc>(doc, "launch");
@@ -422,7 +668,11 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     if (arg === undefined) {
       throw new FormatError("not-found", `${locator.flag} is not given`);
     }
-    return verified(launchAdapter, launch, setArg(launch, arg, value));
+    const splices =
+      locator.key === undefined
+        ? setArg(launch, arg, value)
+        : setKeyed(launch, arg, value);
+    return verified(launchAdapter, launch, splices);
   },
   insert(doc, locator, value) {
     const launch = own<LaunchDoc>(doc, "launch");
@@ -430,7 +680,10 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     if (find(launch, locator).length > 0) {
       throw new FormatError("exists", `${locator.flag} is already given`);
     }
-    const splices = insertArg(launch, locator.flag, value);
+    const splices =
+      locator.key === undefined
+        ? insertArg(launch, locator.flag, value, locator.before)
+        : insertKeyed(launch, locator, value);
     return verified(launchAdapter, launch, splices);
   },
   remove(doc, locator) {
@@ -442,7 +695,17 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     }
     const arg = found.at(0);
     if (arg === undefined) return [];
-    return verified(launchAdapter, launch, [removeArg(launch, arg)]);
+    const splices =
+      locator.key === undefined
+        ? [removeArg(launch, arg)]
+        : [
+            removeWords(
+              launch,
+              arg.word,
+              arg.extraWord ?? arg.valueWord ?? arg.word,
+            ),
+          ];
+    return verified(launchAdapter, launch, splices);
   },
   lint: (doc) => sortedIssues(own<LaunchDoc>(doc, "launch")),
   apply: (bytes, splices) => applySplices(bytes, splices),
@@ -450,9 +713,18 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
 
 /** Every flag locator of a parsed launch line, for tests and fuzzing. */
 export function launchLocators(doc: ParsedDoc): LaunchLocator[] {
-  const all = (doc as LaunchDoc).args.map((a) => a.name);
-  const names = all.filter((name) => FLAG.test(name));
-  const lower = names.map((n) => n.toLowerCase());
-  const unique = names.filter((n, i) => lower.indexOf(n.toLowerCase()) === i);
-  return unique.map((flag): LaunchLocator => ({ kind: "launch", flag }));
+  const plain = new Map<string, LaunchLocator>();
+  const keyed = new Map<string, LaunchLocator>();
+  for (const arg of (doc as LaunchDoc).args) {
+    if (!FLAG.test(arg.name)) continue;
+    const name = arg.name.toLowerCase();
+    const key = keyOf(arg);
+    if (arg.extraWord !== undefined && key !== undefined && KEY.test(key)) {
+      const by = `${name} ${key}`;
+      keyed.set(by, { kind: "launch", flag: arg.name, key });
+    } else {
+      plain.set(name, { kind: "launch", flag: arg.name });
+    }
+  }
+  return [...plain.values(), ...keyed.values()];
 }

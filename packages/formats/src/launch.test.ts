@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { bytes, edited, errorCode, text } from "../test/harness.js";
 import { fixture } from "../test/kits.js";
-import { launchAdapter as launch, type LaunchLocator } from "./index.js";
+import {
+  launchAdapter as launch,
+  launchShellIssues,
+  type LaunchLocator,
+} from "./index.js";
 
 function flag(name: string): LaunchLocator {
   return { kind: "launch", flag: name };
@@ -222,5 +226,167 @@ describe("launch arguments: plus convars and quoting", () => {
     expect(errorCode(() => launch.insert(none, flag("?A"), 1))).toBe(
       "not-found",
     );
+  });
+});
+
+describe("launch arguments: keyed flags and order (Valheim, P6)", () => {
+  const source =
+    "-name 'Quarry Lane' -port 2456 -modifier combat easy " +
+    "-modifier raids none -setkey nomap";
+  const data = bytes(source);
+  const doc = launch.parse(data);
+
+  function keyed(name: string, key: string): LaunchLocator {
+    return { kind: "launch", flag: name, key };
+  }
+
+  it("reads a keyed flag by its key word", () => {
+    expect(launch.get(doc, keyed("-modifier", "combat"))).toBe("easy");
+    expect(launch.get(doc, keyed("-modifier", "raids"))).toBe("none");
+    expect(launch.get(doc, keyed("-setkey", "nomap"))).toBe(true);
+    expect(launch.get(doc, keyed("-modifier", "portals"))).toBeUndefined();
+  });
+
+  it("changes, removes and adds a keyed flag", () => {
+    const combat = keyed("-modifier", "combat");
+    const changed = edited(launch, data, (d) =>
+      launch.set(d, combat, "veryhard"),
+    );
+    expect(changed).toBe(source.replace("combat easy", "combat veryhard"));
+    const removed = edited(launch, data, (d) => launch.remove(d, combat));
+    expect(removed).toBe(source.replace(" -modifier combat easy", ""));
+    const added = edited(launch, data, (d) =>
+      launch.insert(d, keyed("-modifier", "portals"), "casual"),
+    );
+    expect(added).toBe(`${source} -modifier portals casual`);
+  });
+
+  it("turns a keyed switch off and on", () => {
+    const nomap = keyed("-setkey", "nomap");
+    const off = edited(launch, data, (d) => launch.set(d, nomap, false));
+    expect(off).toBe(source.replace(" -setkey nomap", ""));
+    const on = edited(launch, off, (d) => launch.insert(d, nomap, true));
+    expect(on).toBe(source);
+    expect(launch.set(doc, nomap, true)).toEqual([]);
+  });
+
+  it("keeps the second value word out of the next plain flag", () => {
+    const line = launch.parse(bytes("-a 1 2 -b 3"));
+    expect(launch.get(line, flag("-a"))).toBe("1");
+    expect(launch.get(line, flag("-b"))).toBe("3");
+    const removed = edited(launch, "-a 1 2 -b 3", (d) =>
+      launch.remove(d, flag("-a")),
+    );
+    expect(removed).toBe("-b 3");
+  });
+
+  it("places a before-flag in front of the flags it names", () => {
+    const preset: LaunchLocator = {
+      kind: "launch",
+      flag: "-preset",
+      before: ["-modifier", "-setkey"],
+    };
+    const placed = edited(launch, data, (d) =>
+      launch.insert(d, preset, "casual"),
+    );
+    expect(placed).toBe(
+      source.replace("2456 -modifier", "2456 -preset casual -modifier"),
+    );
+    // Without the field the argument goes to the end, as before.
+    const plain = edited(launch, data, (d) =>
+      launch.insert(d, flag("-preset"), "casual"),
+    );
+    expect(plain).toBe(`${source} -preset casual`);
+  });
+
+  it("refuses a keyed write to a key that is not on the line", () => {
+    const missing = keyed("-modifier", "no-such");
+    expect(errorCode(() => launch.set(doc, missing, "hard"))).toBe("not-found");
+    expect(errorCode(() => launch.get(doc, keyed("-modifier", "a b")))).toBe(
+      "invalid-locator",
+    );
+  });
+
+  it("finds a keyed argument whatever the case of its key", () => {
+    const doc = launch.parse(bytes("-modifier deathPenalty casual"));
+    expect(launch.get(doc, keyed("-modifier", "deathpenalty"))).toBe("casual");
+    expect(launch.get(doc, keyed("-MODIFIER", "DEATHPENALTY"))).toBe("casual");
+  });
+});
+
+// Threat tests T1 (security review THE-2598, F1): the start snippets hand the
+// args file to eval, so any shell character in the line is an error, which
+// the pack lint of the args file turns into a blocked write.
+describe("launch arguments: shell characters", () => {
+  const shellIssues = (line: string) =>
+    launchShellIssues(bytes(line)).filter(
+      (issue) => issue.code === "shell-character",
+    );
+
+  it.each([
+    '-name Quarry -zz "$(touch /tmp/dw-pwn)"',
+    "-name Quarry `id`",
+    "-name Quarry;reboot",
+    "-port 2456 -x a|b",
+    "-port 2456 -x a>b",
+    '-name "Quarry $HOME"',
+    "-name Quarry\n-x $HOME",
+    "-name Quarry\nreboot",
+    "\n-name Quarry",
+    "-name Quarry\\&x",
+  ])("refuses %j", (line) => {
+    const issues = shellIssues(line);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.severity === "error")).toBe(true);
+  });
+
+  it.each([
+    '-name "Quarry Lane" -port 2456',
+    "TheIsland?listen?SessionName=X",
+    "-name 'single $(x) quoted'",
+    '-name "Quarry \\"Lane\\""',
+    "-name Quarry -port 2456\n",
+    "-name Quarry \\\n  -port 2456\n",
+  ])("accepts %j", (line) => {
+    expect(shellIssues(line)).toEqual([]);
+  });
+
+  // Threat test T12 (security re-review THE-2605, N1 and I1): the parser
+  // takes CR, FF and VT for blanks and skips a BOM, but sh and bash read them
+  // as word bytes, so a # after one is a comment to the parser only; and a
+  // backslash in a comment continues no line.
+  it.each([
+    "-name Quarry -port 2456\r# $(touch /tmp/dw-pwn)",
+    "-name Quarry -port 2456\f# $(touch /tmp/dw-pwn)",
+    "-name Quarry -port 2456\v# $(touch /tmp/dw-pwn)",
+    `${String.fromCharCode(0xfeff)}# $(touch /tmp/dw-pwn)`,
+    "-name Quarry # x\\\nreboot",
+    "-name Quarry\0# $(touch /tmp/dw-pwn)",
+  ])("refuses %j, where the shell sees no comment", (line) => {
+    const issues = shellIssues(line);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.severity === "error")).toBe(true);
+  });
+
+  it.each([
+    "-name Quarry # note",
+    "-name Quarry\r\n",
+    "-name Quarry\n# note\n",
+    "-name Quarry\t-port 2456",
+  ])("accepts %j", (line) => {
+    expect(shellIssues(line)).toEqual([]);
+  });
+
+  it("leaves the adapter lint of a start script alone", () => {
+    const script = bytes('# start\n./Server.sh -name "$NAME"\n');
+    expect(launch.lint(launch.parse(script))).toEqual([]);
+  });
+
+  it("accepts the bytes the writer produces for a value with quotes", () => {
+    const written = edited(launch, bytes("-name x"), (d) =>
+      launch.set(d, flag("-name"), 'Quarry "Lane"'),
+    );
+    expect(written).toBe('-name "Quarry \\"Lane\\""');
+    expect(shellIssues(written)).toEqual([]);
   });
 });

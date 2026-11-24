@@ -193,11 +193,104 @@
             "cfg",
             "shellvar",
             "shellvar-systemd",
-            "launch"
+            "launch",
+            "textlist"
           ]
         },
         "encoding": { "enum": ["utf-8"] },
-        "applyPolicy": { "enum": ["anytime", "stopped-only"] }
+        "applyPolicy": { "enum": ["anytime", "stopped-only"] },
+        "launchSources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/launchSource" }
+        }
+      }
+    },
+    "launchSource": {
+      "type": "object",
+      "required": ["kind"],
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "const": "args" } }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paths"],
+          "properties": {
+            "kind": { "const": "linuxgsm" },
+            "paths": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "linux": { "$ref": "#/$defs/pathList" },
+                "windows": { "$ref": "#/$defs/pathList" }
+              }
+            },
+            "flagVars": { "$ref": "#/$defs/flagVars" },
+            "modifiersVar": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "argsVar": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paths"],
+          "properties": {
+            "kind": { "const": "env" },
+            "paths": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "linux": { "$ref": "#/$defs/pathList" },
+                "windows": { "$ref": "#/$defs/pathList" }
+              }
+            },
+            "flagVars": { "$ref": "#/$defs/flagVars" },
+            "argsVar": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "paths"],
+          "properties": {
+            "kind": { "const": "panel" },
+            "paths": {
+              "type": "object",
+              "additionalProperties": false,
+              "minProperties": 1,
+              "properties": {
+                "linux": { "$ref": "#/$defs/pathList" },
+                "windows": { "$ref": "#/$defs/pathList" }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "flagVars": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[-+?][^\\s=?]{1,127}$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
       }
     },
     "pathList": {
@@ -300,7 +393,26 @@
           "required": ["kind", "flag"],
           "properties": {
             "kind": { "const": "launch" },
-            "flag": { "type": "string", "pattern": "^[-+?][^\\s=?]{1,127}$" }
+            "flag": { "type": "string", "pattern": "^[-+?][^\\s=?]{1,127}$" },
+            "key": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "before": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[-+?][^\\s=?]{1,127}$"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "const": "textlist" }
           }
         },
         {
@@ -437,11 +549,37 @@
             "sourceRcon",
             "rustWebRcon",
             "telnet7dtd",
+            "a2s",
             "sshCommand",
             "dockerProxy"
           ]
-        }
+        },
+        "allow": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/probeCommand" }
+        },
+        "saveCommand": { "$ref": "#/$defs/probeCommand" },
+        "stopCommand": { "$ref": "#/$defs/probeCommand" },
+        "infoPath": {
+          "type": "string",
+          "pattern": "^/[^?#\\s]*$",
+          "maxLength": 256
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9.:-]+$",
+          "maxLength": 253
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "portOffset": { "type": "integer", "minimum": 0, "maximum": 1000 }
       }
+    },
+    "probeCommand": {
+      "description": "One console command line: no control characters, so a pack entry can never send two commands.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
     }
   }
 }

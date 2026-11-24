@@ -96,6 +96,29 @@ export interface ShellVarLocator {
 export interface LaunchLocator {
   readonly kind: "launch";
   readonly flag: string;
+  /**
+   * The key word of a repeated flag family (P6: Valheim writes
+   * -modifier combat veryhard and -setkey nomap, where the word after the
+   * flag names the key and the value follows it). Without a key the flag is
+   * matched by name alone.
+   */
+  readonly key?: string;
+  /**
+   * Flags this one must stay in front of when it is added (P6: a game may
+   * wipe earlier arguments, as Valheim's -preset does to the -modifier and
+   * -setkey flags that follow it). Without the field the argument goes to
+   * the end of the line, the usual order.
+   */
+  readonly before?: readonly string[];
+}
+
+/**
+ * A plain-text list file (P6: the Valheim admin, ban and permit lists): the
+ * values are the non-comment lines of the whole file, one list entry each;
+ * lines starting with // are comments and blank lines are kept as they are.
+ */
+export interface TextListLocator {
+  readonly kind: "textlist";
 }
 
 /** A setting whose value is encoded (decoded by a ValueCodec, from P7). */
@@ -113,6 +136,7 @@ export type Locator =
   | CfgLocator
   | ShellVarLocator
   | LaunchLocator
+  | TextListLocator
   | CodecLocator;
 
 /** What parse returns. Each adapter keeps its own parse tree behind it. */

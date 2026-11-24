@@ -35,7 +35,15 @@ export const RULE_OPERATORS = [
   "in",
   "cat",
   "substr",
+  "strlen",
 ] as const;
+
+// strlen: the length of a setting's text (P6: the Valheim password rule
+// needs it; core JSONLogic has no length operator). Registered once here, so
+// the browser and the server run the same rules.
+jsonLogic.add_operation("strlen", (value: unknown): number =>
+  typeof value === "string" ? value.length : 0,
+);
 
 const ALLOWED = new Set<string>(RULE_OPERATORS);
 const MAX_DEPTH = 32;

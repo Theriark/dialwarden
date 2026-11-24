@@ -1,0 +1,879 @@
+{
+  "id": "valheim",
+  "version": "1.0.0",
+  "displayName": "Valheim",
+  "steamAppId": 896660,
+  "builds": {
+    "from": 0,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "valheim_server.x86_64",
+        "os": ["linux"]
+      },
+      {
+        "path": "valheim_server.exe",
+        "os": ["windows"]
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime",
+      "launchSources": [
+        {
+          "kind": "args"
+        },
+        {
+          "kind": "linuxgsm",
+          "paths": {
+            "linux": ["lgsm/config-lgsm/vhserver/vhserver.cfg"]
+          },
+          "flagVars": {
+            "-name": "servername",
+            "-password": "serverpassword",
+            "-port": "port",
+            "-world": "worldname",
+            "-public": "public",
+            "-savedir": "savedir",
+            "-saveinterval": "saveinterval",
+            "-backups": "backups",
+            "-backupshort": "backupshort",
+            "-backuplong": "backuplong",
+            "-instanceid": "instanceid",
+            "-logFile": "logFile"
+          },
+          "modifiersVar": "worldmodifiers",
+          "argsVar": "startparameters"
+        },
+        {
+          "kind": "env",
+          "paths": {
+            "linux": ["valheim.env"]
+          },
+          "flagVars": {
+            "-name": "SERVER_NAME",
+            "-password": "SERVER_PASS",
+            "-port": "SERVER_PORT",
+            "-world": "WORLD_NAME",
+            "-public": "SERVER_PUBLIC",
+            "-crossplay": "CROSSPLAY"
+          },
+          "argsVar": "SERVER_ARGS"
+        },
+        {
+          "kind": "panel",
+          "paths": {
+            "linux": ["start_server.sh"],
+            "windows": ["start_server.bat"]
+          }
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "name",
+      "file": "launch",
+      "label": "Server name",
+      "locator": {
+        "kind": "launch",
+        "flag": "-name"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 64,
+      "group": "Identity",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Name players see in the server browser. Quote it when it has spaces, and keep the join password out of it."
+    },
+    {
+      "key": "password",
+      "file": "launch",
+      "label": "Join password",
+      "locator": {
+        "kind": "launch",
+        "flag": "-password"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Identity",
+      "restartRequired": true,
+      "secret": true,
+      "panelManaged": true,
+      "description": "Password players must enter to join. A public server refuses to start with fewer than five characters; private servers accept shorter ones."
+    },
+    {
+      "key": "port",
+      "file": "launch",
+      "label": "Game port",
+      "locator": {
+        "kind": "launch",
+        "flag": "-port"
+      },
+      "type": "int",
+      "default": 2456,
+      "min": 1024,
+      "max": 65533,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "UDP port the game listens on. The query port is always this number plus one, so publish both, with matching numbers inside a container."
+    },
+    {
+      "key": "public",
+      "file": "launch",
+      "label": "List publicly",
+      "locator": {
+        "kind": "launch",
+        "flag": "-public"
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Listed"
+        },
+        {
+          "value": 0,
+          "label": "By address only"
+        }
+      ],
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Value 1 lists the server in the browser and turns on the password rules; 0 means joining by address only, with no query replies."
+    },
+    {
+      "key": "crossplay",
+      "file": "launch",
+      "label": "Crossplay relay",
+      "locator": {
+        "kind": "launch",
+        "flag": "-crossplay"
+      },
+      "type": "bool",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Bare switch with no value. Routes players through the PlayFab relay so console and game-pass players can join by invite code."
+    },
+    {
+      "key": "instanceid",
+      "file": "launch",
+      "label": "Instance number",
+      "locator": {
+        "kind": "launch",
+        "flag": "-instanceid"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 99,
+      "unit": "count",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Instance number for running several servers on one host. What the game does with it is unverified, so leave it empty unless a second server needs it."
+    },
+    {
+      "key": "world",
+      "file": "launch",
+      "label": "World name",
+      "locator": {
+        "kind": "launch",
+        "flag": "-world"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 64,
+      "group": "World",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Name of the world save. A world that does not exist yet is generated at boot with this name."
+    },
+    {
+      "key": "resetmodifiers",
+      "file": "launch",
+      "label": "Reset world modifiers",
+      "locator": {
+        "kind": "launch",
+        "flag": "-resetmodifiers"
+      },
+      "type": "bool",
+      "group": "World",
+      "restartRequired": true,
+      "description": "Switch found in the server strings that appears to clear world modifiers stored in the save. Never verified in a test, so treat it as untested."
+    },
+    {
+      "key": "savedir",
+      "file": "launch",
+      "label": "Save folder",
+      "locator": {
+        "kind": "launch",
+        "flag": "-savedir"
+      },
+      "type": "string",
+      "group": "Saves",
+      "restartRequired": true,
+      "description": "Root folder for the world saves and for the admin, ban and permit lists the game keeps next to them. Leave it unset to use the default folder in the profile of the user that runs the game."
+    },
+    {
+      "key": "saveinterval",
+      "file": "launch",
+      "label": "Save interval",
+      "locator": {
+        "kind": "launch",
+        "flag": "-saveinterval"
+      },
+      "type": "int",
+      "default": 1800,
+      "min": 60,
+      "max": 86400,
+      "unit": "seconds",
+      "group": "Saves",
+      "restartRequired": true,
+      "description": "Seconds between automatic world saves. Shorter values make hot backups fresher but write to disk more often."
+    },
+    {
+      "key": "backups",
+      "file": "launch",
+      "label": "Kept backups",
+      "locator": {
+        "kind": "launch",
+        "flag": "-backups"
+      },
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 20,
+      "unit": "count",
+      "group": "Saves",
+      "restartRequired": true,
+      "description": "How many automatic world backups the game keeps for itself. They only run after a long enough session."
+    },
+    {
+      "key": "backupshort",
+      "file": "launch",
+      "label": "Early backup spacing",
+      "locator": {
+        "kind": "launch",
+        "flag": "-backupshort"
+      },
+      "type": "int",
+      "default": 7200,
+      "min": 60,
+      "max": 604800,
+      "unit": "seconds",
+      "group": "Saves",
+      "restartRequired": true,
+      "description": "Spacing of the first automatic backups after start. It should stay smaller than the later spacing."
+    },
+    {
+      "key": "backuplong",
+      "file": "launch",
+      "label": "Later backup spacing",
+      "locator": {
+        "kind": "launch",
+        "flag": "-backuplong"
+      },
+      "type": "int",
+      "default": 43200,
+      "min": 60,
+      "max": 604800,
+      "unit": "seconds",
+      "group": "Saves",
+      "restartRequired": true,
+      "description": "Spacing of the later automatic backups once the early phase is over. It should stay larger than the early spacing."
+    },
+    {
+      "key": "preset",
+      "file": "launch",
+      "label": "World preset",
+      "locator": {
+        "kind": "launch",
+        "flag": "-preset",
+        "before": ["-modifier", "-setkey"]
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "normal",
+          "label": "Normal"
+        },
+        {
+          "value": "casual",
+          "label": "Casual"
+        },
+        {
+          "value": "easy",
+          "label": "Easy"
+        },
+        {
+          "value": "hard",
+          "label": "Hard"
+        },
+        {
+          "value": "hardcore",
+          "label": "Hardcore"
+        },
+        {
+          "value": "immersive",
+          "label": "Immersive"
+        },
+        {
+          "value": "hammer",
+          "label": "Hammer"
+        }
+      ],
+      "group": "World preset",
+      "restartRequired": true,
+      "description": "Applies a bundle of world modifiers at once and wipes any modifier given before it, so it always stays in front of them."
+    },
+    {
+      "key": "combat",
+      "file": "launch",
+      "label": "Combat difficulty",
+      "locator": {
+        "kind": "launch",
+        "flag": "-modifier",
+        "key": "combat"
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "veryeasy",
+          "label": "Very easy"
+        },
+        {
+          "value": "easy",
+          "label": "Easy"
+        },
+        {
+          "value": "hard",
+          "label": "Hard"
+        },
+        {
+          "value": "veryhard",
+          "label": "Very hard"
+        }
+      ],
+      "group": "World modifiers",
+      "restartRequired": true,
+      "description": "Changes how much damage enemies deal and take, plus their speed, size and star chance. Leave it out for standard combat."
+    },
+    {
+      "key": "deathpenalty",
+      "file": "launch",
+      "label": "Death penalty",
+      "locator": {
+        "kind": "launch",
+        "flag": "-modifier",
+        "key": "deathpenalty"
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "casual",
+          "label": "Keep everything"
+        },
+        {
+          "value": "veryeasy",
+          "label": "Very easy"
+        },
+        {
+          "value": "easy",
+          "label": "Easy"
+        },
+        {
+          "value": "hard",
+          "label": "Hard"
+        },
+        {
+          "value": "hardcore",
+          "label": "Lose skills and items"
+        }
+      ],
+      "group": "World modifiers",
+      "restartRequired": true,
+      "description": "Controls skill and item loss on death, from keeping all gear to losing items and skills. Leave it out for the standard penalty."
+    },
+    {
+      "key": "resources",
+      "file": "launch",
+      "label": "Resource yields",
+      "locator": {
+        "kind": "launch",
+        "flag": "-modifier",
+        "key": "resources"
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "muchless",
+          "label": "Much less"
+        },
+        {
+          "value": "less",
+          "label": "Less"
+        },
+        {
+          "value": "more",
+          "label": "More"
+        },
+        {
+          "value": "muchmore",
+          "label": "Much more"
+        },
+        {
+          "value": "most",
+          "label": "Most"
+        }
+      ],
+      "group": "World modifiers",
+      "restartRequired": true,
+      "description": "Scales yields from gathering and creature drops, from about half to about triple. Leave it out for standard yields."
+    },
+    {
+      "key": "raids",
+      "file": "launch",
+      "label": "Raid frequency",
+      "locator": {
+        "kind": "launch",
+        "flag": "-modifier",
+        "key": "raids"
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "none",
+          "label": "No raids"
+        },
+        {
+          "value": "muchless",
+          "label": "Much less"
+        },
+        {
+          "value": "less",
+          "label": "Less"
+        },
+        {
+          "value": "more",
+          "label": "More"
+        },
+        {
+          "value": "muchmore",
+          "label": "Much more"
+        }
+      ],
+      "group": "World modifiers",
+      "restartRequired": true,
+      "description": "Controls how often base raid events happen; none switches raids off completely. Leave it out for standard raids."
+    },
+    {
+      "key": "portals",
+      "file": "launch",
+      "label": "Portal rules",
+      "locator": {
+        "kind": "launch",
+        "flag": "-modifier",
+        "key": "portals"
+      },
+      "type": "enum",
+      "enum": [
+        {
+          "value": "casual",
+          "label": "Metals pass"
+        },
+        {
+          "value": "hard",
+          "label": "Blocked in fights"
+        },
+        {
+          "value": "veryhard",
+          "label": "Portals off"
+        }
+      ],
+      "group": "World modifiers",
+      "restartRequired": true,
+      "description": "Portal rules: casual lets metals through, hard blocks portals during boss fights, veryhard turns portals off. Leave it out for standard rules."
+    },
+    {
+      "key": "nobuildcost",
+      "file": "launch",
+      "label": "Free building",
+      "locator": {
+        "kind": "launch",
+        "flag": "-setkey",
+        "key": "nobuildcost"
+      },
+      "type": "bool",
+      "group": "World keys",
+      "restartRequired": true,
+      "description": "Building pieces cost no materials. The hammer preset turns this on."
+    },
+    {
+      "key": "playerevents",
+      "file": "launch",
+      "label": "Per-player events",
+      "locator": {
+        "kind": "launch",
+        "flag": "-setkey",
+        "key": "playerevents"
+      },
+      "type": "bool",
+      "group": "World keys",
+      "restartRequired": true,
+      "description": "Raids and events follow the progress of each player instead of the whole world. The casual preset turns this on."
+    },
+    {
+      "key": "passivemobs",
+      "file": "launch",
+      "label": "Passive creatures",
+      "locator": {
+        "kind": "launch",
+        "flag": "-setkey",
+        "key": "passivemobs"
+      },
+      "type": "bool",
+      "group": "World keys",
+      "restartRequired": true,
+      "description": "Creatures do not start fights unless provoked. Used by the casual and hammer presets."
+    },
+    {
+      "key": "nomap",
+      "file": "launch",
+      "label": "No map",
+      "locator": {
+        "kind": "launch",
+        "flag": "-setkey",
+        "key": "nomap"
+      },
+      "type": "bool",
+      "group": "World keys",
+      "restartRequired": true,
+      "description": "Turns off the map and minimap for everyone. The hardcore and immersive presets enable this."
+    },
+    {
+      "key": "logFile",
+      "file": "launch",
+      "label": "Log file",
+      "locator": {
+        "kind": "launch",
+        "flag": "-logFile"
+      },
+      "type": "string",
+      "group": "Logging",
+      "restartRequired": true,
+      "description": "Sends the server log to a file, after which the console goes almost silent. Leave it unset to read the log from the console."
+    }
+  ],
+  "rules": [
+    {
+      "id": "password-too-short-public",
+      "severity": "error",
+      "settings": ["password"],
+      "serverEvaluated": true,
+      "message": "A listed server needs a password of at least five characters, otherwise the server exits at start.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "public"
+              },
+              1
+            ]
+          },
+          {
+            "<": [
+              {
+                "strlen": {
+                  "var": "password"
+                }
+              },
+              5
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "password-in-name",
+      "severity": "error",
+      "settings": ["name", "password"],
+      "serverEvaluated": true,
+      "message": "The join password appears inside the server name, so anyone browsing can read it.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "password"
+            }
+          },
+          {
+            "in": [
+              {
+                "var": "password"
+              },
+              {
+                "var": "name"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "public-without-password",
+      "severity": "error",
+      "settings": ["public", "password"],
+      "serverEvaluated": true,
+      "message": "Listing the server publicly requires a password.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "public"
+              },
+              1
+            ]
+          },
+          {
+            "!": {
+              "var": "password"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "preset-with-modifiers",
+      "severity": "info",
+      "settings": [
+        "preset",
+        "combat",
+        "deathpenalty",
+        "resources",
+        "raids",
+        "portals"
+      ],
+      "message": "A preset plus individual modifiers: the modifiers refine the preset only when they come after it.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "preset"
+            }
+          },
+          {
+            "or": [
+              {
+                "!!": {
+                  "var": "combat"
+                }
+              },
+              {
+                "!!": {
+                  "var": "deathpenalty"
+                }
+              },
+              {
+                "!!": {
+                  "var": "resources"
+                }
+              },
+              {
+                "!!": {
+                  "var": "raids"
+                }
+              },
+              {
+                "!!": {
+                  "var": "portals"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "port-plus-one-overflow",
+      "severity": "error",
+      "settings": ["port"],
+      "message": "The query port is the game port plus one; choose 65533 or lower.",
+      "when": {
+        ">": [
+          {
+            "var": "port"
+          },
+          65533
+        ]
+      }
+    },
+    {
+      "id": "backup-intervals-inverted",
+      "severity": "warning",
+      "settings": ["backupshort", "backuplong"],
+      "message": "The early backup spacing should be smaller than the later one.",
+      "when": {
+        ">=": [
+          {
+            "var": "backupshort"
+          },
+          {
+            "var": "backuplong"
+          }
+        ]
+      }
+    },
+    {
+      "id": "crossplay-probe-note",
+      "severity": "info",
+      "settings": ["crossplay", "public"],
+      "message": "With crossplay, players come through a relay; the query answer still needs a public server.",
+      "when": {
+        "and": [
+          {
+            "var": "crossplay"
+          },
+          {
+            "==": [
+              {
+                "var": "public"
+              },
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "normal",
+      "label": "Normal",
+      "description": "The standard world. Also the only way to clear modifiers stored in the world save.",
+      "values": {
+        "preset": "normal"
+      }
+    },
+    {
+      "id": "casual",
+      "label": "Casual",
+      "description": "Easier combat and gentler deaths, more resources, no raids, carrying metals through portals.",
+      "values": {
+        "preset": "casual",
+        "combat": "veryeasy",
+        "deathpenalty": "casual",
+        "resources": "more",
+        "raids": "none",
+        "portals": "casual",
+        "playerevents": true,
+        "passivemobs": true
+      }
+    },
+    {
+      "id": "easy",
+      "label": "Easy",
+      "description": "A step below normal: slightly easier combat and less frequent raids.",
+      "values": {
+        "preset": "easy",
+        "combat": "easy",
+        "raids": "less"
+      }
+    },
+    {
+      "id": "hard",
+      "label": "Hard",
+      "description": "A step above normal: harder combat and more frequent raids.",
+      "values": {
+        "preset": "hard",
+        "combat": "hard",
+        "raids": "more"
+      }
+    },
+    {
+      "id": "hardcore",
+      "label": "Hardcore",
+      "description": "Very hard combat, full loss on death, harder portal rules and no map.",
+      "values": {
+        "preset": "hardcore",
+        "combat": "veryhard",
+        "deathpenalty": "hardcore",
+        "raids": "more",
+        "portals": "hard",
+        "nomap": true
+      }
+    },
+    {
+      "id": "immersive",
+      "label": "Immersive",
+      "description": "Portals off and no map, for a slower expedition style.",
+      "values": {
+        "preset": "immersive",
+        "portals": "veryhard",
+        "nomap": true
+      }
+    },
+    {
+      "id": "hammer",
+      "label": "Hammer",
+      "description": "Free building and passive creatures, for building sessions.",
+      "values": {
+        "preset": "hammer",
+        "raids": "none",
+        "nobuildcost": true,
+        "passivemobs": true
+      }
+    },
+    {
+      "id": "friends-relaxed",
+      "label": "Friends, relaxed",
+      "description": "Our own starting point for invited friends: gentler loss on death, more resources, rarer raids, ore through portals.",
+      "values": {
+        "preset": "normal",
+        "deathpenalty": "easy",
+        "resources": "more",
+        "raids": "less",
+        "portals": "casual",
+        "public": 0,
+        "saveinterval": 600,
+        "crossplay": false
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "a2s",
+      "portSetting": "port",
+      "portOffset": 1,
+      "players": true
+    }
+  ],
+  "hooksSupported": ["restart"],
+  "sources": [
+    "https://github.com/community-valheim-tools/valheim-server-docker",
+    "https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/config-default/config-lgsm/vhserver/_default.cfg",
+    "https://github.com/pepenotti/gameserver-panel/blob/main/docs/verification/valheim-1.0.16.md",
+    "https://github.com/ovh/game-panel/blob/main/backend/src/providers/ovhcloud/images/valheim/launchSettings.ts",
+    "https://github.com/Ezequiel294/valheim-server-docker/blob/main/docs/world-modifiers.md",
+    "https://github.com/CrystalFerrai/MakeFwl/blob/main/MakeFwl/Modifiers.cs",
+    "https://github.com/kirilloid/valheim/blob/main/src/data/game-settings.ts",
+    "https://github.com/emeraldhost/documentation/blob/main/tutorials/gameserver/valheim/add-admin/en.md",
+    "https://github.com/Arokan13/Raspiheim/blob/main/add/start_server.sh.tpl",
+    "https://github.com/chreez/deep-space-10-valheim/blob/mainline/src/server/start_server.bat"
+  ]
+}

@@ -100,6 +100,119 @@ function locatorKey(locator: Locator): string {
   return JSON.stringify(locator);
 }
 
+/** Flags this pack addresses with a keyed locator (P6: -modifier, -setkey). */
+function keyedFlags(pack: Pack, fileId: string): Set<string> {
+  const flags = new Set<string>();
+  for (const setting of pack.settings) {
+    if (setting.file !== fileId) continue;
+    const locator = setting.locator;
+    if (locator.kind === "launch" && locator.key !== undefined) {
+      flags.add(locator.flag.toLowerCase());
+    }
+  }
+  return flags;
+}
+
+/**
+ * The adapter issues of a file without the duplicate warnings of keyed flag
+ * families: a family repeats its flag name by design (-modifier combat,
+ * -modifier raids), and the adapter cannot know the pack addresses those
+ * flags with keyed locators.
+ */
+export function withoutKeyedDuplicates(
+  pack: Pack,
+  fileId: string,
+  issues: readonly LintIssue[],
+): LintIssue[] {
+  const keyed = keyedFlags(pack, fileId);
+  return issues.filter((issue) => {
+    const locator = issue.locator;
+    return !(
+      issue.code === "duplicate-key" &&
+      locator !== undefined &&
+      locator.kind === "launch" &&
+      keyed.has(locator.flag.toLowerCase())
+    );
+  });
+}
+
+/**
+ * The -preset-first order warning of a launch file (dev-work-plan P6-A): a
+ * setting that declares the flags it must precede (LaunchLocator.before) is
+ * reported when the line holds it after one of them, because the game wipes
+ * those arguments when it reads the later flag.
+ */
+function orderWarnings(
+  pack: Pack,
+  fileId: string,
+  adapter: FormatAdapter,
+  doc: ParsedDoc,
+): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const setting of pack.settings) {
+    if (setting.file !== fileId || setting.locator.kind !== "launch") continue;
+    const before = setting.locator.before;
+    if (before === undefined) continue;
+    const mine = startOf(adapter, doc, setting.locator);
+    if (mine === undefined) continue;
+    for (const flag of before) {
+      const theirs = firstStartOf(pack, fileId, adapter, doc, flag);
+      if (theirs === undefined || theirs >= mine) continue;
+      const at = position(doc, mine);
+      issues.push({
+        code: "launch-order",
+        severity: "warning",
+        ...at,
+        message: `${setting.locator.flag} comes after ${flag}, and the game wipes the ${flag} arguments that precede it. Move ${setting.locator.flag} in front.`,
+        locator: setting.locator,
+      });
+    }
+  }
+  return issues;
+}
+
+/** The first byte a value's removal changes, or undefined when it is absent. */
+function startOf(
+  adapter: FormatAdapter,
+  doc: ParsedDoc,
+  locator: Locator,
+): number | undefined {
+  try {
+    if (adapter.get(doc, locator) === undefined) return undefined;
+    const starts = adapter.remove(doc, locator).map((splice) => splice.start);
+    return starts.length > 0 ? Math.min(...starts) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Where the first argument of a flag starts. A keyed family repeats its flag
+ * (-modifier combat, -modifier raids), so the plain locator is ambiguous; the
+ * keyed locators the pack declares for the flag find each of them.
+ */
+function firstStartOf(
+  pack: Pack,
+  fileId: string,
+  adapter: FormatAdapter,
+  doc: ParsedDoc,
+  flag: string,
+): number | undefined {
+  const name = flag.toLowerCase();
+  const locators: Locator[] = [{ kind: "launch", flag }];
+  for (const setting of pack.settings) {
+    const locator = setting.locator;
+    if (setting.file !== fileId || locator.kind !== "launch") continue;
+    if (locator.key !== undefined && locator.flag.toLowerCase() === name) {
+      locators.push(locator);
+    }
+  }
+  const starts = locators
+    .map((locator) => startOf(adapter, doc, locator))
+    .filter((start): start is number => start !== undefined);
+  return starts.length > 0 ? Math.min(...starts) : undefined;
+}
+
 /**
  * Wrong-file and wrong-section warnings for one file of a pack. A key that a
  * setting of this file also uses where it was found is never reported.
@@ -140,7 +253,11 @@ export function lintPackFile(
       issues.set(key, { code, severity: "warning", ...at, message, locator });
     }
   }
-  const sorted = [...issues.values()];
+  const kept = [...issues.values()];
+  const sorted =
+    file.adapter === "launch"
+      ? [...kept, ...orderWarnings(pack, fileId, adapter, doc)]
+      : kept;
   sorted.sort((a, b) => a.line - b.line || a.column - b.column);
   return sorted;
 }

@@ -83,18 +83,23 @@ export function readSetting(
   return fromFileValue(setting, value);
 }
 
-/** The bytes after writing a value: set when it is there, insert when not. */
+/**
+ * The bytes after writing a value: set when it is there, insert when not,
+ * remove for null, the same rule the change-set write path follows.
+ */
 export function writeSetting(
   adapter: FormatAdapter,
   doc: ParsedDoc,
   locator: Locator,
   value: JsonValue,
 ): Uint8Array {
-  const fileValue = value as Value;
   const exists = adapter.get(doc, locator) !== undefined;
-  const splices = exists
-    ? adapter.set(doc, locator, fileValue)
-    : adapter.insert(doc, locator, fileValue);
+  const splices =
+    value === null
+      ? adapter.remove(doc, locator)
+      : exists
+        ? adapter.set(doc, locator, value as Value)
+        : adapter.insert(doc, locator, value as Value);
   return adapter.apply(doc.bytes, splices);
 }
 

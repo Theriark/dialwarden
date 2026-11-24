@@ -38,6 +38,9 @@ section 2).
 | shellvar/sample.env | a .env file: a backslash escape, escaped quotes and $ inside double quotes, an empty value and a single-quoted literal |
 | shellvar/environmentfile.conf | a systemd EnvironmentFile: an unquoted value with spaces, double and single quotes, a ; comment and an indented line with spaces around = |
 | shellvar/malformed-unclosed-quote.cfg | malformed: a double quote that is not closed |
+| textlist/SYNTHETIC.md | the list of the textlist fixtures |
+| textlist/adminlist-like.txt | a plain list of player ids: a // comment header, a blank line, spaces around an id, a comment between ids and no final line break |
+| textlist/crlf-bom.txt | a list with a UTF-8 BOM and CRLF line endings |
 | ueini/SYNTHETIC.md | the list of the ueini fixtures |
 | ueini/palworld-optionsettings.ini | Palworld one-line OptionSettings struct: nested parentheses, quoted strings with a comma and parentheses inside, empty strings, Title-case booleans, six-decimal floats |
 | ueini/palworld-crlf-bom.ini | the same struct with CRLF line endings, a UTF-8 BOM, trailing spaces and an escaped quote |
