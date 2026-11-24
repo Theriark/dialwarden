@@ -8,12 +8,19 @@ import { FileText, History, Save, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
-import { rawFileQuery, serverQuery, serverSettingsQuery } from "../api/queries";
-import type { ChangeSet, LintEntry } from "../api/schema";
+import {
+  rawFileQuery,
+  serverQuery,
+  serverSettingsQuery,
+  settingsMetaQuery,
+} from "../api/queries";
+import type { ChangeSet } from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { languageOf } from "../lib/file-language";
+import { packOf } from "../lib/pack";
+import { draftLint, lintMarkers } from "../lib/raw-lint";
 import { PageHeader } from "../components/layout/page-header";
-import { LazyEditor, type LintMarker } from "../components/code-editor";
+import { LazyEditor } from "../components/code-editor";
 import { SaveDialog } from "../components/save-dialog";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -23,16 +30,6 @@ import { useToast } from "../components/ui/toast";
 
 const FILE_LABEL =
   "flex items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft";
-
-function toMarkers(lint: readonly LintEntry[]): LintMarker[] {
-  return lint
-    .filter((entry) => entry.line !== null)
-    .map((entry) => ({
-      line: entry.line ?? 1,
-      severity: entry.severity,
-      message: entry.message,
-    }));
-}
 
 export function ServerRawPage() {
   const params = useParams({ strict: false }) as { slug: string };
@@ -47,10 +44,28 @@ export function ServerRawPage() {
     ...rawFileQuery(slug, chosen ?? ""),
     enabled: isOwner && chosen !== null,
   });
-  const markers = useMemo(() => toMarkers(file.data?.lint ?? []), [file.data]);
+  const packId = settings.data?.packId;
+  const meta = useQuery({
+    ...settingsMetaQuery(packId ?? ""),
+    enabled: packId !== undefined,
+  });
   const toast = useToast();
   const [text, setText] = useState<string | null>(null);
   const [changeSet, setChangeSet] = useState<ChangeSet | null>(null);
+
+  // The draft's own lint, the same lintFile the server runs (live check
+  // F3): the gutter marks the malformed line as it is typed, not only
+  // after a save refuses, and a clean file stays clean.
+  const draft = text ?? file.data?.text ?? null;
+  const lint = useMemo(
+    () =>
+      draft === null || meta.data === undefined
+        ? []
+        : draftLint(packOf(meta.data), chosen ?? "", draft),
+    [draft, meta.data, chosen],
+  );
+  const markers = useMemo(() => lintMarkers(draft ?? "", lint), [draft, lint]);
+  const blocked = lint.some((issue) => issue.severity === "error");
 
   const save = useMutation({
     mutationFn: () =>
@@ -125,7 +140,7 @@ export function ServerRawPage() {
   }
 
   const editable = settings.data.editable;
-  const current = chosen === null ? null : (text ?? file.data?.text ?? null);
+  const current = chosen === null ? null : draft;
   const dirty =
     current !== null && file.data !== undefined && current !== file.data.text;
   // The save dialog's text diff highlights with the file's own language.
@@ -186,7 +201,7 @@ export function ServerRawPage() {
           <Button
             variant="primary"
             loading={save.isPending}
-            disabled={!editable || !dirty}
+            disabled={!editable || !dirty || blocked}
             icon={<Save className="size-4" aria-hidden="true" />}
             onClick={() => {
               save.mutate();
@@ -194,6 +209,11 @@ export function ServerRawPage() {
           >
             Review and save
           </Button>
+          {blocked ? (
+            <span className="pb-1 text-sm text-fg-muted">
+              fix the errors first
+            </span>
+          ) : null}
         </div>
         {file.isPending ? (
           <RowsSkeleton rows={6} />

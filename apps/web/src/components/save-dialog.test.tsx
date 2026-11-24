@@ -203,6 +203,13 @@ describe("SaveDialog", () => {
     await waitFor(() => {
       expect(screen.getByText(/The last try failed/)).toBeTruthy();
     });
+    // One sentence keeps one full stop: the server message already ends in
+    // one (the live check saw a double full stop here).
+    expect(
+      screen.getByText(
+        "The last try failed: The folder is read-only. A failed change set can be applied again.",
+      ),
+    ).toBeTruthy();
     expect(onApplied).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: "Save without restart" }),
@@ -260,5 +267,72 @@ describe("SaveDialog", () => {
       screen.queryByRole("button", { name: "Save without restart" }),
     ).toBeNull();
     expect(onApplied).not.toHaveBeenCalled();
+  });
+
+  it("keeps the apply disabled while a blocking lint error is shown", () => {
+    stubFetch(() => ({ status: 404, body: { error: "not_found" } }));
+    renderWithProviders(
+      <SaveDialog
+        slug="home"
+        changeSet={changeSet({
+          lint: [
+            {
+              fileId: "settings",
+              settingKey: null,
+              code: "syntax",
+              severity: "error",
+              message: "expected key=value, [section] or comment",
+              line: 8,
+              column: 1,
+              serverEvaluated: false,
+            },
+          ],
+        })}
+        onClose={() => {
+          /* not used here */
+        }}
+        onApplied={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const button = screen.getByRole("button", {
+      name: "Save without restart",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText("fix the errors first")).toBeTruthy();
+  });
+
+  it("keeps the apply enabled for an error on an untouched setting", () => {
+    stubFetch(() => ({ status: 404, body: { error: "not_found" } }));
+    renderWithProviders(
+      <SaveDialog
+        slug="home"
+        changeSet={changeSet({
+          lint: [
+            {
+              fileId: "settings",
+              settingKey: "someOtherKey",
+              code: "validation",
+              severity: "error",
+              message: "A stored value this save does not touch.",
+              line: null,
+              column: null,
+              serverEvaluated: false,
+            },
+          ],
+        })}
+        onClose={() => {
+          /* not used here */
+        }}
+        onApplied={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const button = screen.getByRole("button", {
+      name: "Save without restart",
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
   });
 });

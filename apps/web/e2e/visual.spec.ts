@@ -19,6 +19,8 @@ const THEMES = ["light", "dark"] as const;
 interface Screen {
   readonly name: string;
   readonly path: string;
+  /** Viewport-only shot; the default captures the whole page. */
+  readonly full?: boolean | undefined;
   readonly ready: (page: Page) => Promise<void>;
 }
 
@@ -85,6 +87,53 @@ const SCREENS: readonly Screen[] = [
       await expect(page.getByText("E2E Customer")).toBeVisible();
     },
   },
+  {
+    name: "raw-blocked",
+    path: "/servers/palworld-home/raw",
+    full: false,
+    ready: async (page) => {
+      await expect(page.getByText("Palworld Home raw files")).toBeVisible();
+      await page.locator(".monaco-editor").click();
+      await page.keyboard.press("Control+End");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("this line has no key value pair");
+      await expect(page.locator(".squiggly-error").first()).toBeVisible();
+      await expect(page.getByText("fix the errors first")).toBeVisible();
+    },
+  },
+  {
+    name: "save-dialog",
+    path: "/servers/palworld-home/settings",
+    full: false,
+    ready: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: "Palworld Home settings" }),
+      ).toBeVisible();
+      await page.getByLabel("Search settings").fill("Experience rate");
+      // On the phone widths the settings groups sit behind their
+      // accordions, so the Rates group is opened before the field is
+      // filled; the wider widths render the groups open already.
+      if ((page.viewportSize()?.width ?? 0) < 640) {
+        await page.getByText("Rates", { exact: true }).first().click();
+      }
+      await page.getByLabel("Experience rate").fill("2");
+      await page.getByRole("button", { name: "Review and save" }).click();
+      await expect(
+        page.getByRole("dialog", { name: "Save these changes?" }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: "wizard-sftp",
+    path: "/servers/new",
+    ready: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: "Add server" }),
+      ).toBeVisible();
+      await page.getByText("SFTP", { exact: true }).click();
+      await expect(page.getByText("This instance's public key")).toBeVisible();
+    },
+  },
 ];
 
 test("every screen at 1440, 768 and 390 in light and dark", async ({
@@ -112,7 +161,7 @@ test("every screen at 1440, 768 and 390 in light and dark", async ({
           path: `${SHOTS}/p5-${screen.name}-${width}-${theme}.jpg`,
           type: "jpeg",
           quality: 75,
-          fullPage: true,
+          fullPage: screen.full !== false,
         });
       }
     }
