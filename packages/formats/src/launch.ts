@@ -36,7 +36,6 @@ interface Char {
   /** Raw range of the byte, its escape included. */
   readonly from: number;
   readonly to: number;
-  readonly context: Context;
   /** Quoted segment the byte belongs to; -1 when unquoted. */
   readonly segment: number;
 }
@@ -109,7 +108,7 @@ function quoted(
     if (c === "") throw new ParseFail(open, `the ${quote} is not closed`);
     if (c === quote) return i + 1;
     const next = text.charAt(i + 1);
-    if (context === 1 && c === "\\" && /[\\"$`]/.test(next)) {
+    if (context === 1 && c === "\\" && /[\\\"$`]/.test(next)) {
       const byte = text.charCodeAt(i + 1);
       chars.push({ byte, from: i, to: i + 2, context, segment });
       i += 2;
@@ -260,27 +259,71 @@ const SHELL_DOUBLE = new Set(["`", "$"]);
  * hold them. A line break after the last word is fine. Not part of the
  * adapter lint: a start script the user owns may use the shell on purpose;
  * the pack lint applies this to the args file only.
+ *
+ * The words are read by this module's parser, so the bytes where the parser
+ * and the shell disagree are refused first (THE-2605 N1): the parser takes
+ * CR, FF and VT for blanks and skips a BOM, where sh and bash read them as
+ * word bytes, so a # after one of them would be a comment to the parser
+ * only. Every control byte but tab and LF is refused, CR too unless it ends
+ * a CRLF line, and so is a BOM.
  */
 export function launchShellIssues(bytes: Uint8Array): LintIssue[] {
   const src = new Source(bytes);
-  let words: Word[];
+  const flag = shellFlag(src);
+  controlBytes(src, flag);
+  let words: Word[] | undefined;
   try {
     words = readWords(src);
   } catch (fail) {
     // An unclosed quote is already an error of the adapter lint.
-    if (fail instanceof ParseFail) return [];
-    throw fail;
+    if (!(fail instanceof ParseFail)) throw fail;
   }
-  shellIssues(src, words);
-  return sortedIssues(src.doc("launch"));
+  if (words !== undefined) shellIssues(src, words, flag);
+  return sortedIssues(src.doc("launch")).filter(
+    (issue) => issue.code === "shell-character",
+  );
 }
 
-function shellIssues(src: Source, words: readonly Word[]): void {
+function shellFlag(src: Source): (at: number) => void {
   const message =
     "the launch line holds a shell character the start script would run";
-  const flag = (at: number) => {
+  return (at) => {
     src.issue(at, "shell-character", "error", message);
   };
+}
+
+/** Bytes the shell reads as part of a word where the parser sees a blank. */
+function controlBytes(src: Source, flag: (at: number) => void): void {
+  if (src.bom) flag(0);
+  const text = src.text;
+  for (let i = src.begin; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 0x09 || code === 0x0a) continue;
+    if (code === 0x0d && text.charAt(i + 1) === "\n") continue;
+    if (code < 0x20 || code === 0x7f) flag(i);
+  }
+}
+
+/**
+ * The first line break in the text between two words that ends the command
+ * under eval: one outside a comment that no backslash continues, or the one
+ * that ends a comment (a backslash in a comment continues nothing).
+ */
+function commandBreak(gap: string): number {
+  let comment = false;
+  for (let i = 0; i < gap.length; i++) {
+    const c = gap.charAt(i);
+    if (c === "#") comment = true;
+    else if (c === "\n" && (comment || gap.charAt(i - 1) !== "\\")) return i;
+  }
+  return -1;
+}
+
+function shellIssues(
+  src: Source,
+  words: readonly Word[],
+  flag: (at: number) => void,
+): void {
   for (const word of words) {
     for (const char of word.chars) {
       const text = String.fromCharCode(char.byte);
@@ -298,10 +341,18 @@ function shellIssues(src: Source, words: readonly Word[]): void {
   let from = src.begin;
   for (const word of words) {
     // A backslash line continuation joins the lines and is fine.
-    const at = text.slice(from, word.start).search(/(?<!\\)\n/);
+    const at = commandBreak(text.slice(from, word.start));
     if (at >= 0) flag(from + at);
     from = word.end;
   }
+}
+
+/**
+ * The unquoted words of a launch line, for tests: on a line the shell lint
+ * accepts they are the arguments the start snippet hands the game.
+ */
+export function launchWords(bytes: Uint8Array): string[] {
+  return readWords(new Source(bytes)).map((word) => decode(word.chars));
 }
 
 function parse(bytes: Uint8Array): LaunchDoc {
@@ -331,7 +382,7 @@ function parse(bytes: Uint8Array): LaunchDoc {
 // Writing -------------------------------------------------------------------
 
 function doubleQuoted(text: string): string {
-  return text.replace(/[\\"$`]/g, (c) => `\\${c}`);
+  return text.replace(/[\\\"$`]/g, (c) => `\\${c}`);
 }
 
 /** A whole word that the shell reads back as text. */
@@ -494,7 +545,7 @@ function insertArg(
     return [{ start: at, end: at, text: encodeIn(context, option) }];
   }
   const equals = doc.args.some((a) => a.inline !== undefined && !a.option);
-  let token = flag;
+  let token: string = flag;
   if (text !== undefined && flag.startsWith("-") && equals) {
     token = `${flag}=${encodeIn(0, text)}`;
   } else if (text !== undefined) {
