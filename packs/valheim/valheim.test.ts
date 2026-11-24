@@ -135,8 +135,9 @@ describe("Valheim pack", () => {
 
   it("reads the fixture line: quoted words and two-token modifiers", () => {
     expect(launchValue(args(), "name")).toBe("Quarry Lane");
-    expect(launchValue(args(), "port")).toBe(2456);
-    expect(launchValue(args(), "public")).toBe(1);
+    // The adapter reads text; the pack types it (port 2456, public 1).
+    expect(launchValue(args(), "port")).toBe("2456");
+    expect(launchValue(args(), "public")).toBe("1");
     expect(launchValue(args(), "combat")).toBe("easy");
     expect(launchValue(args(), "raids")).toBe("none");
     expect(launchValue(args(), "preset")).toBe("casual");
