@@ -12,7 +12,7 @@ import {
   type Value,
 } from "@dialwarden/formats";
 import { fromFileValue } from "./coerce.js";
-import { lintPackFile } from "./lint.js";
+import { lintPackFile, withoutKeyedDuplicates } from "./lint.js";
 import type { JsonValue, Pack, PackFile, Setting } from "./types.js";
 
 /** One edit of a setting value; null removes the value from the file. */
@@ -155,7 +155,8 @@ export function lintFile(
   bytes: Uint8Array,
 ): LintIssue[] {
   const adapter = adapterOf(packFileOf(pack, fileId));
-  const issues = adapter.lint(adapter.parse(bytes));
-  if (issues.some((issue) => issue.severity === "error")) return issues;
+  const parsed = adapter.lint(adapter.parse(bytes));
+  if (parsed.some((issue) => issue.severity === "error")) return parsed;
+  const issues = withoutKeyedDuplicates(pack, fileId, parsed);
   return [...issues, ...lintPackFile(pack, fileId, bytes)];
 }
