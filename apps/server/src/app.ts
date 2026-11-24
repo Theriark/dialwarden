@@ -29,6 +29,7 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { ConnectorService } from "./connectors/service.js";
 import { createAead } from "./crypto/aead.js";
 import { loadAppKey } from "./crypto/app-key.js";
+import { HookService } from "./control/hooks.js";
 import { Settings } from "./db/settings.js";
 import { Store } from "./db/store.js";
 import type { AppContext } from "./http/context.js";
@@ -51,6 +52,7 @@ import { changeRoutes } from "./routes/changes.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
+import { hookRoutes } from "./routes/hooks.js";
 import { licenceRoutes } from "./routes/licence.js";
 import { presetRoutes } from "./routes/presets.js";
 import { serverRoutes } from "./routes/servers.js";
@@ -203,6 +205,19 @@ export async function buildApp(
     exists: (id) => servers.exists(id),
   });
   const snapshots = new SnapshotStore(store, config.dataDir, now);
+  // The hooks of P6-B (contract C7): the per-server hook configuration, the
+  // status probes and the hook runs. The change set service holds a server's
+  // lock while it applies, so the hook service never reads a server's files
+  // from inside an apply.
+  const hooks = new HookService({
+    store,
+    aead,
+    activity,
+    servers,
+    connectors,
+    waitMs: config.hookWaitMs,
+    now,
+  });
   const changes = new ChangeSetService({
     store,
     aead,
@@ -210,8 +225,10 @@ export async function buildApp(
     snapshots,
     activity,
     entitlement,
+    hooks,
     now,
   });
+  hooks.setChanges(changes);
   const presets = new PresetService({
     store,
     packs: packs.packs,
@@ -248,6 +265,7 @@ export async function buildApp(
     connectors,
     packs: packs.packs,
     servers,
+    hooks,
     changes,
     presets,
     snapshots,
@@ -315,6 +333,7 @@ export async function buildApp(
   serverRoutes(app);
   changeRoutes(app);
   presetRoutes(app);
+  hookRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
