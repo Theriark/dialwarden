@@ -1,4 +1,4 @@
-// Drizzle schema of the P1 and P4 tables. The SQL that creates them is in
+// Drizzle schema of the P1, P4 and P6 tables. The SQL that creates them is in
 // migrations.ts; schema.test.ts fails when the two disagree. Later phases add
 // their tables here and a new migration (never an edit of an applied one).
 import { sql } from "drizzle-orm";
@@ -186,6 +186,12 @@ export const changeSets = sqliteTable(
     conflict: text("conflict"),
     /** JSON: the error code and message, when the status is failed. */
     error: text("error"),
+    /**
+     * The hook mode a pending change asked for (P6-B): none, restart or
+     * stop-start. Set while it waits; the flush reads it to decide whether
+     * the start hook runs after the write.
+     */
+    runHooks: text("run_hooks"),
     /** The snapshot a rollback restores. */
     restoreOf: text("restore_of"),
     createdAt: text("created_at").notNull(),
@@ -247,6 +253,25 @@ export const presets = sqliteTable(
   (table) => [index("presets_created").on(table.createdAt)],
 );
 
+/**
+ * The per-server hook configuration (P6-B, contract C7): the ssh command
+ * string or the docker-socket-proxy the owner or an admin set, and the
+ * per-kind probe overrides (host, port and an encrypted password). Only the
+ * owner or an admin writes it; editors can only trigger it.
+ */
+export const serverHooks = sqliteTable("server_hooks", {
+  /** The slug of the server; one row per server at most. */
+  serverId: text("server_id")
+    .primaryKey()
+    .references(() => servers.id, { onDelete: "cascade" }),
+  /** JSON: the ControlConfig, or null when only the pack hooks are used. */
+  hook: text("hook"),
+  /** JSON: ProbeOverride by probe kind; passwords stay encrypted inside. */
+  overrides: text("overrides").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
 export const schema = {
   users,
   recoveryCodes,
@@ -258,6 +283,7 @@ export const schema = {
   knownHosts,
   servers,
   serverFiles,
+  serverHooks,
   changeSets,
   snapshots,
   snapshotBlobs,
