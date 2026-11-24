@@ -14,8 +14,48 @@ export interface HostKeyPair {
   readonly fingerprint: string;
 }
 
-export function hostKeyPair(): HostKeyPair {
-  const pair = ssh2.utils.generateKeyPairSync("ed25519");
+/** An OpenSSH key pair as ssh2.utils.generateKeyPairSync returns it. */
+export interface GeneratedPair {
+  readonly private: string;
+  readonly public: string;
+}
+
+/** How many generated keys may fail to parse before hostKeyPair gives up. */
+export const HOST_KEY_ATTEMPTS = 10;
+
+const ed25519 = (): GeneratedPair => ssh2.utils.generateKeyPairSync("ed25519");
+
+/**
+ * True when ssh2 parses the private key back (as new ssh2.Server does with
+ * its host keys) and the key matches the public key the test pins.
+ */
+export function parsesBack(pair: GeneratedPair): boolean {
+  try {
+    const parsed = ssh2.utils.parseKey(pair.private);
+    if (parsed instanceof Error) return false;
+    const blob = parsed.getPublicSSH().toString("base64");
+    return pair.public.trim().split(/\s+/)[1] === blob;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A new Ed25519 key pair that ssh2 parses back. ssh2's generator now and
+ * then writes an OpenSSH private key its own parser calls malformed ("Cannot
+ * parse privateKey" in new ssh2.Server, push CI run 45302896324), so such a
+ * key is made again, a few times at most.
+ */
+export function usablePair(generate = ed25519): GeneratedPair {
+  for (let attempt = 0; attempt < HOST_KEY_ATTEMPTS; attempt += 1) {
+    const pair = generate();
+    if (parsesBack(pair)) return pair;
+  }
+  throw new Error(`no usable host key in ${HOST_KEY_ATTEMPTS} attempts`);
+}
+
+export function hostKeyPair(generate = ed25519): HostKeyPair {
+  const pair = usablePair(generate);
   return {
     privateKey: pair.private,
     fingerprint: publicKeyFingerprint(pair.public),

@@ -1060,6 +1060,9 @@ export class ChangeSetService {
     if (bytes === null) throw new ApiError(410, "snapshot_unavailable");
     return this.#exclusive(server.id, async () => {
       const states = await this.#readLocked(server, pack);
+      // Again under the lock and after the read, before any file is written:
+      // an outside edit the read just recorded is a new entry on top.
+      this.#assertVisible(server, snapshot);
       const state = states.get(snapshot.fileId);
       if (state === undefined) {
         throw new ApiError(409, "file_not_on_server", {
@@ -1130,15 +1133,26 @@ export class ChangeSetService {
       .all();
   }
 
-  /** On Free a restore reaches only the 5 visible entries (402 otherwise). */
+  /**
+   * On Free a restore reaches only the 5 visible entries (402 otherwise).
+   * The history page restores an entry one file per call, and each call adds
+   * its rollback on top. Rollbacks of the entry's own snapshots do not count,
+   * so every call of one restore gets the same answer: a multi-file entry is
+   * restored whole or not at all.
+   */
   #assertVisible(server: ServerRecord, snapshot: SnapshotRecord): void {
     const limit = this.#entitlement.limit("historyVisible");
     if (limit === null) return;
-    const ids = this.#historyRows(server.id).map((row) => row.id);
-    const visible = new Set(ids.slice(0, limit));
+    const rows = this.#historyRows(server.id);
+    const refused = limitReached("historyVisible", rows.length, limit);
     const owner = snapshot.changeSetId;
-    if (owner !== null && visible.has(owner)) return;
-    throw limitReached("historyVisible", ids.length, limit);
+    if (owner === null) throw refused;
+    const own = this.#snapshots.ofChangeSets([owner]).map((item) => item.id);
+    const ownRestores = new Set(own);
+    const counted = rows.filter((row) => !ownRestores.has(row.restoreOf ?? ""));
+    const visible = counted.slice(0, limit).map((row) => row.id);
+    if (visible.includes(owner)) return;
+    throw refused;
   }
 
   /** GET /servers/SLUG/history (contract C5), limited to 5 on Free. */

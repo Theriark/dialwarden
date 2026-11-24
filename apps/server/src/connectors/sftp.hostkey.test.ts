@@ -2,11 +2,11 @@
 // SFTP server whose host key is not confirmed, or differs from the confirmed
 // one. The server runs in the test process and counts authentication
 // requests; the handshake must stop at the host key, before any of them.
-import ssh2 from "ssh2";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   hostKeyPair,
   startSshServer,
+  usablePair,
   type HostKeyPair,
   type SshServer,
 } from "../../test/ssh-server.js";
@@ -111,7 +111,7 @@ describe("SFTP host key before credentials (T5)", () => {
   });
 
   it("never offers the instance key to an unpinned server", async () => {
-    const pair = ssh2.utils.generateKeyPairSync("ed25519");
+    const pair = usablePair();
     const sftp = connector({ method: "key", privateKey: pair.private }, null);
     try {
       expect(await sftp.test()).toMatchObject({
