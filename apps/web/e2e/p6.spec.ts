@@ -263,8 +263,10 @@ test("the launch page shows the source, the live line and the snippets", async (
   await expect(page.getByLabel("PowerShell snippet")).toContainText(
     "Get-Content dialwarden-args.txt -Raw",
   );
-  await page.getByRole("button", { name: "Copy" }).click();
-  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  // The launch line above has a copy button of its own: scope to the panel.
+  const panel = page.getByRole("tabpanel");
+  await panel.getByRole("button", { name: "Copy" }).click();
+  await expect(panel.getByRole("button", { name: "Copied" })).toBeVisible();
 
   // One flag changes the line live and saves through the same dialog.
   await page.getByLabel("Player slots (-players)").fill("16");
