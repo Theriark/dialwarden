@@ -76,10 +76,14 @@ export function launchSourcePaths(
  * The shell forms hand the line to eval, so the quoting the launch adapter
  * writes ("Quarry Lane") reaches the game as one argument; plain word
  * splitting of the file would break it apart. eval is safe here because the
- * validator refuses every shell character in a launch value (validate.ts),
- * so the file holds only words and quotes. Docker Compose and systemd read
- * $ themselves, so their forms write it as $$. PowerShell passes the line to
- * the game as its raw Windows command line, which keeps double quotes.
+ * validator refuses every shell character in a launch value (validate.ts)
+ * and the pack lint of the args file refuses one anywhere in it, which also
+ * blocks the write of a raw patch (files.ts lintFile with formats
+ * launchShellIssues), so the file holds only words and quotes. set -f keeps an unquoted ? * or [ (ARK
+ * question-mark chains) from being read as a file pattern. Docker Compose
+ * and systemd read $ themselves, so their forms write it as $$. PowerShell
+ * passes the line to the game as its raw Windows command line, which keeps
+ * double quotes.
  */
 export function launchSnippets(
   fileName: string,
@@ -91,7 +95,7 @@ export function launchSnippets(
   readonly systemd: string;
 } {
   const line = (dollar: string) =>
-    `eval "exec ${executable} ${dollar}(cat ${fileName})"`;
+    `set -f; eval "exec ${executable} ${dollar}(cat ${fileName})"`;
   return {
     bash: line("$"),
     powershell: `Start-Process -FilePath ${executable} -ArgumentList (Get-Content ${fileName} -Raw) -NoNewWindow -Wait`,
@@ -306,6 +310,16 @@ export function writeLaunchSourceValues(
     }
     const lineVar = { kind: "shellvar" as const, name: target.name };
     const line = shell.get(doc, lineVar);
+    if (line === undefined && source.kind === "linuxgsm") {
+      // A LinuxGSM instance cfg starts empty and the whole line lives in
+      // _default.cfg; the instance value wins over the default one, so adding
+      // the variable here would drop every other flag of the default line
+      // (name, password, world, save folder).
+      throw new FormatError(
+        "invalid-value",
+        `the LinuxGSM instance config holds no ${target.name} line; copy the ${target.name} line from _default.cfg into it first`,
+      );
+    }
     const current = typeof line === "string" ? line : "";
     const next = editLaunch(setting, current, edit.value);
     const splices =

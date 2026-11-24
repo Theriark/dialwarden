@@ -21,6 +21,7 @@ import {
   FormatError,
   type FormatAdapter,
   type LaunchLocator,
+  type LintIssue,
   type ParsedDoc,
   type Splice,
   type Value,
@@ -241,6 +242,66 @@ function classify(words: readonly Word[]): Arg[] {
     }
   }
   return args;
+}
+
+/** Characters the shell acts on outside quotes. */
+const SHELL_UNQUOTED = new Set([";", "&", "|", "`", "$", "(", ")", "<", ">"]);
+/** Characters the shell still acts on inside double quotes. */
+const SHELL_DOUBLE = new Set(["`", "$"]);
+
+/**
+ * Shell characters in a launch line that is run through eval. The start
+ * snippets of the app-managed args file hand it to eval (packs-schema
+ * launchsources.ts launchSnippets), so that file is shell text: a command
+ * substitution, an operator or a line break between words would run as code
+ * at the next game start. Single quotes keep everything literal; the writer
+ * never emits any of these (it double-quotes words and the validator refuses
+ * shell characters in values), so only hand-edited or raw-patched text can
+ * hold them. A line break after the last word is fine. Not part of the
+ * adapter lint: a start script the user owns may use the shell on purpose;
+ * the pack lint applies this to the args file only.
+ */
+export function launchShellIssues(bytes: Uint8Array): LintIssue[] {
+  const src = new Source(bytes);
+  let words: Word[];
+  try {
+    words = readWords(src);
+  } catch (fail) {
+    // An unclosed quote is already an error of the adapter lint.
+    if (fail instanceof ParseFail) return [];
+    throw fail;
+  }
+  shellIssues(src, words);
+  return sortedIssues(src.doc("launch"));
+}
+
+function shellIssues(src: Source, words: readonly Word[]): void {
+  const message =
+    "the launch line holds a shell character the start script would run";
+  const flag = (at: number) => {
+    src.issue(at, "shell-character", "error", message);
+  };
+  for (const word of words) {
+    for (const char of word.chars) {
+      const text = String.fromCharCode(char.byte);
+      if (char.context === 0 && SHELL_UNQUOTED.has(text)) flag(char.from);
+      else if (char.context === 1 && SHELL_DOUBLE.has(text)) flag(char.from);
+      else if (char.context === 0 && char.to - char.from === 2) {
+        // An unquoted backslash escape: the writer never emits one.
+        flag(char.from);
+      }
+    }
+  }
+  // A line break between words (or before the first) ends the command under
+  // eval, so the next word would run as a command of its own.
+  const text = src.text;
+  let from = src.begin;
+  for (const word of words) {
+    // A backslash line continuation joins the lines and is fine.
+    const at = text.slice(from, word.start).search(/(?<!\\)\n/);
+    if (at >= 0) flag(from + at);
+    from = word.end;
+  }
 }
 
 function parse(bytes: Uint8Array): LaunchDoc {
@@ -521,11 +582,14 @@ function find(doc: LaunchDoc, locator: LaunchLocator): Arg[] {
       "launch: a key is one word without spaces",
     );
   }
+  // Keys compare without case like flags: LinuxGSM documents the Valheim
+  // key as deathPenalty while the game's own examples write deathpenalty.
   const name = flag.toLowerCase();
+  const keyName = key?.toLowerCase();
   return doc.args.filter(
     (arg) =>
       arg.name.toLowerCase() === name &&
-      (key === undefined || keyOf(arg) === key),
+      (keyName === undefined || keyOf(arg)?.toLowerCase() === keyName),
   );
 }
 

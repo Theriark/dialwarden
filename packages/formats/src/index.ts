@@ -5,7 +5,7 @@
 import { cfgAdapter } from "./cfg.js";
 import { iniAdapter, ueIniAdapter } from "./ini.js";
 import { jsonAdapter, jsoncAdapter } from "./json.js";
-import { launchAdapter } from "./launch.js";
+import { launchAdapter, launchShellIssues } from "./launch.js";
 import { textListAdapter } from "./textlist.js";
 import { luaAdapter } from "./lua.js";
 import { shellVarAdapter, systemdEnvAdapter } from "./shellvar.js";
@@ -20,6 +20,7 @@ export {
   jsonAdapter,
   jsoncAdapter,
   launchAdapter,
+  launchShellIssues,
   luaAdapter,
   shellVarAdapter,
   systemdEnvAdapter,

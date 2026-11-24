@@ -5,6 +5,7 @@
 import {
   FormatError,
   getAdapter,
+  launchShellIssues,
   type FormatAdapter,
   type LintIssue,
   type ParsedDoc,
@@ -26,6 +27,20 @@ export interface FileValues {
   readonly values: Map<string, JsonValue>;
   /** Keys whose text in the file does not fit the setting's type. */
   readonly invalid: string[];
+}
+
+/** The app-managed launch file the start snippets hand to eval. */
+export const APP_ARGS_FILE = "dialwarden-args.txt";
+
+/**
+ * Whether a pack file is the app-managed args file: its text is run through
+ * eval at game start, so a shell character anywhere in it is an error that
+ * blocks the write, raw patches and restores included.
+ */
+function evaluatedArgsFile(file: PackFile): boolean {
+  if (file.adapter !== "launch") return false;
+  const paths = [...(file.paths.linux ?? []), ...(file.paths.windows ?? [])];
+  return paths.some((path) => path.split("/").at(-1) === APP_ARGS_FILE);
 }
 
 /** A file of a pack by id; throws when the pack has no such file. */
@@ -154,8 +169,12 @@ export function lintFile(
   fileId: string,
   bytes: Uint8Array,
 ): LintIssue[] {
-  const adapter = adapterOf(packFileOf(pack, fileId));
-  const parsed = adapter.lint(adapter.parse(bytes));
+  const file = packFileOf(pack, fileId);
+  const adapter = adapterOf(file);
+  const parsed = [
+    ...adapter.lint(adapter.parse(bytes)),
+    ...(evaluatedArgsFile(file) ? launchShellIssues(bytes) : []),
+  ];
   if (parsed.some((issue) => issue.severity === "error")) return parsed;
   const issues = withoutKeyedDuplicates(pack, fileId, parsed);
   return [...issues, ...lintPackFile(pack, fileId, bytes)];
