@@ -89,7 +89,9 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
   await expect(
     page.getByRole("heading", { name: "Waiting for the server to stop" }),
   ).toBeVisible();
-  await expect(page.getByText("Experience rate: 1 → 3")).toBeVisible();
+  await expect(
+    page.getByText("Experience rate: 1 → 3").first(),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Stop the server now" }).click();
   const confirm = page.getByRole("alertdialog", {
     name: "Stop the server now?",
