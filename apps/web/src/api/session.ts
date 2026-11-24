@@ -37,7 +37,7 @@ export function isSessionEnded(error: unknown): boolean {
 /**
  * Drops the local session once the server says it ended. The query client
  * calls this for every query and mutation (app.tsx); the shell then sends the
- * user to sign-in again with the current page as the redirect.
+ * user to sign in again with the current page as the redirect.
  */
 export function forgetSession(client: QueryClient): void {
   setCsrf(null);
