@@ -63,21 +63,29 @@ export function isControlError(
   );
 }
 
-/** Whether an error (or its cause) means the port is closed. */
-export function refused(error: unknown): boolean {
-  let at: unknown = error;
-  for (
-    let depth = 0;
-    depth < 3 && at !== null && at !== undefined;
-    depth += 1
-  ) {
-    const code = (at as { code?: unknown }).code;
-    if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EPIPE") {
-      return true;
-    }
-    at = (at as { cause?: unknown }).cause;
+/**
+ * Whether an error (or one of its causes) means the port is closed. fetch
+ * wraps the socket error in its cause, sometimes inside an AggregateError,
+ * so the walk follows causes and aggregated errors a few levels deep.
+ */
+export function refused(error: unknown, depth = 0): boolean {
+  if (depth > 5 || error === null || typeof error !== "object") return false;
+  const { code, cause, errors } = error as {
+    code?: unknown;
+    cause?: unknown;
+    errors?: unknown;
+  };
+  if (code === "ECONNREFUSED" || code === "ECONNRESET" || code === "EPIPE") {
+    return true;
   }
-  return false;
+  // Some wrappers keep only the text of the socket error.
+  if (error instanceof Error && /\bECONNREFUSED\b/.test(error.message)) {
+    return true;
+  }
+  if (Array.isArray(errors) && errors.some((e) => refused(e, depth + 1))) {
+    return true;
+  }
+  return refused(cause, depth + 1);
 }
 
 /**

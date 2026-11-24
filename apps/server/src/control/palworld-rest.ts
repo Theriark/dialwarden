@@ -72,7 +72,13 @@ export class PalworldRest implements GameControl {
 
   /** Announces a message in game; only the server itself calls this. */
   async announce(message: string): Promise<void> {
-    const text = message.replace(/[\u{0}-\u{1f}\u{7f}]/gu, " ").trim();
+    // Control characters become spaces; nothing else of the text changes.
+    const text = Array.from(message, (char) => {
+      const code = char.codePointAt(0) ?? 0;
+      return code < 0x20 || code === 0x7f ? " " : char;
+    })
+      .join("")
+      .trim();
     if (text === "" || text.length > LIMITS.maxAnnounceLength) {
       throw new ControlError("Refused", "the announce message is not usable");
     }
