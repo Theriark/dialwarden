@@ -79,36 +79,6 @@
           }
         }
       ]
-    },
-    {
-      "id": "adminlist",
-      "paths": {
-        "linux": ["adminlist.txt"],
-        "windows": ["adminlist.txt"]
-      },
-      "adapter": "textlist",
-      "encoding": "utf-8",
-      "applyPolicy": "stopped-only"
-    },
-    {
-      "id": "bannedlist",
-      "paths": {
-        "linux": ["bannedlist.txt"],
-        "windows": ["bannedlist.txt"]
-      },
-      "adapter": "textlist",
-      "encoding": "utf-8",
-      "applyPolicy": "stopped-only"
-    },
-    {
-      "id": "permittedlist",
-      "paths": {
-        "linux": ["permittedlist.txt"],
-        "windows": ["permittedlist.txt"]
-      },
-      "adapter": "textlist",
-      "encoding": "utf-8",
-      "applyPolicy": "stopped-only"
     }
   ],
   "settings": [
@@ -256,7 +226,7 @@
       "type": "string",
       "group": "Saves",
       "restartRequired": true,
-      "description": "Root folder for the world saves and the admin, ban and permit lists. Changing it moves where Dialwarden looks for the lists."
+      "description": "Root folder for the world saves and for the admin, ban and permit lists the game keeps next to them. Leave it unset to use the default folder in the profile of the user that runs the game."
     },
     {
       "key": "saveinterval",
@@ -606,48 +576,6 @@
       "group": "Logging",
       "restartRequired": true,
       "description": "Sends the server log to a file, after which the console goes almost silent. Leave it unset to read the log from the console."
-    },
-    {
-      "key": "adminlist",
-      "file": "adminlist",
-      "label": "Admin list",
-      "locator": {
-        "kind": "textlist"
-      },
-      "type": "list",
-      "default": [],
-      "group": "Access lists",
-      "restartRequired": true,
-      "secret": true,
-      "description": "Player ids allowed to use the admin console commands such as kick, ban and save. One id per line; lines starting with // are comments."
-    },
-    {
-      "key": "bannedlist",
-      "file": "bannedlist",
-      "label": "Ban list",
-      "locator": {
-        "kind": "textlist"
-      },
-      "type": "list",
-      "default": [],
-      "group": "Access lists",
-      "restartRequired": true,
-      "secret": true,
-      "description": "Player ids refused at connect. In-game bans probably write here, so the file is checked again before every save."
-    },
-    {
-      "key": "permittedlist",
-      "file": "permittedlist",
-      "label": "Permit list",
-      "locator": {
-        "kind": "textlist"
-      },
-      "type": "list",
-      "default": [],
-      "group": "Access lists",
-      "restartRequired": true,
-      "secret": true,
-      "description": "Allowlist. While it holds at least one id, nobody else can join; with only the header line, everyone can join."
     }
   ],
   "rules": [
