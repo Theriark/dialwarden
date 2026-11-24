@@ -22,6 +22,7 @@ const MESSAGES = new Map<string, string>([
   ["totp_not_enabled", "Two-factor sign-in is not on."],
   ["maintenance", "The server is busy with a restore. Try again shortly."],
   ["payment_required", "This needs the Paid plan."],
+  ["no_change", "This server already holds these values."],
   ["internal", "The server hit an error. Check its log."],
   ["validation", "Some fields are not valid."],
 ]);

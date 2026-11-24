@@ -34,6 +34,19 @@ async function firstRunSetup(page: Page): Promise<void> {
   await expect(page).toHaveURL("/");
 }
 
+/** The text of the raw editor's rendered lines, top to bottom. */
+async function renderedLines(page: Page): Promise<string[]> {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>(".view-line"))
+      .map((line) => ({
+        top: Number.parseFloat(line.style.top),
+        text: (line.textContent ?? "").replace(/\xa0/g, " "),
+      }))
+      .sort((a, b) => a.top - b.top)
+      .map((line) => line.text),
+  );
+}
+
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
@@ -136,6 +149,27 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(page.locator(".monaco-editor")).toBeVisible();
   await expect(page.getByLabel("File")).toBeVisible();
 
+  // Fast typing keeps the caret where it is (live check F13): a burst at
+  // about 12 ms per key lands at the end of the first line, where the
+  // caret sits, and never at the end of the file. The first line is a
+  // comment, so the file stays valid and the save turns on.
+  const burst = "fastburst0123456789";
+  await page.locator(".monaco-editor").click();
+  await page.keyboard.press("Control+Home");
+  await page.keyboard.press("End");
+  await page.keyboard.type(burst, { delay: 12 });
+  await expect
+    .poll(async () => (await renderedLines(page))[0] ?? "")
+    .toMatch(/^; Synthetic Palworld settings file .*fastburst0123456789$/);
+  const lines = await renderedLines(page);
+  expect(lines.filter((line) => line.includes(burst))).toHaveLength(1);
+  await expect(
+    page.getByRole("button", { name: "Review and save" }),
+  ).toBeEnabled();
+  await expect(page.locator(".squiggly-error")).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator(".monaco-editor")).toBeVisible();
+
   // A malformed line marks the gutter at once (live check F3) and blocks
   // the save with the typed editor's words (F1), so no failed change set
   // is ever created.
@@ -144,6 +178,8 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.keyboard.press("Enter");
   await page.keyboard.type("this line has no key value pair");
   await expect(page.locator(".squiggly-error").first()).toBeVisible();
+  // The glyph margin carries the error icon on that line too (F3a).
+  await expect(page.locator(".dw-lint-glyph-error").first()).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Review and save" }),
   ).toBeDisabled();

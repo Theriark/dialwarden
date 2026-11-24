@@ -1,9 +1,10 @@
 // The Monaco editors of the raw editor (screen 4) and the save dialog
 // (screen 5), lazy-loaded so the typed editor, the tests and the first
 // paint never pull the editor bundle. The theme follows the app theme, and
-// the raw editor's lint reaches the Monaco gutter as markers.
+// the raw editor's lint reaches the Monaco gutter as markers and glyphs.
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import type * as MonacoTypes from "monaco-editor";
+import { minimalEdit } from "../lib/editor-sync";
 import { useTheme } from "../theme/theme-provider";
 import { Skeleton } from "./ui/states";
 
@@ -48,15 +49,94 @@ function markersOf(lint: readonly LintMarker[]) {
     });
 }
 
+/** The glyph margin classes of app.css, one per severity that gets an icon. */
+export const GLYPH_CLASS = {
+  error: "dw-lint-glyph-error",
+  warning: "dw-lint-glyph-warning",
+} as const;
+
+/**
+ * The gutter glyphs of the lint (live check F3a): an icon in the glyph
+ * margin on every error and warning line, with the message on hover.
+ */
+export function glyphsOf(
+  lint: readonly LintMarker[],
+): MonacoTypes.editor.IModelDeltaDecoration[] {
+  return lint
+    .filter((marker) => marker.line > 0 && marker.severity !== "info")
+    .map((marker) => ({
+      range: {
+        startLineNumber: marker.line,
+        startColumn: 1,
+        endLineNumber: marker.line,
+        endColumn: 1,
+      },
+      options: {
+        isWholeLine: true,
+        glyphMarginClassName:
+          marker.severity === "error" ? GLYPH_CLASS.error : GLYPH_CLASS.warning,
+        glyphMarginHoverMessage: { value: marker.message },
+      },
+    }));
+}
+
+/**
+ * Replaces the model's text with an external text as one minimal edit on
+ * the undo stack (live check F13). The caret keeps its place unless the
+ * replaced part holds it; a text the model already shows is no edit.
+ */
+export function pushText(
+  editor: MonacoTypes.editor.IStandaloneCodeEditor,
+  text: string,
+): boolean {
+  const model = editor.getModel();
+  if (model === null) {
+    return false;
+  }
+  const edit = minimalEdit(model.getValue(), text);
+  if (edit === null) {
+    return false;
+  }
+  const start = model.getPositionAt(edit.start);
+  const end = model.getPositionAt(edit.end);
+  model.pushEditOperations(
+    editor.getSelections(),
+    [
+      {
+        range: {
+          startLineNumber: start.lineNumber,
+          startColumn: start.column,
+          endLineNumber: end.lineNumber,
+          endColumn: end.column,
+        },
+        text: edit.text,
+      },
+    ],
+    () => null,
+  );
+  return true;
+}
+
+/**
+ * The raw editor. The Monaco model is the editor's own after mount: typing
+ * never waits for a React render, so a burst of keys lands where the caret
+ * is (live check F13). The page learns every edit through onChange and
+ * reaches the model only on a real external change, by changing
+ * textVersion: a file switch, a reload after a save, a discard.
+ */
 export function LazyEditor({
-  value,
+  text,
+  textVersion,
   language,
   onChange,
   lint,
   readOnly,
   height,
 }: {
-  value: string;
+  /** The document's text: read when the editor mounts and on textVersion. */
+  text: string;
+  /** Changes when text is a new document, never on the user's own edits. */
+  textVersion: string;
   language: string;
   onChange?: (value: string) => void;
   lint?: readonly LintMarker[];
@@ -64,9 +144,16 @@ export function LazyEditor({
   height?: string;
 }) {
   const { resolved } = useTheme();
+  const editorRef = useRef<MonacoTypes.editor.IStandaloneCodeEditor | null>(
+    null,
+  );
   const setMarkersRef = useRef<((lint: readonly LintMarker[]) => void) | null>(
     null,
   );
+  const shownVersion = useRef<string | null>(null);
+  // True while this component edits the model itself: those edits are not
+  // the user's and never reach onChange.
+  const syncing = useRef(false);
 
   // The lint must reach the gutter whenever it changes, not only when the
   // editor first mounts: the raw editor keeps one instance across files and
@@ -75,11 +162,27 @@ export function LazyEditor({
     setMarkersRef.current?.(lint ?? []);
   }, [lint]);
 
+  // An external text reaches the mounted editor only on a new version; the
+  // text prop alone may lag the model by a keystroke and is left alone.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (editor === null || shownVersion.current === textVersion) {
+      return;
+    }
+    shownVersion.current = textVersion;
+    syncing.current = true;
+    try {
+      pushText(editor, text);
+    } finally {
+      syncing.current = false;
+    }
+  }, [text, textVersion]);
+
   return (
     <div className="overflow-hidden rounded-control border border-border">
       <Suspense fallback={FALLBACK}>
         <Monaco
-          value={value}
+          defaultValue={text}
           language={language}
           theme={resolved === "dark" ? "dw-dark" : "dw-light"}
           height={height ?? "70vh"}
@@ -94,11 +197,18 @@ export function LazyEditor({
             wordWrap: "on",
           }}
           onChange={(next) => {
-            if (onChange !== undefined && typeof next === "string") {
+            if (
+              !syncing.current &&
+              onChange !== undefined &&
+              typeof next === "string"
+            ) {
               onChange(next);
             }
           }}
           onMount={(editor, monaco) => {
+            editorRef.current = editor;
+            shownVersion.current = textVersion;
+            const glyphs = editor.createDecorationsCollection();
             const setMarkers = (next: readonly LintMarker[]) => {
               const model = editor.getModel();
               if (model !== null) {
@@ -107,6 +217,7 @@ export function LazyEditor({
                   "dialwarden",
                   markersOf(next),
                 );
+                glyphs.set(glyphsOf(next));
               }
             };
             setMarkersRef.current = setMarkers;

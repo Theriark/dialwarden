@@ -72,6 +72,7 @@ function PresetCard({
               <SelectField
                 id={`apply-${preset.id}`}
                 label="Apply to"
+                placeholder="Choose a server"
                 value={server}
                 options={packServers.map((item) => ({
                   value: item.id,
@@ -212,6 +213,7 @@ export function PresetsPage() {
         id="preset-server"
         label="From server"
         help="The preset takes the current values of this server."
+        placeholder="Choose a server"
         value={presetServer}
         options={ownerServers.map((item) => ({
           value: item.id,

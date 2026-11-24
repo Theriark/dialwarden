@@ -108,6 +108,14 @@ describe("api client", () => {
     );
   });
 
+  it("says in plain words that a preset changes nothing", () => {
+    // A preset whose values the server already holds answers 422
+    // no_change (live check F11).
+    expect(errorMessage(new ApiError(422, { error: "no_change" }))).toBe(
+      "This server already holds these values.",
+    );
+  });
+
   it("names the status when the answer carries no error code", async () => {
     vi.stubGlobal(
       "fetch",

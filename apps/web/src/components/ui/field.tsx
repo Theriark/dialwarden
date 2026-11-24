@@ -203,6 +203,12 @@ export interface SelectFieldProps {
   options: readonly SelectOption[];
   onChange: (value: string) => void;
   disabled?: boolean | undefined;
+  /**
+   * The first option, with the empty value, shown while nothing is chosen
+   * yet: the select never shows a server its state does not hold (live
+   * check F12).
+   */
+  placeholder?: string | undefined;
 }
 
 /** A labelled select, wired like the text fields. */
@@ -215,6 +221,7 @@ export function SelectField({
   options,
   onChange,
   disabled = false,
+  placeholder,
 }: SelectFieldProps) {
   const invalid = error !== undefined && error !== "";
   return (
@@ -230,6 +237,9 @@ export function SelectField({
         aria-invalid={invalid ? true : undefined}
         aria-describedby={describedBy(id, help, error)}
       >
+        {placeholder === undefined ? null : (
+          <option value="">{placeholder}</option>
+        )}
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
