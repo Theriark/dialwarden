@@ -189,10 +189,11 @@ test("the Activity page renders the fleet in words and pages onwards", async ({
     expect(applied.ok()).toBeTruthy();
   }
 
-  // The feed says what happened in plain words.
+  // The feed says what happened in plain words. The first import is not an
+  // event: the detector writes it to the history sink, not through the apply
+  // path that records change.applied, so the feed starts at the first save.
   await page.goto("/activity");
   await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
-  await expect(page.getByText("First import").first()).toBeVisible();
   await expect(page.getByText("Change applied").first()).toBeVisible();
   await expect(
     page.getByText("Change saved as pending (written at the next stop)"),
