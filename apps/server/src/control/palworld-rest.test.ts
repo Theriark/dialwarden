@@ -144,9 +144,18 @@ describe("Palworld REST client (simulated)", () => {
   });
 
   it("reports stopped when the REST port is closed", async () => {
+    // fetch refuses some low ports outright (port 1 is on its bad-port
+    // list), so the closed port is one that was just bound and released.
+    const closed = await new Promise<number>((resolve) => {
+      const probe = createServer();
+      probe.listen(0, "127.0.0.1", () => {
+        const { port: free } = probe.address() as AddressInfo;
+        probe.close(() => resolve(free));
+      });
+    });
     const down = new PalworldRest({
       host: "127.0.0.1",
-      port: 1,
+      port: closed,
       user: "admin",
       password: PASSWORD,
       readMs: 2_000,

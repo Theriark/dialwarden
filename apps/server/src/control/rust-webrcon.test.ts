@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { Duplex } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RustWebRcon } from "./rust-webrcon.js";
 import type { AllowList } from "./types.js";
@@ -27,6 +28,8 @@ let paths: string[] = [];
 let frames: Frame[] = [];
 let acceptHandshake = true;
 let answerWith: (frame: Frame) => string | string[] = () => "Saved";
+/** Upgraded sockets, which server.close() does not end by itself. */
+const upgraded = new Set<Duplex>();
 const server: Server = createServer(() => {
   // Plain HTTP requests never happen; the console only upgrades.
 });
@@ -40,6 +43,8 @@ function textFrame(payload: string): Buffer {
 
 /** Answers the upgrade the way the game does. */
 server.on("upgrade", (request, socket) => {
+  upgraded.add(socket);
+  socket.on("close", () => upgraded.delete(socket));
   const url = request.url ?? "";
   paths.push(url);
   if (!acceptHandshake || url !== `/${PASSWORD}`) {
@@ -70,13 +75,14 @@ server.on("upgrade", (request, socket) => {
         length = buffer.readUInt16BE(2);
         offset = 4;
       }
-      if (buffer.length < offset + length + 4) return;
-      const masked = buffer.subarray(offset, offset + length);
-      const mask = buffer.subarray(offset + length, offset + length + 4);
+      if (buffer.length < offset + 4 + length) return;
+      // RFC 6455: the four mask bytes come before the payload.
+      const mask = buffer.subarray(offset, offset + 4);
+      const masked = buffer.subarray(offset + 4, offset + 4 + length);
       const body = Buffer.from(
         masked.map((byte, index) => byte ^ (mask[index % 4] ?? 0)),
       );
-      buffer = buffer.subarray(offset + length + 4);
+      buffer = buffer.subarray(offset + 4 + length);
       try {
         const parsed = JSON.parse(body.toString("utf8")) as Frame;
         frames.push(parsed);
@@ -113,7 +119,8 @@ beforeAll(
 afterAll(
   () =>
     new Promise<void>((resolve) => {
-      server.closeAllConnections?.();
+      for (const socket of upgraded) socket.destroy();
+      server.closeAllConnections();
       server.close(() => resolve());
     }),
 );
