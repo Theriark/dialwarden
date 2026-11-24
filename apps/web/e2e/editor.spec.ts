@@ -50,7 +50,7 @@ async function renderedLines(page: Page): Promise<string[]> {
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
-  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
+  await page.getByLabel("Password").fill(OWNER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/");
 }
