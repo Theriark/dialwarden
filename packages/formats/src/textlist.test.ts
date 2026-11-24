@@ -9,6 +9,8 @@ import { describe, expect, it } from "vitest";
 import { textListAdapter } from "./textlist.js";
 import type { ParsedDoc, TextListLocator, Value } from "./types.js";
 
+/* eslint-disable security/detect-non-literal-fs-filename -- the fixtures folder of this package */
+
 const FIXTURES = fileURLToPath(
   new URL("../fixtures/textlist/", import.meta.url),
 );
@@ -18,6 +20,7 @@ const read = (name: string) =>
 const text = (bytes: Uint8Array) =>
   new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
 const locator: TextListLocator = { kind: "textlist" };
+const BOM = String.fromCharCode(0xfeff);
 
 const parse = (name: string): ParsedDoc => textListAdapter.parse(read(name));
 const valuesOf = (doc: ParsedDoc) => textListAdapter.get(doc, locator);
@@ -91,7 +94,8 @@ describe("text list", () => {
       "76561198000000006",
     ]);
     expect(text(next)).toBe(
-      "\\uFEFF// Header line.\r\n76561198000000004\r\n76561198000000005\r\n76561198000000006",
+      BOM +
+        "// Header line.\r\n76561198000000004\r\n76561198000000005\r\n76561198000000006",
     );
     const reread = textListAdapter.parse(next);
     expect(valuesOf(reread)).toEqual([

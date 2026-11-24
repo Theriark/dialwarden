@@ -134,8 +134,8 @@ function setSplices(doc: TextListDoc, values: readonly string[]): Splice[] {
   const splices: Splice[] = [];
   const shared = Math.min(entries.length, values.length);
   for (let index = 0; index < shared; index += 1) {
-    const entry = entries[index];
-    const next = values[index] ?? "";
+    const entry = entries.at(index);
+    const next = values.at(index) ?? "";
     if (entry !== undefined && entry.valueStart !== entry.valueEnd) {
       splices.push({
         start: entry.valueStart,
