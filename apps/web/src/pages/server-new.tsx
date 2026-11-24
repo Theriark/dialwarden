@@ -423,7 +423,6 @@ export function NewServerPage() {
                       setPassword(event.target.value);
                       connectionChanged();
                     }}
-                  />
                 ) : null}
                 {key.data === undefined ? null : (
                   <div className="flex flex-col gap-2 rounded-control border border-border bg-accent-soft p-3">
@@ -437,8 +436,12 @@ export function NewServerPage() {
                     <pre className="max-h-24 overflow-auto rounded-control bg-surface p-2 font-mono text-xs break-all whitespace-pre-wrap">
                       {key.data.publicKey}
                     </pre>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs text-fg-muted">
+                    {/* F4 at 390: the fingerprint wraps and Copy key sits
+                        on its own row, so the card never overflows. */}
+                    <div className="flex flex-col items-start gap-2">
+                      <span
+                        className="w-full font-mono text-xs break-all text-fg-muted"
+                      >
                         {key.data.fingerprint}
                       </span>
                       <CopyKey publicKey={key.data.publicKey} />
