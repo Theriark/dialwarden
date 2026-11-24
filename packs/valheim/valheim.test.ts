@@ -17,19 +17,19 @@ import {
   validate,
   writeLaunchSourceValues,
   type JsonValue,
-  type Setting,
 } from "@dialwarden/packs-schema";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
-  fixtureOf,
   fixtureValues,
   loadPack,
   ruleOf,
   settingOf,
   writeSetting,
 } from "../kit.js";
+
+/* eslint-disable security/detect-non-literal-fs-filename -- the fixtures folder of this pack */
 
 const pack = loadPack("valheim");
 const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
