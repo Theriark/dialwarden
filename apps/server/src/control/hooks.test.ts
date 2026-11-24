@@ -142,6 +142,18 @@ const PACK = {
       description:
         "The size class of the synthetic world; the game reads it only at start.",
     },
+    {
+      key: "Difficulty",
+      file: "world",
+      locator: { kind: "ini", section: "World", key: "Difficulty" },
+      type: "int",
+      default: 1,
+      min: 1,
+      max: 3,
+      group: "World",
+      description:
+        "The difficulty of the synthetic world; the game reads it only at start.",
+    },
   ],
   rules: [],
   presets: [],
@@ -167,7 +179,7 @@ const CFG = [
   "Motd=Welcome",
   "Slots=32",
 ].join("\n");
-const WORLD = ["[World]", "WorldSize=1"].join("\n");
+const WORLD = ["[World]", "WorldSize=1", "Difficulty=1"].join("\n");
 
 const CONTAINER = "ab".repeat(32);
 const VERBS = /^\/containers\/[0-9a-f]{64}\/(start|stop|restart)$/;
@@ -514,6 +526,49 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
     expect(await fileText(root, WORLD_PATH)).toContain("WorldSize=5");
   });
 
+  it("writes every pending change, then starts the server once", async () => {
+    const { api, root, slug } = await setup();
+    await putHooks(api, slug, dockerHook(game()));
+    // Two stopped-only changes wait while the server runs.
+    const first = await draft(api, slug, { WorldSize: 2 });
+    const second = await draft(api, slug, { Difficulty: 3 });
+    for (const made of [first, second]) {
+      const parked = await applyHooks(api, made.id, "restart");
+      expect(parked.json<ChangeSetBody>().status).toBe("pending");
+    }
+    const run = await runHook(api, slug, "stop");
+    expect(run.json()).toMatchObject({ stopped: true, flushed: 2 });
+    // Both are written while the server is down; one start comes after.
+    expect(sim?.dockerCalls).toEqual(["start"]);
+    const world = await fileText(root, WORLD_PATH);
+    expect(world).toContain("WorldSize=2");
+    expect(world).toContain("Difficulty=3");
+    expect(await pendingOf(api, slug)).toHaveLength(0);
+  });
+
+  it("writes the older pending changes first in a stop-start", async () => {
+    const { api, root, slug } = await setup();
+    await putHooks(api, slug, dockerHook(game()));
+    const older = await draft(api, slug, { WorldSize: 4 });
+    const parked = await applyHooks(api, older.id, "restart");
+    expect(parked.json<ChangeSetBody>().status).toBe("pending");
+    // A newer change asks for stop-start: the stop window writes the older
+    // pending change first, then the newer one, and starts once.
+    const newer = await draft(api, slug, { Difficulty: 2 });
+    const answer = await applyHooks(api, newer.id, "stop-start");
+    expect(answer.json<ChangeSetBody>().status).toBe("applied");
+    expect(sim?.dockerCalls).toEqual(["start"]);
+    const world = await fileText(root, WORLD_PATH);
+    expect(world).toContain("WorldSize=4");
+    expect(world).toContain("Difficulty=2");
+    const view = await api.get(`/api/v1/change-sets/${older.id}`);
+    expect(view.json<ChangeSetBody>().status).toBe("applied");
+    const applied = (await activityOf(api, slug))
+      .filter((row) => row.type === "change.applied")
+      .map((row) => (row.data as { changeSetId?: string }).changeSetId);
+    expect(applied).toEqual([older.id, newer.id]);
+  });
+
   it("parks a stop-start apply when the stop never takes effect", async () => {
     // A short wait bound (HOOK_WAIT_MS), so the probe gives up quickly.
     const { api, root, slug } = await setup({ HOOK_WAIT_MS: "150" });
@@ -683,6 +738,37 @@ describe("the hook run API and its roles (contract C7)", () => {
       probes: { palworldRest: { host: "game.example/x" } },
     });
     expect(badHost.statusCode).toBe(422);
+    const badPassword = await putHooks(api, slug, {
+      probes: { palworldRest: { password: "line\nbreak" } },
+    });
+    expect(badPassword.statusCode).toBe(422);
+    expect(badPassword.json()).toMatchObject({
+      error: "probe_password_not_usable",
+    });
+  });
+
+  it("still answers the hook view when a probe port is not usable", async () => {
+    const { api, root, slug } = await setup();
+    await putHooks(api, slug, dockerHook(game()));
+    // The override keeps only the host, so the port comes from the game
+    // file, which someone edited by hand to a port out of range.
+    await putHooks(api, slug, {
+      probes: { palworldRest: { host: "127.0.0.1" } },
+    });
+    const cfg = CFG.replace("ApiPort=8212", "ApiPort=70000");
+    await writeFile(join(root, "Config", "Server.ini"), `${cfg}\n`);
+    const view = (await hooksOf(api, slug)) as {
+      available: Record<string, string | null>;
+    };
+    // The broken probe stays silent; the docker hook stays usable.
+    expect(view.available).toMatchObject({
+      save: null,
+      stop: null,
+      start: "dockerProxy",
+      restart: "dockerProxy",
+    });
+    const run = await runHook(api, slug, "restart");
+    expect(run.statusCode).toBe(200);
   });
 
   it("refuses an unrunnable action and records a broken hook", async () => {
@@ -705,6 +791,15 @@ describe("the hook run API and its roles (contract C7)", () => {
     expect(broken.json()).toMatchObject({
       error: "control_error",
       code: "Connection",
+    });
+    const runs = (await activityOf(api, slug)).filter(
+      (row) => row.type === "hook.run",
+    );
+    expect(runs.at(-1)?.data).toMatchObject({
+      action: "restart",
+      source: "dockerProxy",
+      ok: false,
+      error: "Connection",
     });
   });
 });

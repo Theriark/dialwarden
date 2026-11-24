@@ -934,14 +934,14 @@ export class ChangeSetService {
 
     if (runHooks === "none") {
       if (running) {
-        this.#finish(row, "pending", { runHooks: "none" });
-        this.#activity.record("change.pending", {
-          serverId: server.id,
-          actor,
-          data: { changeSetId: row.id, runHooks },
-        });
-      } else {
-        await this.#run(row, server, pack, actor);
+        this.#park(row, server, actor, runHooks);
+        return;
+      }
+      // Down: the change sets that waited for the stop are written first.
+      const pendingStart = await this.#writePending(server, pack, actor);
+      await this.#run(row, server, pack, actor);
+      if (pendingStart) {
+        await this.#afterWrite(server, sources, actor, "start", {});
       }
       return;
     }
@@ -958,20 +958,20 @@ export class ChangeSetService {
         return;
       }
       if (stoppedOnly && running) {
-        this.#finish(row, "pending", { runHooks: "restart" });
-        this.#activity.record("change.pending", {
-          serverId: server.id,
-          actor,
-          data: { changeSetId: row.id, runHooks },
-        });
+        this.#park(row, server, actor, runHooks);
         return;
       }
       if (hooks.canRun(server, sources, "restart") === null) {
         throw new ApiError(409, "hook_not_configured", { action: "restart" });
       }
+      const pendingStart = running
+        ? false
+        : await this.#writePending(server, pack, actor);
       const written = await this.#run(row, server, pack, actor);
       if (written === "applied") {
         await this.#afterWrite(server, sources, actor, "restart", {});
+      } else if (pendingStart) {
+        await this.#afterWrite(server, sources, actor, "start", {});
       }
       return;
     }
@@ -979,24 +979,24 @@ export class ChangeSetService {
     if (!stoppedOnly) {
       // Any-time files need no stop; the change is written and the game is
       // brought back with whatever the server has.
-      const restart = hooks.canRun(server, sources, "restart");
-      if (restart !== null) {
-        const written = await this.#run(row, server, pack, actor);
-        if (written === "applied") {
-          await this.#afterWrite(server, sources, actor, "restart", {});
-        }
-        return;
-      }
+      const restart = hooks.canRun(server, sources, "restart") !== null;
       const stop = hooks.canRun(server, sources, "stop");
       const start = hooks.canRun(server, sources, "start");
-      if (stop === null || start === null) {
+      if (!restart && (stop === null || start === null)) {
         throw new ApiError(409, "hook_not_configured", {
           action: "stop-start",
         });
       }
+      const pendingStart = running
+        ? false
+        : await this.#writePending(server, pack, actor);
       const written = await this.#run(row, server, pack, actor);
-      if (written === "applied") {
+      if (written === "applied" && restart) {
+        await this.#afterWrite(server, sources, actor, "restart", {});
+      } else if (written === "applied") {
         await this.#afterWrite(server, sources, actor, "stop", {});
+        await this.#afterWrite(server, sources, actor, "start", {});
+      } else if (pendingStart) {
         await this.#afterWrite(server, sources, actor, "start", {});
       }
       return;
@@ -1004,35 +1004,69 @@ export class ChangeSetService {
     if (running) {
       const stop = hooks.canRun(server, sources, "stop");
       if (stop === null) {
-        this.#finish(row, "pending", { runHooks: "stop-start" });
-        this.#activity.record("change.pending", {
-          serverId: server.id,
-          actor,
-          data: { changeSetId: row.id, runHooks },
-        });
+        this.#park(row, server, actor, runHooks);
         return;
       }
       await hooks.runFrom(server, sources, "stop", actor);
       if (!(await hooks.awaitStopped(server, context, sources))) {
-        this.#finish(row, "pending", { runHooks: "stop-start" });
-        this.#activity.record("change.pending", {
-          serverId: server.id,
-          actor,
-          data: { changeSetId: row.id, runHooks },
-        });
+        this.#park(row, server, actor, runHooks);
         return;
       }
+      // The stop window: the older pending change sets first, oldest first,
+      // then this one (contract C5).
+      await this.#writePending(server, pack, actor);
       await this.#run(row, server, pack, actor);
       // This request stopped the server, so it starts it again whatever the
-      // write did; a failed write is recorded in the change set.
+      // writes did; a failed write is recorded in its change set.
       await this.#afterWrite(server, sources, actor, "start", {});
       return;
     }
-    // Already down: write, and the start hook runs after the write.
+    // Already down: the waiting change sets, then this one, and the start
+    // hook runs once after every write.
+    const pendingStart = await this.#writePending(server, pack, actor);
     const written = await this.#run(row, server, pack, actor);
-    if (written === "applied") {
+    if (written === "applied" || pendingStart) {
       await this.#afterWrite(server, sources, actor, "start", {});
     }
+  }
+
+  /** Parks a change set as pending until the server is stopped (C5, C6). */
+  #park(
+    row: ChangeSetRow,
+    server: ServerRecord,
+    actor: string,
+    runHooks: RunHooks,
+  ): void {
+    this.#finish(row, "pending", { runHooks });
+    this.#activity.record("change.pending", {
+      serverId: server.id,
+      actor,
+      data: { changeSetId: row.id, runHooks },
+    });
+  }
+
+  /**
+   * Writes the pending change sets of a server while it is down, oldest
+   * first, under the lock the caller holds. True when one of them was
+   * applied and had asked for restart or stop-start: the caller then runs
+   * the start hook once, after every write, so no pending change lands on a
+   * server that was started again in between (contract C5).
+   */
+  async #writePending(
+    server: ServerRecord,
+    pack: Pack,
+    actor: string,
+    written?: ChangeSetView[],
+  ): Promise<boolean> {
+    let start = false;
+    for (const row of this.#pendingRows(server.id)) {
+      const mode = (row.runHooks ?? "none") as RunHooks;
+      const result = await this.#run(row, server, pack, actor);
+      written?.push(viewOf(this.#require(row.id)));
+      // A change set parked as none keeps the server down.
+      if (mode !== "none" && result === "applied") start = true;
+    }
+    return start;
   }
 
   /**
@@ -1062,7 +1096,7 @@ export class ChangeSetService {
    * Writes the pending change sets of a server while it is stopped (the
    * stopped-only policy of P6-B): the probe is asked again under the lock,
    * every pending change set is written in the order it was made, and the
-   * start hook of each applied change runs after the write (contract C5).
+   * start hook runs once after the last write (contract C5).
    */
   async flushPending(
     server: ServerRecord,
@@ -1081,15 +1115,8 @@ export class ChangeSetService {
       const answer = await hooks.probe(server, context, sources);
       if (answer.state === "running") return [];
       const written: ChangeSetView[] = [];
-      for (const row of rows) {
-        const mode = (row.runHooks ?? "none") as RunHooks;
-        const result = await this.#run(row, server, pack, actor);
-        written.push(viewOf(this.#require(row.id)));
-        // The start hook the change asked for runs after the write; a change
-        // set parked as none keeps the server down.
-        if (mode !== "none" && result === "applied") {
-          await this.#afterWrite(server, sources, actor, "start", {});
-        }
+      if (await this.#writePending(server, pack, actor, written)) {
+        await this.#afterWrite(server, sources, actor, "start", {});
       }
       return written;
     });
