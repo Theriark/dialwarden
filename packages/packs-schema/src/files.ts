@@ -33,12 +33,18 @@ export interface FileValues {
 export const APP_ARGS_FILE = "dialwarden-args.txt";
 
 /**
- * Whether a pack file is the app-managed args file: its text is run through
+ * Whether a pack file is an app-managed args file: its text is run through
  * eval at game start, so a shell character anywhere in it is an error that
- * blocks the write, raw patches and restores included.
+ * blocks the write, raw patches and restores included. A file that lists the
+ * args launch source is one whatever its name (THE-2605 L5); a launch file
+ * without launchSources is one by its name, since a start script the user
+ * owns (a comment line, then the command) is a launch file too.
  */
 function evaluatedArgsFile(file: PackFile): boolean {
   if (file.adapter !== "launch") return false;
+  if (file.launchSources?.some((source) => source.kind === "args")) {
+    return true;
+  }
   const paths = [...(file.paths.linux ?? []), ...(file.paths.windows ?? [])];
   return paths.some((path) => path.split("/").at(-1) === APP_ARGS_FILE);
 }
@@ -65,7 +71,7 @@ function bareFlag(adapter: FormatAdapter, setting: Setting): boolean {
   return adapter.id === "launch" && setting.type === "bool";
 }
 
-/** The settings of a pack that live in one file, in pack order. */
+/** The settings of a pack file, in pack order. */
 export function settingsOfFile(pack: Pack, fileId: string): Setting[] {
   return pack.settings.filter((setting) => setting.file === fileId);
 }
