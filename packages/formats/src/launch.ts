@@ -383,7 +383,7 @@ function parse(bytes: Uint8Array): LaunchDoc {
 // Writing -------------------------------------------------------------------
 
 function doubleQuoted(text: string): string {
-  return text.replace(/[\\$`]/g, (c) => `\\${c}`);
+  return text.replace(/[\\"$`]/g, (c) => `\\${c}`);
 }
 
 /** A whole word that the shell reads back as text. */
