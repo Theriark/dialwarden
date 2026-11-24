@@ -29,6 +29,12 @@ export interface AppConfig {
   webDist: string;
   /** PACKS_DIR: the game packs folder (default: @dialwarden/packs). */
   packsDir: string;
+  /**
+   * HOOK_WAIT_MS: how long a stop or start waits for the status probe to
+   * see the new state (P6-B). Games that save a large world on shutdown can
+   * need more than the default.
+   */
+  hookWaitMs: number;
 }
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
@@ -86,6 +92,7 @@ function trustProxy(value: string | undefined): string | false {
 }
 
 const portSchema = z.coerce.number().int().min(1).max(65535);
+const waitSchema = z.coerce.number().int().min(1).max(120_000);
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const baseUrl = nonEmpty(env["BASE_URL"]);
@@ -109,5 +116,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     demoServersDir: nonEmpty(env["DEMO_SERVERS_DIR"]) ?? "/demo-servers",
     webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,
     packsDir: nonEmpty(env["PACKS_DIR"]) ?? defaultPacksDir(),
+    hookWaitMs: waitSchema.parse(nonEmpty(env["HOOK_WAIT_MS"]) ?? "10000"),
   };
 }

@@ -17,6 +17,7 @@ import type { ActiveSession, SessionService } from "../auth/sessions.js";
 import type { BackupService } from "../backup/service.js";
 import type { AppConfig } from "../config.js";
 import type { ConnectorService } from "../connectors/service.js";
+import type { HookService } from "../control/hooks.js";
 import type { Aead } from "../crypto/aead.js";
 import type { AppKey } from "../crypto/app-key.js";
 import type { Settings } from "../db/settings.js";
@@ -52,6 +53,8 @@ export interface AppContext {
   packs: ReadonlyMap<string, Pack>;
   /** Game servers: the servers API, limits and connectors per server. */
   servers: ServerService;
+  /** The hooks of every server: configuration, status probes and runs (C7). */
+  hooks: HookService;
   /** Change sets, the write path, outside edits and history (C5). */
   changes: ChangeSetService;
   /** The saved user presets and their apply as change sets (P5 screen 7). */
