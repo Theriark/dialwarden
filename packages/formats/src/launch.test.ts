@@ -351,6 +351,32 @@ describe("launch arguments: shell characters", () => {
     expect(shellIssues(line)).toEqual([]);
   });
 
+  // Threat test T12 (security re-review THE-2605, N1 and I1): the parser
+  // takes CR, FF and VT for blanks and skips a BOM, but sh and bash read them
+  // as word bytes, so a # after one is a comment to the parser only; and a
+  // backslash in a comment continues no line.
+  it.each([
+    "-name Quarry -port 2456\r# $(touch /tmp/dw-pwn)",
+    "-name Quarry -port 2456\f# $(touch /tmp/dw-pwn)",
+    "-name Quarry -port 2456\v# $(touch /tmp/dw-pwn)",
+    `${String.fromCharCode(0xfeff)}# $(touch /tmp/dw-pwn)`,
+    "-name Quarry # x\\\nreboot",
+    "-name Quarry\0# $(touch /tmp/dw-pwn)",
+  ])("refuses %j, where the shell sees no comment", (line) => {
+    const issues = shellIssues(line);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.severity === "error")).toBe(true);
+  });
+
+  it.each([
+    "-name Quarry # note",
+    "-name Quarry\r\n",
+    "-name Quarry\n# note\n",
+    "-name Quarry\t-port 2456",
+  ])("accepts %j", (line) => {
+    expect(shellIssues(line)).toEqual([]);
+  });
+
   it("leaves the adapter lint of a start script alone", () => {
     const script = bytes('# start\n./Server.sh -name "$NAME"\n');
     expect(launch.lint(launch.parse(script))).toEqual([]);
