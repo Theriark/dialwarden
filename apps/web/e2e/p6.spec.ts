@@ -196,19 +196,20 @@ test("the Activity page renders the fleet in words and pages onwards", async ({
   await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
   await expect(page.getByText("Change applied").first()).toBeVisible();
   await expect(
-    page.getByText("Change saved as pending (written at the next stop)"),
-  ).toBeVisible();
-  await expect(
     page.getByText("The stop hook ran (dockerProxy)").first(),
   ).toBeVisible();
 
-  // The feed pages onwards with the server's cursor.
+  // The feed pages onwards with the server's cursor: the pending save of
+  // the first walk is older than the first page of 20, so it appears here.
   await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
   await page.getByRole("button", { name: "Load more" }).click();
   await expect(
     page.getByText(/events shown · everything loaded/),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+  await expect(
+    page.getByText("Change saved as pending (written at the next stop)"),
+  ).toBeVisible();
 
   // The tabs narrow the feed; the arrows move them on the keyboard.
   await page.getByRole("tab", { name: "Applies" }).click();
