@@ -297,9 +297,7 @@ describe("launch arguments: keyed flags and order (Valheim, P6)", () => {
 
   it("refuses a keyed write to a key that is not on the line", () => {
     const missing = keyed("-modifier", "no-such");
-    expect(errorCode(() => launch.set(doc, missing, "hard"))).toBe(
-      "not-found",
-    );
+    expect(errorCode(() => launch.set(doc, missing, "hard"))).toBe("not-found");
     expect(errorCode(() => launch.get(doc, keyed("-modifier", "a b")))).toBe(
       "invalid-locator",
     );
