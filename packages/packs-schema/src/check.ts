@@ -4,7 +4,7 @@
 // fixture checks on top (node.ts).
 import { checkRules } from "./rules.js";
 import { schemaProblems } from "./schema.js";
-import type { Pack, Setting } from "./types.js";
+import type { LaunchSource, Pack, Probe, Setting } from "./types.js";
 import { checkValue } from "./validate.js";
 
 /** Locator kinds each adapter reads (codec works with every adapter). */
@@ -19,6 +19,7 @@ const LOCATOR_KINDS = new Map<string, readonly string[]>([
   ["shellvar", ["shellvar"]],
   ["shellvar-systemd", ["shellvar"]],
   ["launch", ["launch"]],
+  ["textlist", ["textlist"]],
 ]);
 
 /** Key parts a rule could use to reach outside the values. */
@@ -83,6 +84,106 @@ function settingProblems(pack: Pack, setting: Setting): string[] {
   return problems;
 }
 
+/** The string fields a probe kind may carry. */
+const PROBE_TEXT_FIELDS = new Map<string, readonly string[]>([
+  [
+    "palworldRest",
+    [
+      "enabledSetting",
+      "portSetting",
+      "passwordSetting",
+      "user",
+      "host",
+      "scheme",
+      "infoPath",
+    ],
+  ],
+  [
+    "sourceRcon",
+    ["portSetting", "passwordSetting", "host", "saveCommand", "stopCommand"],
+  ],
+  [
+    "rustWebRcon",
+    ["portSetting", "passwordSetting", "host", "saveCommand", "stopCommand"],
+  ],
+  [
+    "telnet7dtd",
+    ["portSetting", "passwordSetting", "host", "saveCommand", "stopCommand"],
+  ],
+  ["a2s", ["portSetting", "host"]],
+]);
+
+/**
+ * Problems of one probe declaration: the settings it names must exist, and
+ * the commands it maps hooks to must be on its own allow-list (contract C7:
+ * commands come only from the pack allow-list).
+ */
+function probeProblems(pack: Pack, probe: Probe): string[] {
+  const problems: string[] = [];
+  const at = `probe ${probe.kind}`;
+  const settings = new Set(pack.settings.map((setting) => setting.key));
+  const textFields = PROBE_TEXT_FIELDS.get(probe.kind) ?? [];
+  for (const field of textFields) {
+    const value = probe[field];
+    if (value === undefined) continue;
+    if (typeof value !== "string" || value === "") {
+      problems.push(`${at}: ${field} must be text`);
+      continue;
+    }
+    if (field.endsWith("Setting") && !settings.has(value)) {
+      problems.push(`${at}: ${field} ${value} is not a setting of the pack`);
+    }
+  }
+  const allow = probe.allow;
+  const commands = Array.isArray(allow)
+    ? allow.filter((item): item is string => typeof item === "string")
+    : undefined;
+  if (allow !== undefined && commands === undefined) {
+    problems.push(`${at}: allow must list commands as text`);
+  }
+  for (const field of ["saveCommand", "stopCommand"]) {
+    const command = probe[field];
+    if (command === undefined) continue;
+    if (
+      typeof command !== "string" ||
+      commands === undefined ||
+      !commands.includes(command)
+    ) {
+      problems.push(`${at}: ${field} is not on the allow-list`);
+    }
+  }
+  return problems;
+}
+
+/** Problems of the launch sources of one file (dev-work-plan P6-A step 5). */
+function launchSourceProblems(
+  pack: Pack,
+  fileId: string,
+  sources: readonly LaunchSource[],
+): string[] {
+  const problems: string[] = [];
+  let args = 0;
+  for (const source of sources) {
+    if (source.kind === "args") {
+      args += 1;
+      continue;
+    }
+    const paths = [
+      ...(source.paths.linux ?? []),
+      ...(source.paths.windows ?? []),
+    ];
+    for (const path of paths) {
+      if (!safeRelativePath(path)) {
+        problems.push(`file ${fileId}: ${source.kind} path ${path} escapes`);
+      }
+    }
+  }
+  if (args > 1) {
+    problems.push(`file ${fileId}: the args source is listed twice`);
+  }
+  return problems;
+}
+
 /** Problems of the references inside a pack that matches the schema. */
 export function referenceProblems(pack: Pack): string[] {
   const problems: string[] = [];
@@ -130,6 +231,13 @@ export function referenceProblems(pack: Pack): string[] {
     problems.push(...settingProblems(pack, setting));
   }
   problems.push(...checkRules(pack));
+  for (const probe of pack.probes) {
+    problems.push(...probeProblems(pack, probe));
+  }
+  for (const file of pack.files) {
+    if (file.launchSources === undefined) continue;
+    problems.push(...launchSourceProblems(pack, file.id, file.launchSources));
+  }
   const settings = new Map(pack.settings.map((s) => [s.key, s]));
   for (const preset of pack.presets) {
     for (const [key, value] of Object.entries(preset.values)) {
