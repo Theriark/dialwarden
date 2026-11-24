@@ -55,8 +55,8 @@ export interface ControlContext {
   /** Decrypts a per-server control password (context control.password). */
   readonly secret: (encrypted: string) => string;
   /**
-   * The host of the server connection (the SFTP host), used when neither the
-   * override nor the pack names one; without any host there is no probe.
+   * The host of the server connection (the SFTP host), used when the server
+   * has no host override; without any host there is no probe.
    */
   readonly host?: string;
   readonly timeouts?: ControlTimeouts;
@@ -118,16 +118,14 @@ async function valueOf(
 }
 
 /**
- * The host to contact: the override, else what the pack names, else the host
- * of the server connection. Undefined when none is known: Dialwarden runs in
- * its own container, so a local fallback would probe the container itself and
- * read a running game as stopped.
+ * The host to contact: the per-server override, else the host of the server
+ * connection. A host in the pack is never used: a pack cannot know where a
+ * server runs, and Dialwarden runs in its own container, so a local address
+ * would probe the container itself and read a running game as stopped.
+ * Undefined when no host is known.
  */
 function hostOf(input: ProbeInput): string | undefined {
-  const host =
-    input.override?.host ??
-    probeText(input.probe, "host") ??
-    input.context.host;
+  const host = input.override?.host ?? input.context.host;
   if (host === undefined) return undefined;
   if (!usableHost(host)) {
     throw new ControlError("Refused", "the probe host is not usable");
