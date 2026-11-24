@@ -41,7 +41,7 @@ function checkedCommand(command: string): string {
     throw new ControlError("Refused", "the command is not usable");
   }
   // A command with breaks or nulls is not one fixed string.
-  if (/[\u{0}\r\n]/u.test(command)) {
+  if (["\0", "\r", "\n"].some((stop) => command.includes(stop))) {
     throw new ControlError("Refused", "the command is not one line");
   }
   return command;

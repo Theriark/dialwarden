@@ -19,8 +19,24 @@ import {
 
 /** A Docker container id the list endpoint returns. */
 const CONTAINER_ID = /^[0-9a-f]{64}$/;
+/** The key of a label selector. */
+const LABEL_KEY = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+
 /** A label selector: a key, or key=value (Docker accepts both). */
-const LABEL = /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:=.+)?$/;
+function usableLabel(label: string): boolean {
+  const at = label.indexOf("=");
+  const key = at < 0 ? label : label.slice(0, at);
+  const value = at < 0 ? undefined : label.slice(at + 1);
+  if (!LABEL_KEY.test(key)) return false;
+  if (value === undefined) return true;
+  return (
+    value !== "" &&
+    Array.from(value).every((char) => {
+      const code = char.codePointAt(0) ?? 0;
+      return code > 0x20 && code !== 0x7f;
+    })
+  );
+}
 
 export interface DockerProxyOptions extends ControlTimeouts {
   /** The base URL of the docker-socket-proxy, http or https, no path. */
@@ -53,7 +69,7 @@ export class DockerProxy implements GameControl {
     ) {
       throw new ControlError("Refused", "the proxy URL is not usable");
     }
-    if (!LABEL.test(options.containerLabel)) {
+    if (!usableLabel(options.containerLabel)) {
       throw new ControlError("Refused", "the container label is not usable");
     }
     this.#base = `${url.protocol}//${url.host}`;
