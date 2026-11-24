@@ -58,8 +58,9 @@ export class DockerProxy implements GameControl {
   readonly #readMs: number;
 
   constructor(options: DockerProxyOptions) {
-    const url = new URL(options.url);
+    const url = URL.parse(options.url);
     if (
+      url === null ||
       (url.protocol !== "http:" && url.protocol !== "https:") ||
       url.username !== "" ||
       url.password !== "" ||
@@ -106,7 +107,13 @@ export class DockerProxy implements GameControl {
       "GET",
       `/containers/json?all=1&filters=${encodeURIComponent(filters)}`,
     );
-    const listed = JSON.parse(response) as unknown;
+    let listed: unknown;
+    try {
+      listed = JSON.parse(response);
+    } catch {
+      // The parser's message quotes the body; it never leaves this client.
+      throw new ControlError("Protocol", "the proxy answer is not usable");
+    }
     if (!Array.isArray(listed)) {
       throw new ControlError("Protocol", "the proxy answer is not usable");
     }

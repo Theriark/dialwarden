@@ -9,6 +9,7 @@
 // from A2S_PLAYER when the pack wants it; a failed player query never changes
 // the state, which the INFO round already proved.
 import { createSocket } from "node:dgram";
+import { isIPv6 } from "node:net";
 import {
   ControlError,
   LIMITS,
@@ -163,7 +164,7 @@ export class A2sProbe {
    */
   #exchange(payload: Buffer, timeoutMs: number): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const socket = createSocket("udp4");
+      const socket = createSocket(isIPv6(this.#host) ? "udp6" : "udp4");
       let settled = false;
       const finish = (error: unknown, reply?: Buffer) => {
         if (settled) return;
@@ -177,12 +178,21 @@ export class A2sProbe {
         () => finish(new ControlError("Timeout", "the query timed out")),
         timeoutMs,
       );
-      socket.once("error", (error) => finish(error));
+      // A permanent listener: a second socket error after the first must
+      // not reach the emitter unhandled.
+      socket.on("error", (error) => finish(error));
       socket.once("message", (message) => {
         if (message.length <= LIMITS.maxA2sBytes) finish(undefined, message);
         else finish(new ControlError("Protocol", "the A2S reply is too large"));
       });
-      socket.connect(this.#port, this.#host, () => {
+      // Node passes a failed connect (a name that does not resolve) to this
+      // callback and emits nothing; sending on the unconnected socket would
+      // then throw outside the promise and end the process.
+      socket.connect(this.#port, this.#host, (error?: Error | null) => {
+        if (error) {
+          finish(error);
+          return;
+        }
         socket.send(payload, (error) => {
           if (error !== null) finish(error);
         });

@@ -10,6 +10,7 @@
 // down (stopped), a timeout or anything unreadable is unknown. The actions
 // throw ControlError; authentication failures are configuration blockers and
 // are never retried (the caller shows them as such).
+import { isIP } from "node:net";
 import type { JsonValue } from "@dialwarden/packs-schema";
 
 /** The six control kinds of contract C7. */
@@ -128,13 +129,61 @@ export interface ControlTimeouts {
  */
 export type AllowList = readonly string[];
 
+const HOST_LABEL = /^[A-Za-z0-9-]{1,63}$/;
+
+/**
+ * A control host: an IP address or a DNS name, nothing else (no scheme,
+ * port, user, brackets or path), the rule the SFTP connector applies
+ * (routes/connectors.ts isHost). A host like evil.example/x? would otherwise
+ * move a request, credentials included, to another address.
+ */
+export function usableHost(value: string): boolean {
+  if (isIP(value) !== 0) return true;
+  if (value === "" || value.length > 253) return false;
+  return value
+    .split(".")
+    .every(
+      (label) =>
+        HOST_LABEL.test(label) &&
+        !label.startsWith("-") &&
+        !label.endsWith("-"),
+    );
+}
+
+/** A TCP or UDP port: an integer from 1 to 65535. */
+export function usablePort(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 65_535;
+}
+
+/** NUL, CR and LF end a console line or a C string. */
+const LINE_BREAK = /[\0\r\n]/;
+
+/**
+ * Whether a value can go out as one console line: a password or a command
+ * holding NUL, CR or LF would let a second line through, past the allow-list.
+ */
+export function lineSafe(value: string): boolean {
+  return !LINE_BREAK.test(value);
+}
+
+/** Refuses a password that is not one line; the message never holds it. */
+export function checkLineSafePassword(password: string): void {
+  if (!lineSafe(password)) {
+    throw new ControlError(
+      "Refused",
+      "the control password holds a line break or a zero byte",
+    );
+  }
+}
+
 /** Refuses a command that is not on the allow-list (never free text). */
 export function allowedCommand(
   allow: AllowList,
   command: string,
 ): string | undefined {
   const found = allow.find((entry) => entry === command);
-  if (found !== undefined && found.length > LIMITS.maxCommandLength) {
+  if (found === undefined) return undefined;
+  if (found.length > LIMITS.maxCommandLength || !lineSafe(found)) {
     return undefined;
   }
   return found;
