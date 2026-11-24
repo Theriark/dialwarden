@@ -72,7 +72,7 @@ function statusWord(status: ChangeSetStatus): string {
     case "conflict":
       return "Ended in a conflict";
     case "failed":
-      return "Failed to apply";
+      return "Save failed";
     case "scheduled":
       return "Scheduled";
     case "reverted":
@@ -164,7 +164,7 @@ export function TimelineRow({
           </div>
         ) : (
           <p className="text-xs text-fg-muted">
-            No stored version to restore for this entry.
+            Nothing to restore for this entry
           </p>
         )}
       </div>

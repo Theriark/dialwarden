@@ -102,7 +102,7 @@ describe("TimelineRow", () => {
       </ol>,
     );
     expect(
-      screen.getByText("No stored version to restore for this entry."),
+      screen.getByText("Nothing to restore for this entry"),
     ).toBeTruthy();
   });
 });

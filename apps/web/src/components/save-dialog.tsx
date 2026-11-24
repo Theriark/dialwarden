@@ -113,6 +113,22 @@ export function SaveDialog({
   const conflict = current.status === "conflict";
   const failed = current.status === "failed";
   const done = applied || pending || conflict;
+  // The errors that stop the write, the same filter the server applies: a
+  // file-level error of a written file (settingKey null) and an error on a
+  // setting this change set sets. Warnings never block (live check F1).
+  const changedKeys = new Set(
+    current.diff.semantic.map((chip) => chip.settingKey),
+  );
+  const blocking = current.lint.some(
+    (entry) =>
+      entry.severity === "error" &&
+      (entry.settingKey === null || changedKeys.has(entry.settingKey)),
+  );
+  // The server message may already end in a full stop; one sentence keeps
+  // exactly one (the live check saw a double full stop here).
+  const failedReason = (
+    current.error?.message ?? "the server could not write the files"
+  ).replace(/\.+$/, "");
 
   return (
     <Dialog
@@ -148,6 +164,11 @@ export function SaveDialog({
           </Button>
         ) : (
           <>
+            {blocking ? (
+              <span className="mr-auto self-center text-sm text-fg-muted">
+                fix the errors first
+              </span>
+            ) : null}
             <Button
               variant="ghost"
               onClick={onClose}
@@ -158,6 +179,7 @@ export function SaveDialog({
             <Button
               variant="primary"
               loading={apply.isPending}
+              disabled={blocking}
               onClick={() => {
                 apply.mutate();
               }}
@@ -178,7 +200,7 @@ export function SaveDialog({
         <Alert kind="error">
           {conflict
             ? "Another writer changed the file while this change set was open. The change set is closed: copy anything you need, reload the editor and save a new change set."
-            : `The last try failed: ${current.error?.message ?? "the server could not write the files"}. A failed change set can be applied again.`}
+            : `The last try failed: ${failedReason}. A failed change set can be applied again.`}
         </Alert>
       ) : null}
       {conflict && current.conflict !== null ? (
