@@ -131,7 +131,7 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
     page.getByRole("heading", { name: "Choose your three servers" }),
   ).toBeVisible();
   await expect(page.getByText("Palworld Home").first()).toBeVisible();
-  await expect(page.getByText("1 of 3 in use")).toBeVisible();
+  await expect(page.getByText("1 of 3 in use").first()).toBeVisible();
 
   // The presets screen holds its designed state while the API is missing.
   await page.goto("/presets");

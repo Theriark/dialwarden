@@ -130,10 +130,10 @@ describe("snapshotsToRestore", () => {
   it("keeps the one snapshot of a first import", () => {
     const imported = entry({
       cause: "import",
-      snapshots: [snap("s-import", "settings", "after")],
+      snapshots: [snap("s-import", "settings", "import")],
     });
     expect(snapshotsToRestore(imported)).toEqual([
-      snap("s-import", "settings", "after"),
+      snap("s-import", "settings", "import"),
     ]);
   });
 

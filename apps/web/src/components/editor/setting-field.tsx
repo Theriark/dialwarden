@@ -187,6 +187,15 @@ export const SettingField = memo(function SettingField({
           value={edited ? String(value ?? "") : ""}
           placeholder={edited ? undefined : "Unchanged"}
           onChange={(event) => {
+            // An empty box means what the help text says: keep the stored
+            // value. Typing and then clearing hands the key back to the
+            // server answer instead of queueing an empty string, which the
+            // server would write over the stored secret (it only drops an
+            // edit that equals its mask).
+            if (event.target.value === "") {
+              onReset(setting.key);
+              return;
+            }
             onChange(setting.key, event.target.value);
           }}
         />
