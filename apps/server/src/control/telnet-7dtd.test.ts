@@ -19,8 +19,11 @@ let requirePassword = true;
 let refusePassword = false;
 let sent: string[] = [];
 let iac = false;
+let repromptSilently = false;
+let connections = 0;
 const sockets = new Set<Socket>();
 const server: TcpServer = createTcpServer((socket) => {
+  connections += 1;
   sockets.add(socket);
   socket.on("close", () => sockets.delete(socket));
   // The negotiation bytes a telnet server sends at connect.
@@ -43,6 +46,11 @@ const server: TcpServer = createTcpServer((socket) => {
       if (word === "") continue;
       sent.push(word);
       if (requirePassword && sent.length === 1) {
+        if (repromptSilently) {
+          // A console that asks again instead of saying incorrect.
+          socket.write("Please enter password:\r\n");
+          return;
+        }
         if (refusePassword || word !== PASSWORD) {
           socket.write("Password incorrect, please enter password:\r\n");
           // The game bans after failed logins: this server closes at once.
@@ -150,6 +158,32 @@ describe("7 Days to Die telnet client (simulated)", () => {
     await expect(control.stop?.()).rejects.toMatchObject({ code: "Refused" });
   });
 
+  it("answers a second prompt with nothing: one attempt only", async () => {
+    requirePassword = true;
+    repromptSilently = true;
+    sent = [];
+    await expect(client().save?.()).rejects.toMatchObject({ code: "Auth" });
+    expect(sent.filter((line) => line === PASSWORD)).toHaveLength(1);
+    // The client closed its side; nothing stays connected.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sockets.size).toBe(0);
+    repromptSilently = false;
+  });
+
+  it("keeps the password out of the refusal message", async () => {
+    requirePassword = true;
+    refusePassword = true;
+    sent = [];
+    const error: unknown = await client()
+      .save?.()
+      .catch((caught: unknown) => caught);
+    const { code, message } = error as { code: string; message: string };
+    expect(code).toBe("Auth");
+    expect(message).not.toContain(PASSWORD);
+    expect(JSON.stringify({ code, message })).not.toContain(PASSWORD);
+    refusePassword = false;
+  });
+
   it("reports stopped when the telnet port is closed", async () => {
     const down = new Telnet7dtd({
       host: "127.0.0.1",
@@ -159,5 +193,56 @@ describe("7 Days to Die telnet client (simulated)", () => {
       connectMs: 2_000,
     });
     expect(await down.probe()).toEqual({ state: "stopped" });
+  });
+});
+
+// Threat tests T4 (security review THE-2598, F2): a password or a command
+// with a line break would send a second console command past the allow-list.
+describe("7 Days to Die telnet client: no line break reaches the console", () => {
+  const smuggled = (separator: string) =>
+    `${PASSWORD}${separator}admin add 76561190000000000 0`;
+
+  it.each([
+    ["a line feed", "\n"],
+    ["a carriage return", "\r"],
+    ["a zero byte", "\0"],
+  ])(
+    "refuses a password holding %s before connecting",
+    async (_, separator) => {
+      requirePassword = true;
+      sent = [];
+      const before = connections;
+      const control = new Telnet7dtd({
+        host: "127.0.0.1",
+        port,
+        password: smuggled(separator),
+        allow: ALLOW,
+        saveCommand: "sav",
+        readMs: 2_000,
+      });
+      const error: unknown = await control
+        .save?.()
+        .catch((caught: unknown) => caught);
+      expect(error).toMatchObject({ code: "Refused" });
+      expect((error as Error).message).not.toContain(PASSWORD);
+      expect(sent).toEqual([]);
+      expect(connections).toBe(before);
+    },
+  );
+
+  it("refuses an allow-list entry holding a line break", async () => {
+    sent = [];
+    const before = connections;
+    const control = new Telnet7dtd({
+      host: "127.0.0.1",
+      port,
+      password: PASSWORD,
+      allow: ["sav\nshutdown"],
+      saveCommand: "sav\nshutdown",
+      readMs: 2_000,
+    });
+    await expect(control.save?.()).rejects.toMatchObject({ code: "Refused" });
+    expect(sent).toEqual([]);
+    expect(connections).toBe(before);
   });
 });

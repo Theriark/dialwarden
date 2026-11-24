@@ -32,14 +32,22 @@ interface Behaviour {
   readonly closeAfterAuth?: boolean;
   /** Send the empty response frame most servers send before the auth one. */
   readonly emptyFirst?: boolean;
+  /** Accept the connection and never answer anything. */
+  readonly silent?: boolean;
 }
 
 let port = 0;
 let behaviour: Behaviour = {};
 let seen: Buffer[] = [];
+let connections = 0;
+const sockets = new Set<Socket>();
 const server = createServer((socket: Socket) => {
+  connections += 1;
+  sockets.add(socket);
+  socket.on("close", () => sockets.delete(socket));
   let buffer = Buffer.alloc(0);
   socket.on("data", (chunk: Buffer) => {
+    if (behaviour.silent === true) return;
     buffer = Buffer.concat([buffer, chunk]);
     while (buffer.length >= 14) {
       const length = buffer.readUInt32LE(0);
@@ -185,5 +193,84 @@ describe("Source RCON client (simulated)", () => {
     } catch (error) {
       expect(`${(error as Error).message}`).not.toContain(PASSWORD);
     }
+  });
+});
+
+// Threat tests T5 (security review THE-2598, F2) and the review follow-ups:
+// nothing with a line break or a zero byte is sent, a password is UTF-8 on
+// the wire, and a server that never answers is bounded.
+describe("Source RCON client: refusals and bounds (simulated)", () => {
+  it("refuses an allow-listed command holding a line break", async () => {
+    behaviour = {};
+    seen = [];
+    const control = new SourceRcon({
+      host: "127.0.0.1",
+      port,
+      password: PASSWORD,
+      allow: ["sav\nquit"],
+      saveCommand: "sav\nquit",
+      readMs: 2_000,
+    });
+    await expect(control.save?.()).rejects.toMatchObject({ code: "Refused" });
+    expect(seen.filter((packet) => packet.readInt32LE(8) === 2)).toEqual([]);
+  });
+
+  it("refuses a password holding a zero byte before connecting", async () => {
+    behaviour = {};
+    seen = [];
+    const before = connections;
+    const control = new SourceRcon({
+      host: "127.0.0.1",
+      port,
+      password: `${PASSWORD}\0extra`,
+      allow: ALLOW,
+      saveCommand: "sav",
+      readMs: 2_000,
+    });
+    const error: unknown = await control
+      .save?.()
+      .catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "Refused" });
+    expect((error as Error).message).not.toContain(PASSWORD);
+    expect(connections).toBe(before);
+    expect(seen).toEqual([]);
+  });
+
+  it("sends a password outside latin1 as UTF-8", async () => {
+    behaviour = {};
+    seen = [];
+    const password = "fjörd-žal-秘密";
+    const control = new SourceRcon({
+      host: "127.0.0.1",
+      port,
+      password,
+      allow: ALLOW,
+      readMs: 2_000,
+    });
+    expect(await control.probe()).toEqual({ state: "running" });
+    const bytes = Buffer.from(password, "utf8");
+    const auth = seen[0];
+    expect(auth?.readUInt32LE(0)).toBe(10 + bytes.length);
+    expect(auth?.subarray(12, 12 + bytes.length)).toEqual(bytes);
+  });
+
+  it("bounds a server that accepts and never answers", async () => {
+    behaviour = { silent: true };
+    const control = new SourceRcon({
+      host: "127.0.0.1",
+      port,
+      password: PASSWORD,
+      allow: ALLOW,
+      saveCommand: "sav",
+      connectMs: 300,
+      readMs: 300,
+    });
+    const started = Date.now();
+    expect(await control.probe()).toEqual({ state: "unknown" });
+    await expect(control.save?.()).rejects.toMatchObject({ code: "Timeout" });
+    expect(Date.now() - started).toBeLessThan(2_000);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sockets.size).toBe(0);
+    behaviour = {};
   });
 });
