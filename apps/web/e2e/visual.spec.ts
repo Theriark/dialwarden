@@ -110,6 +110,12 @@ const SCREENS: readonly Screen[] = [
         page.getByRole("heading", { name: "Palworld Home settings" }),
       ).toBeVisible();
       await page.getByLabel("Search settings").fill("Experience rate");
+      // On the phone widths the settings groups sit behind their
+      // accordions, so the Rates group is opened before the field is
+      // filled; the wider widths render the groups open already.
+      if ((page.viewportSize()?.width ?? 0) < 640) {
+        await page.getByText("Rates", { exact: true }).first().click();
+      }
       await page.getByLabel("Experience rate").fill("2");
       await page.getByRole("button", { name: "Review and save" }).click();
       await expect(
