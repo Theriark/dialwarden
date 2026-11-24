@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { bytes, edited, errorCode, text } from "../test/harness.js";
 import { fixture } from "../test/kits.js";
-import { launchAdapter as launch, type LaunchLocator } from "./index.js";
+import {
+  launchAdapter as launch,
+  launchShellIssues,
+  type LaunchLocator,
+} from "./index.js";
 
 function flag(name: string): LaunchLocator {
   return { kind: "launch", flag: name };
@@ -301,5 +305,62 @@ describe("launch arguments: keyed flags and order (Valheim, P6)", () => {
     expect(errorCode(() => launch.get(doc, keyed("-modifier", "a b")))).toBe(
       "invalid-locator",
     );
+  });
+
+  it("finds a keyed argument whatever the case of its key", () => {
+    const doc = launch.parse(bytes("-modifier deathPenalty casual"));
+    expect(launch.get(doc, keyed("-modifier", "deathpenalty"))).toBe("casual");
+    expect(launch.get(doc, keyed("-MODIFIER", "DEATHPENALTY"))).toBe("casual");
+  });
+});
+
+// Threat tests T1 (security review THE-2598, F1): the start snippets hand the
+// args file to eval, so any shell character in the line is an error, which
+// the pack lint of the args file turns into a blocked write.
+describe("launch arguments: shell characters", () => {
+  const shellIssues = (line: string) =>
+    launchShellIssues(bytes(line)).filter(
+      (issue) => issue.code === "shell-character",
+    );
+
+  it.each([
+    '-name Quarry -zz "$(touch /tmp/dw-pwn)"',
+    "-name Quarry `id`",
+    "-name Quarry;reboot",
+    "-port 2456 -x a|b",
+    "-port 2456 -x a>b",
+    '-name "Quarry $HOME"',
+    "-name Quarry\n-x $HOME",
+    "-name Quarry\nreboot",
+    "\n-name Quarry",
+    "-name Quarry\\&x",
+  ])("refuses %j", (line) => {
+    const issues = shellIssues(line);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.severity === "error")).toBe(true);
+  });
+
+  it.each([
+    '-name "Quarry Lane" -port 2456',
+    "TheIsland?listen?SessionName=X",
+    "-name 'single $(x) quoted'",
+    '-name "Quarry \\"Lane\\""',
+    "-name Quarry -port 2456\n",
+    "-name Quarry \\\n  -port 2456\n",
+  ])("accepts %j", (line) => {
+    expect(shellIssues(line)).toEqual([]);
+  });
+
+  it("leaves the adapter lint of a start script alone", () => {
+    const script = bytes('# start\n./Server.sh -name "$NAME"\n');
+    expect(launch.lint(launch.parse(script))).toEqual([]);
+  });
+
+  it("accepts the bytes the writer produces for a value with quotes", () => {
+    const written = edited(launch, bytes("-name x"), (d) =>
+      launch.set(d, flag("-name"), 'Quarry "Lane"'),
+    );
+    expect(written).toBe('-name "Quarry \\"Lane\\""');
+    expect(shellIssues(written)).toEqual([]);
   });
 });
