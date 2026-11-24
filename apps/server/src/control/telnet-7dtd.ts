@@ -11,6 +11,7 @@
 import { connect, type Socket } from "node:net";
 import {
   allowedCommand,
+  checkLineSafePassword,
   ControlError,
   LIMITS,
   type AllowList,
@@ -241,6 +242,9 @@ export class Telnet7dtd implements GameControl {
         "the pack does not allow this telnet command",
       );
     }
+    // The password goes out as one line: a line break in it would send a
+    // second console command past the allow-list.
+    checkLineSafePassword(this.#options.password);
     const session = await connectConsole(this.#options);
     try {
       await this.#login(session);
@@ -272,6 +276,7 @@ export class Telnet7dtd implements GameControl {
           throw new ControlError("Auth", "the telnet password was refused");
         }
         answered = true;
+        checkLineSafePassword(this.#options.password);
         session.send(this.#options.password);
       }
     }

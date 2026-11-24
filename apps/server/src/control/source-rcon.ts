@@ -13,6 +13,7 @@ import { randomInt } from "node:crypto";
 import { connect, type Socket } from "node:net";
 import {
   allowedCommand,
+  checkLineSafePassword,
   ControlError,
   LIMITS,
   refused,
@@ -38,7 +39,9 @@ interface Frame {
 
 /** One client frame: length, id, type, body, two null bytes. */
 function frame(id: number, type: number, body: string): Buffer {
-  const text = Buffer.from(body, "latin1");
+  // UTF-8 both ways: a password outside latin1 must not be mangled into a
+  // refusal the user cannot fix by retyping it.
+  const text = Buffer.from(body, "utf8");
   const packet = Buffer.alloc(14 + text.length);
   packet.writeUInt32LE(10 + text.length, 0);
   packet.writeInt32LE(id, 4);
@@ -139,6 +142,7 @@ async function operate(
   if (options.password.length > MAX_PASSWORD) {
     throw new ControlError("Refused", "the RCON password is too long");
   }
+  checkLineSafePassword(options.password);
   const connectMs = options.connectMs ?? LIMITS.connectMs;
   const readMs = options.readMs ?? LIMITS.readMs;
   const socket = await new Promise<Socket>((resolve, reject) => {

@@ -72,16 +72,20 @@ export class SshCommand implements GameControl {
       );
     }
     const client = new ssh2.Client();
+    // One listener for the client's whole life: a second ssh2 error during or
+    // after the exec must not reach the emitter unhandled.
+    let onError: (error: Error) => void = () => undefined;
+    client.on("error", (error) => onError(error));
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => {
           client.end();
           reject(new ControlError("Timeout", "the SSH server did not answer"));
         }, options.connectMs ?? LIMITS.connectMs);
-        client.once("error", (error) => {
+        onError = (error) => {
           clearTimeout(timer);
           reject(new ControlError("Connection", "SSH is unreachable", error));
-        });
+        };
         client.once("ready", () => {
           clearTimeout(timer);
           resolve();
@@ -113,6 +117,12 @@ export class SshCommand implements GameControl {
             ),
           );
         }, options.readMs ?? LIMITS.readMs);
+        onError = (error) => {
+          clearTimeout(timer);
+          reject(
+            new ControlError("Connection", "the SSH connection failed", error),
+          );
+        };
         client.exec(this.#command, (error, stream) => {
           if (error !== null && error !== undefined) {
             clearTimeout(timer);
@@ -133,9 +143,11 @@ export class SshCommand implements GameControl {
             if (drained > OUTPUT_CAP) client.end();
           });
           stream.stderr.on("data", () => undefined);
-          stream.once("close", (code: number | null) => {
+          // Only exit status 0 is success: a command killed by a signal
+          // (code null) or a channel closed without a status did not finish.
+          stream.once("close", (code: number | null | undefined) => {
             clearTimeout(timer);
-            if (code === 0 || code === null) resolve();
+            if (code === 0) resolve();
             else {
               reject(
                 new ControlError(
