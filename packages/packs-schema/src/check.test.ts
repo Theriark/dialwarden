@@ -164,3 +164,82 @@ describe("pack checks beyond the schema", () => {
     expect(safeRelativePath("a/")).toBe(false);
   });
 });
+
+describe("pack checks: probes and launch sources (P6)", () => {
+  it("checks the settings and allow-list of a probe declaration", () => {
+    const withProbe: Pack = {
+      ...pack,
+      probes: [
+        {
+          kind: "sourceRcon",
+          portSetting: "Nope",
+          passwordSetting: "PvP",
+          allow: ["sav"],
+          saveCommand: "sav",
+          stopCommand: "shutdown",
+        },
+      ],
+    };
+    expect(referenceProblems(withProbe)).toEqual([
+      "probe sourceRcon: portSetting Nope is not a setting of the pack",
+      "probe sourceRcon: stopCommand is not on the allow-list",
+    ]);
+  });
+
+  it("refuses probe commands without an allow-list", () => {
+    const bare: Pack = {
+      ...pack,
+      probes: [{ kind: "rustWebRcon", saveCommand: "server.write" }],
+    };
+    expect(referenceProblems(bare)).toEqual([
+      "probe rustWebRcon: saveCommand is not on the allow-list",
+    ]);
+  });
+
+  it("checks the paths of a launch source", () => {
+    const escaped: Pack = {
+      ...pack,
+      files: [
+        ...pack.files,
+        {
+          id: "launchline",
+          paths: { linux: ["dialwarden-args.txt"] },
+          adapter: "launch",
+          encoding: "utf-8",
+          applyPolicy: "stopped-only",
+          launchSources: [
+            { kind: "args" },
+            {
+              kind: "env",
+              paths: { linux: ["../outside.env"] },
+              argsVar: "SERVER_ARGS",
+            },
+          ],
+        },
+      ],
+    };
+    expect(referenceProblems(escaped)).toEqual([
+      "file launchline: env path ../outside.env escapes",
+    ]);
+  });
+
+  it("refuses the args source twice", () => {
+    const twice: Pack = {
+      ...pack,
+      files: [
+        ...pack.files,
+        {
+          id: "launchline",
+          paths: { linux: ["dialwarden-args.txt"] },
+          adapter: "launch",
+          encoding: "utf-8",
+          applyPolicy: "stopped-only",
+          launchSources: [{ kind: "args" }, { kind: "args" }],
+        },
+      ],
+    };
+    expect(referenceProblems(twice)).toEqual([
+      "file launchline: the args source is listed twice",
+    ]);
+  });
+});
