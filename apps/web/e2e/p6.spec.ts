@@ -249,7 +249,9 @@ test("the launch page shows the source, the live line and the snippets", async (
     page.getByRole("heading", { name: "Palworld Home launch" }),
   ).toBeVisible();
   await expect(page.getByText("App-managed args file").first()).toBeVisible();
-  await expect(page.getByLabel("Launch line")).toBeVisible();
+  // The CI game folder has no args file yet, so the line starts empty (an
+  // empty block has no height and counts as hidden); it fills after the save.
+  await expect(page.getByLabel("Launch line")).toBeAttached();
 
   // The snippets: bash first, the arrows move them, copy answers.
   await page.getByRole("tab", { name: "Bash" }).click();
