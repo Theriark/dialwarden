@@ -9,11 +9,15 @@ import {
 import { PageHeader } from "./page-header";
 
 type SettingsPath =
-  "/settings/profile" | "/settings/licence" | "/settings/backup";
+  | "/settings/profile"
+  | "/settings/licence"
+  | "/settings/plan"
+  | "/settings/backup";
 
 const SECTIONS: readonly { to: SettingsPath; label: string }[] = [
   { to: "/settings/profile", label: "Profile" },
   { to: "/settings/licence", label: "Licence" },
+  { to: "/settings/plan", label: "Plan" },
   { to: "/settings/backup", label: "Backup" },
 ];
 

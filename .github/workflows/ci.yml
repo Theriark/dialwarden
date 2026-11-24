@@ -123,6 +123,111 @@ jobs:
           pnpm run build || status=1
           exit "${status}"
 
+  e2e:
+    name: 5 - Playwright e2e against the server from source
+    # dev-work-plan P5: the editor walk (add a server, edit, diff, save,
+    # rollback, plan, presets) over the real server started from source with
+    # a throwaway data dir, a fixture game folder and run-time test keys.
+    # The shipped image still trusts no test key: the pair is generated in
+    # the job, the public half written to the workspace slot only.
+    needs: detect
+    if: needs.detect.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install, build and add the Playwright browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm -r run build
+          pnpm --filter @dialwarden/web exec playwright install --with-deps chromium
+      - name: Run the editor walk on Free, then on Paid
+        shell: bash
+        run: |
+          set -euo pipefail
+          data="$(mktemp -d)"
+          # The game folder must sit outside the data dir: the Local connector
+          # refuses any root that overlaps it (connectors/service.ts deny).
+          games="$(mktemp -d)"
+          game="$games/palworld-home"
+          mkdir -p "$game/Pal/Saved/Config/LinuxServer"
+          : > "$game/PalServer.sh"
+          cp packs/palworld/fixtures/PalWorldSettings.ini "$game/Pal/Saved/Config/LinuxServer/"
+          node apps/web/e2e/prepare-paid.mjs packages/entitlement/keys "$data/paid-licence"
+          hex() { node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"; }
+          export E2E_DATA_DIR="$data"
+          export E2E_SERVER_DIR="$game"
+          export E2E_PAID_LICENCE="$(cat "$data/paid-licence")"
+          DATA_DIR="$data" HOST=127.0.0.1 PORT=8080 BASE_URL="http://127.0.0.1:8080" \
+            WEB_DIST="$PWD/apps/web/dist" APP_SECRET_KEY="$(hex)" SESSION_SECRET="$(hex)" \
+            node apps/server/dist/main.js > "$data/server.log" 2>&1 &
+          server_pid=$!
+          cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/healthz >/dev/null
+          pnpm --filter @dialwarden/web exec playwright test
+      # references/ui-standard.md: every screen at 1440, 768 and 390 in
+      # light and dark. One artifact per width and theme keeps every
+      # artifact under the 8 MiB bound of the CI evidence download.
+      - name: Upload the P5 screenshots, 1440 light
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-1440-light
+          path: "apps/web/e2e-shots/*-1440-light.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Upload the P5 screenshots, 1440 dark
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-1440-dark
+          path: "apps/web/e2e-shots/*-1440-dark.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Upload the P5 screenshots, 768 light
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-768-light
+          path: "apps/web/e2e-shots/*-768-light.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Upload the P5 screenshots, 768 dark
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-768-dark
+          path: "apps/web/e2e-shots/*-768-dark.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Upload the P5 screenshots, 390 light
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-390-light
+          path: "apps/web/e2e-shots/*-390-light.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+      - name: Upload the P5 screenshots, 390 dark
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: p5-shots-390-dark
+          path: "apps/web/e2e-shots/*-390-dark.jpg"
+          if-no-files-found: warn
+          retention-days: 90
+
   audit:
     name: 2 - dependency audit and licence audit
     needs: detect
@@ -521,6 +626,7 @@ jobs:
     needs:
       - detect
       - checks
+      - e2e
       - audit
       - hygiene
       - docker-build
