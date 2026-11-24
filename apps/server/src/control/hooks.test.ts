@@ -9,13 +9,17 @@
 // in THE-2582), so the game here is a local stub that speaks the Palworld
 // REST shape and a docker-socket-proxy shape over its own loopback ports.
 // No live game is ever contacted.
-import { createServer, type AddressInfo } from "node:http";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { hashPassword } from "../auth/hashing.js";
 import {
+  randomPassword,
+  sessionCookie,
   setupOwner,
   tempDir,
   testApp,
@@ -198,7 +202,7 @@ class SimGame {
       };
       if (request.method === "GET" && url === "/v1/api/info") {
         record("info");
-        answer(200, "{\"servername\":\"hookgame\"}");
+        answer(200, '{"servername":"hookgame"}');
       } else if (request.method === "POST" && url === "/v1/api/save") {
         record("save");
         answer(200, "{}");
@@ -288,6 +292,12 @@ let base: string;
 let current: TestApp | undefined;
 let sim: SimGame | undefined;
 
+/** The simulated game of the running test (setup starts it). */
+function game(): SimGame {
+  if (sim === undefined) throw new Error("no simulated game is running");
+  return sim;
+}
+
 beforeEach(async () => {
   base = await tempDir("dialwarden-hooks-");
   const packDir = join(base, "packs", "hookgame");
@@ -306,11 +316,13 @@ afterEach(async () => {
   await rm(base, { recursive: true, force: true });
 });
 
-/** A user of the given role (P8 names the roles; the column and the
- * session already carry them). */
-function roleUser(app: FastifyInstance, role: string): Promise<SignedIn> {
+/** A signed-in user of the given role (P8 names the roles; the column and
+ * the login already carry them). The session is a real signed-in one: the
+ * cookie the app sets and its CSRF token, taken from the login route. */
+async function roleUser(app: FastifyInstance, role: string): Promise<SignedIn> {
   const id = randomUUID();
   const email = `${role}-${id.slice(0, 8)}@dialwarden.test`;
+  const password = randomPassword();
   const at = new Date().toISOString();
   app.ctx.store.db
     .insert(users)
@@ -319,29 +331,37 @@ function roleUser(app: FastifyInstance, role: string): Promise<SignedIn> {
       email,
       name: role,
       role,
-      passwordHash: "not-a-login",
+      passwordHash: await hashPassword(password),
       createdAt: at,
       updatedAt: at,
     })
     .run();
-  const session = app.ctx.sessions.create(id, { ip: null, userAgent: null });
-  return Promise.resolve({
-    cookie: `dw_session=${session.value}`,
-    csrf: session.csrfToken,
-    userId: id,
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/login",
+    payload: { email, password },
   });
+  if (response.statusCode !== 200) {
+    throw new Error(`login: ${response.statusCode} ${response.body}`);
+  }
+  const body = response.json<{ csrfToken: string }>();
+  return {
+    cookie: sessionCookie(response),
+    csrf: body.csrfToken,
+    userId: id,
+  };
 }
 
-/** A running test server: the app, its owner, the API, the game folder and
- * the simulated game, with the probe pointing at the stub. */
-async function setup(
-  extraEnv: Record<string, string> = {},
-): Promise<{
+interface Setup {
   app: FastifyInstance;
   api: Api;
   root: string;
   slug: string;
-}> {
+}
+
+/** A running test server: the app, its owner, the API, the game folder and
+ * the simulated game, with the probe pointing at the stub. */
+async function setup(extraEnv: Record<string, string> = {}): Promise<Setup> {
   current = await testApp({
     config: { packsDir: join(base, "packs") },
     extraEnv,
@@ -414,7 +434,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
     expect(parked.json<ChangeSetBody>().status).toBe("pending");
     expect(await pendingOf(api, slug)).toHaveLength(1);
     // The owner adds the docker hook while the change waits.
-    const set = await putHooks(api, slug, dockerHook(sim!));
+    const set = await putHooks(api, slug, dockerHook(game()));
     expect(set.statusCode).toBe(200);
     // An editor stops the server: the pack's own REST shutdown runs, the
     // pending change is written while the server is down, and the start
@@ -439,12 +459,12 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
 
   it("records change.pending, hook.run, change.applied in order", async () => {
     const { app, api, root, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { WorldSize: 5 });
     await applyHooks(api, made.id, "restart");
     const runner = await roleUser(app, "editor");
     await runHook(apiOf(app, runner), slug, "stop");
-    const events = (await activityOf(app, slug)).map((row) => row.type);
+    const events = (await activityOf(api, slug)).map((row) => row.type);
     const pending = events.indexOf("change.pending");
     const stop = events.indexOf("hook.run");
     const applied = events.indexOf("change.applied");
@@ -457,7 +477,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
   });
 
   it("writes a pending change when the probe sees it stopped", async () => {
-    const { app, api, root, slug } = await setup();
+    const { api, root, slug } = await setup();
     const made = await draft(api, slug, { WorldSize: 3 });
     await apply(api, made.id);
     // Someone stops the server outside the app; the next status read sees
@@ -466,14 +486,14 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
     const status = await statusOf(api, slug);
     expect(status).toMatchObject({ state: "stopped", pending: 0 });
     expect(await fileText(root, WORLD_PATH)).toContain("WorldSize=3");
-    const events = await activityOf(app, slug);
+    const events = await activityOf(api, slug);
     const applied = events.find((row) => row.type === "change.applied");
     expect(applied?.actor).toBe("system");
   });
 
   it("keeps a change parked as save-only down after a stop", async () => {
     const { api, root, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { WorldSize: 4 });
     await apply(api, made.id);
     const run = await runHook(api, slug, "stop");
@@ -485,7 +505,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
 
   it("stops, writes and starts in one stop-start apply", async () => {
     const { api, root, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { WorldSize: 5 });
     const answer = await applyHooks(api, made.id, "stop-start");
     expect(answer.json<ChangeSetBody>().status).toBe("applied");
@@ -497,7 +517,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
   it("parks a stop-start apply when the stop never takes effect", async () => {
     // A short wait bound (HOOK_WAIT_MS), so the probe gives up quickly.
     const { api, root, slug } = await setup({ HOOK_WAIT_MS: "150" });
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     // The game acknowledges the shutdown and stays up, as games that ignore
     // the request do; the probe never sees the server stopped.
     sim?.ignoreShutdown();
@@ -512,7 +532,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
 describe("the live-reload action of the pack (contract C5)", () => {
   it("replaces a restart with the pack save for live settings", async () => {
     const { api, root, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { Motd: "Hello again" });
     const answer = await applyHooks(api, made.id, "restart");
     expect(answer.json<ChangeSetBody>().status).toBe("applied");
@@ -524,8 +544,8 @@ describe("the live-reload action of the pack (contract C5)", () => {
   });
 
   it("restarts for a setting that is not live-reloadable", async () => {
-    const { api, root, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    const { api, slug } = await setup();
+    await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { Slots: 64 });
     const answer = await applyHooks(api, made.id, "restart");
     expect(answer.json<ChangeSetBody>().status).toBe("applied");
@@ -548,7 +568,7 @@ describe("the live-reload action of the pack (contract C5)", () => {
 describe("the hook run API and its roles (contract C7)", () => {
   it("answers the hook view with its configuration and actions", async () => {
     const { api, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const view = (await hooksOf(api, slug)) as {
       packId: string;
       hooksSupported: string[];
@@ -597,7 +617,7 @@ describe("the hook run API and its roles (contract C7)", () => {
 
   it("runs the configured hook for what the pack cannot do", async () => {
     const { api, slug } = await setup();
-    await putHooks(api, slug, dockerHook(sim!));
+    await putHooks(api, slug, dockerHook(game()));
     const run = await runHook(api, slug, "restart");
     expect(run.json()).toMatchObject({
       action: "restart",
@@ -607,7 +627,7 @@ describe("the hook run API and its roles (contract C7)", () => {
   });
 
   it("lets an editor trigger a hook and refuses a viewer", async () => {
-    const { app, api, slug } = await setup();
+    const { app, slug } = await setup();
     const editor = apiOf(app, await roleUser(app, "editor"));
     const viewer = apiOf(app, await roleUser(app, "viewer"));
     const allowed = await runHook(editor, slug, "save");
@@ -625,15 +645,14 @@ describe("the hook run API and its roles (contract C7)", () => {
     const { app, api, slug } = await setup();
     const editor = apiOf(app, await roleUser(app, "editor"));
     const admin = apiOf(app, await roleUser(app, "admin"));
-    const refused = await putHooks(editor, slug, dockerHook(sim!));
+    const refused = await putHooks(editor, slug, dockerHook(game()));
     expect(refused.statusCode).toBe(403);
-    const allowed = await putHooks(admin, slug, dockerHook(sim!));
+    const allowed = await putHooks(admin, slug, dockerHook(game()));
     expect(allowed.statusCode).toBe(200);
     const change = await putHooks(api, slug, { hook: null });
     expect(change.statusCode).toBe(200);
-    expect(
-      ((await hooksOf(api, slug)) as { hook: unknown }).hook,
-    ).toBeNull();
+    const view = (await hooksOf(api, slug)) as { hook: unknown };
+    expect(view.hook).toBeNull();
   });
 
   it("refuses an SSH command hook on a server without SSH access", async () => {

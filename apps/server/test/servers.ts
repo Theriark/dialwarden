@@ -167,21 +167,21 @@ export async function applyHooks(
   return api.post(`/api/v1/change-sets/${id}/apply`, { runHooks });
 }
 
-/** The status probe answer of a server (GET .../status). */
-export async function statusOf(
-  api: Api,
-  slug: string,
-): Promise<{
+/** The status probe answer of a server (P6-B). */
+export interface StatusBody {
   state: string;
   players: number | null;
   source: string | null;
   pending: number;
-}> {
+}
+
+/** The status probe answer of a server (GET .../status). */
+export async function statusOf(api: Api, slug: string): Promise<StatusBody> {
   const response = await api.get(`/api/v1/servers/${slug}/status`);
   if (response.statusCode !== 200) {
     throw new Error(`status: ${response.statusCode} ${response.body}`);
   }
-  return response.json();
+  return response.json<StatusBody>();
 }
 
 /** The hook configuration view of a server (GET .../hooks). */
@@ -223,29 +223,35 @@ export async function pendingOf(
   return response.json<{ items: ChangeSetBody[] }>().items;
 }
 
+/** An activity event row (contract C6). */
+export interface ActivityRow {
+  id: number;
+  type: string;
+  at: string;
+  actor: string;
+  data: unknown;
+}
+
+interface ActivityPage {
+  items: ActivityRow[];
+  nextBefore: number | null;
+}
+
 /** The activity events of a server, oldest first (GET /api/v1/activity). */
 export async function activityOf(
-  app: FastifyInstance,
+  api: Api,
   slug: string,
-): Promise<
-  { id: number; type: string; at: string; actor: string; data: unknown }[]
-> {
-  const rows: { id: number; type: string; at: string; actor: string }[] = [];
+): Promise<ActivityRow[]> {
+  const rows: ActivityRow[] = [];
   let before: number | undefined;
   for (;;) {
-    const url = new URLSearchParams({ serverId: slug, limit: "50" });
-    if (before !== undefined) url.set("before", String(before));
-    const response = await app.inject({
-      method: "GET",
-      url: `/api/v1/activity?${url.toString()}`,
-    });
+    const query = new URLSearchParams({ serverId: slug, limit: "50" });
+    if (before !== undefined) query.set("before", String(before));
+    const response = await api.get(`/api/v1/activity?${query.toString()}`);
     if (response.statusCode !== 200) {
       throw new Error(`activity: ${response.statusCode} ${response.body}`);
     }
-    const page = response.json<{
-      items: { id: number; type: string; at: string; actor: string }[];
-      nextBefore: number | null;
-    }>();
+    const page = response.json<ActivityPage>();
     rows.push(...page.items);
     if (page.nextBefore === null) break;
     before = page.nextBefore;

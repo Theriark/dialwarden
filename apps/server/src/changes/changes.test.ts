@@ -578,7 +578,7 @@ describe("the change set state machine", () => {
     ]);
   });
 
-  it("refuses to apply twice, hooks before P6 and unknown ids", async () => {
+  it("refuses to apply twice, with or without hooks, and unknown ids", async () => {
     const { api, slug } = await palworld();
     const made = await change(api, slug, { ExpRate: 2 });
     const url = `/api/v1/change-sets/${made.id}/apply`;
@@ -588,8 +588,13 @@ describe("the change set state machine", () => {
       error: "invalid_state",
       status: "applied",
     });
+    // P6-B accepts runHooks; an applied change set is refused all the same.
     const hooks = await api.post(url, { runHooks: "restart" });
-    expect(hooks.json()).toEqual({ error: "hooks_not_available" });
+    expect(hooks.statusCode).toBe(409);
+    expect(hooks.json()).toEqual({
+      error: "invalid_state",
+      status: "applied",
+    });
     const unknown = await api.get(`/api/v1/change-sets/${randomUUID()}`);
     expect(unknown.statusCode).toBe(404);
     expect((await api.get("/api/v1/change-sets/x")).statusCode).toBe(400);
