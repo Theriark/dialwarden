@@ -339,12 +339,18 @@ function setKeyed(launch: LaunchDoc, arg: Arg, value: Value): Splice[] {
       throw new FormatError("invalid-value", "the key word is missing");
     }
     const text = scalar(value, undefined);
+    if (!isValueWord(text)) {
+      throw new FormatError("invalid-value", `${text} would read as a flag`);
+    }
     const at = valueWord.end;
     return [{ start: at, end: at, text: ` ${encodeWord(text)}` }];
   }
   // The group holds its value word: every write replaces that word, the
   // same way a plain flag with a value is rewritten.
   const text = scalar(value, undefined);
+  if (!isValueWord(text)) {
+    throw new FormatError("invalid-value", `${text} would read as a flag`);
+  }
   return [
     {
       start: extraWord.start,
@@ -597,7 +603,7 @@ export function launchLocators(doc: ParsedDoc): LaunchLocator[] {
     if (!FLAG.test(arg.name)) continue;
     const name = arg.name.toLowerCase();
     const key = keyOf(arg);
-    if (arg.extraWord !== undefined && key !== undefined) {
+    if (arg.extraWord !== undefined && key !== undefined && KEY.test(key)) {
       const by = `${name} ${key}`;
       keyed.set(by, { kind: "launch", flag: arg.name, key });
     } else {
