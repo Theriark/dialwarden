@@ -158,6 +158,7 @@ describe("Source RCON client (simulated)", () => {
       port: 1,
       password: PASSWORD,
       allow: ALLOW,
+      saveCommand: "sav",
       connectMs: 2_000,
     });
     expect(await down.probe()).toEqual({ state: "stopped" });

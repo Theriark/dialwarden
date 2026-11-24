@@ -112,7 +112,11 @@ describe("docker proxy hook (simulated)", () => {
     list = [entry("running", { "dialwarden.game": "valheim" })];
     asked = [];
     await client().restart();
-    expect(asked.map((a) => [a.method, a.path.split("/").at(-1)])).toEqual([
+    const verbs = asked.map((a) => [
+      a.method,
+      new URL(a.path, "http://127.0.0.1").pathname.split("/").at(-1),
+    ]);
+    expect(verbs).toEqual([
       ["GET", "json"],
       ["POST", "restart"],
     ]);

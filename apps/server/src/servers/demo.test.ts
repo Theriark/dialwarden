@@ -76,7 +76,12 @@ describe("demo seed", () => {
   it("seeds demo-palworld and demo-enshrouded with 3 entries each", async () => {
     const started = await start(true);
     const api = apiOf(started, await setupOwner(started));
-    expect(await serverIds(api)).toEqual(["demo-enshrouded", "demo-palworld"]);
+    // Every pack with a demo seeds its server; Valheim joined in P6.
+    expect(await serverIds(api)).toEqual([
+      "demo-enshrouded",
+      "demo-palworld",
+      "demo-valheim",
+    ]);
     const palworld = await api.get("/api/v1/servers/demo-palworld");
     expect(palworld.json()).toMatchObject({
       packId: "palworld",
