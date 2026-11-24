@@ -149,6 +149,27 @@ describe("lintFile", () => {
     expect(issues.map((issue) => issue.code)).toEqual(["wrong-file"]);
   });
 
+  it("lints a file that lists the args source as shell text", () => {
+    // The test pack's launch file is launch.txt, a start script the user
+    // owns: shell text there is the user's. Listing the args source makes
+    // it a file the snippets eval, whatever its name (THE-2605 L5).
+    const line = bytes("./run.sh -port=$(id)\n");
+    const shell = (issues: readonly { code: string }[]) =>
+      issues.filter((issue) => issue.code === "shell-character");
+    expect(shell(lintFile(pack, "launch", line))).toEqual([]);
+    const args: Pack = {
+      ...pack,
+      files: pack.files.map((file) =>
+        file.id === "launch"
+          ? { ...file, launchSources: [{ kind: "args" as const }] }
+          : file,
+      ),
+    };
+    expect(shell(lintFile(args, "launch", line))).toContainEqual(
+      expect.objectContaining({ code: "shell-character", severity: "error" }),
+    );
+  });
+
   it("gives only the syntax errors of a file that does not parse", () => {
     const file = "[Net]\nNetRate=60\nOptionSettings=(ExpRate=1.0\n";
     const issues = lintFile(pack, "game", bytes(file));
