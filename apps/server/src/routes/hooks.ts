@@ -150,7 +150,9 @@ async function hooksView(
     const sources = await hooks.sources(server, context);
     available = await hooks.actions(server, sources);
   } catch (error) {
-    if (!(error instanceof ConnectorError)) throw error;
+    const known =
+      error instanceof ConnectorError || error instanceof ControlError;
+    if (!known) throw error;
   }
   return {
     packId: pack.id,
@@ -251,17 +253,18 @@ export function hookRoutes(app: FastifyInstance): void {
       const { servers, hooks } = deps();
       const server = servers.require(request.params.slug);
       let answer;
+      let pending = 0;
       try {
         answer = await hooks.status(server);
+        pending = app.ctx.changes.pending(server).length;
+        if (answer.state === "stopped" && pending > 0) {
+          // The server was seen stopped: the pending change sets are written
+          // and the start hook runs once after them (contract C5).
+          await app.ctx.changes.flushPending(server, "system");
+          pending = app.ctx.changes.pending(server).length;
+        }
       } catch (error) {
         throw hookFailure(error);
-      }
-      let pending = app.ctx.changes.pending(server).length;
-      if (answer.state === "stopped" && pending > 0) {
-        // The server was seen stopped: the pending change sets are written
-        // and their start hooks run (contract C5).
-        await app.ctx.changes.flushPending(server, "system");
-        pending = app.ctx.changes.pending(server).length;
       }
       return {
         ...answer,

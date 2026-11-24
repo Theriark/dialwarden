@@ -339,7 +339,12 @@ export class HookService {
       override.port = input.port;
     }
     if (input.password !== undefined) {
-      checkLineSafePassword(input.password);
+      try {
+        checkLineSafePassword(input.password);
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        throw new ApiError(422, "probe_password_not_usable", { kind });
+      }
       const sealed = encryptControlPassword(this.#aead, input.password);
       override.passwordEnc = sealed;
     }
@@ -375,7 +380,9 @@ export class HookService {
   /**
    * Every control client of a server: the pack probes with their per-kind
    * overrides, the pack hook (the first probe with hook actions) and the
-   * configured hook. A probe that names no endpoint stays silent.
+   * configured hook. A probe that names no endpoint stays silent, and so
+   * does one the clients refuse (a port out of range in the game file): one
+   * broken probe never takes the other clients down with it.
    */
   async sources(
     server: ServerRecord,
@@ -387,7 +394,13 @@ export class HookService {
     for (const probe of pack.probes) {
       const override = overrides.get(probe.kind);
       const input = { probe, context, ...(override ? { override } : {}) };
-      const client = await probeClient(input);
+      let client: StatusProbe | null;
+      try {
+        client = await probeClient(input);
+      } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+        continue;
+      }
       if (client !== null) probes.push(client);
     }
     const configured = await this.#configuredClient(server);
@@ -635,8 +648,8 @@ export class HookService {
   /**
    * The hook run API: reads the live values, resolves the clients and runs
    * one action. A stop also waits for the probe to see the server down and
-   * then writes the pending change sets and runs their start hooks, which is
-   * the stopped-only policy of contract C5: a pending change is written
+   * then writes the pending change sets and runs the start hook once, which
+   * is the stopped-only policy of contract C5: a pending change is written
    * after the stop hook.
    */
   async run(
