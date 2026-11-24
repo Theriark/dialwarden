@@ -6,7 +6,8 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { CAUSES, CHANGE_SET_STATUSES } from "../changes/types.js";
-import { ApiError } from "../http/errors.js";
+import { ControlError } from "../control/types.js";
+import { controlFailure } from "../control/hooks.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import { connectorFailure } from "./connectors.js";
@@ -198,14 +199,17 @@ export function changeRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      // Hooks arrive with P6 (contract C7); until then only "none" applies.
-      if (request.body.runHooks !== "none") {
-        throw new ApiError(422, "hooks_not_available");
-      }
       const actor = actorOf(request);
       try {
-        return await app.ctx.changes.apply(request.params.id, actor);
+        return await app.ctx.changes.apply(
+          request.params.id,
+          actor,
+          request.body.runHooks,
+        );
       } catch (error) {
+        // A control failure carries its own code (the apply stops before
+        // the write); a connector failure keeps its C4 mapping.
+        if (error instanceof ControlError) throw controlFailure(error);
         throw connectorFailure(error);
       }
     },

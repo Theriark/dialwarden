@@ -16,6 +16,16 @@ export const CHANGE_SET_STATUSES = [
 export type ChangeSetStatus = (typeof CHANGE_SET_STATUSES)[number];
 
 /**
+ * The hook mode an apply asks for (contract C5 runHooks): none writes only;
+ * restart writes and runs the pack live-reload action when every changed
+ * setting is liveReloadable, else the restart hook; stop-start stops the
+ * server, writes while it is down and starts it again.
+ */
+export const RUN_HOOKS = ["none", "restart", "stop-start"] as const;
+
+export type RunHooks = (typeof RUN_HOOKS)[number];
+
+/**
  * Why a history entry exists. import is the first read of a server's files
  * (P4-A); the others are the causes of contract C5.
  */

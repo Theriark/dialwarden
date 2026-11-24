@@ -17,11 +17,18 @@
 // 5. re-read and verify the hash, snapshot after, and close the entry.
 // A file that changes during the write is read and merged again (up to three
 // times), so an outside edit is never lost. One task per server runs at once.
+//
+// P6-B adds the hook policy of contract C5: a change to a stopped-only file
+// on a running server becomes pending, is written after the stop hook or when
+// the server is seen stopped, and the start hook runs after the write; the
+// pack live-reload action can replace a restart; the runHooks mode a pending
+// change asked for is kept on its row.
 import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import {
   FormatError,
   SECRET_MASK,
+  readFileValues,
   writeFileValues,
   type JsonValue,
   type Os,
@@ -29,7 +36,7 @@ import {
   type PackFile,
   type SettingEdit,
 } from "@dialwarden/packs-schema";
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { ActivityService } from "../activity/service.js";
 import {
   importFiles,
@@ -43,6 +50,8 @@ import {
   type Connector,
 } from "../connectors/types.js";
 import type { Aead } from "../crypto/aead.js";
+import type { HookService, HookSources } from "../control/hooks.js";
+import type { SettingValue } from "../control/types.js";
 import { changeSets, serverFiles } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { ApiError, limitReached } from "../http/errors.js";
@@ -77,6 +86,7 @@ import {
   type Diff,
   type History,
   type LintEntry,
+  type RunHooks,
   type TextDiff,
 } from "./types.js";
 
@@ -186,6 +196,8 @@ export interface ChangeSetServiceOptions {
   readonly snapshots: SnapshotStore;
   readonly activity: ActivityService;
   readonly entitlement: EntitlementGate;
+  /** The hooks of P6-B; without it the apply step writes as P4 did. */
+  readonly hooks?: HookService;
   readonly now?: () => Date;
 }
 
@@ -377,6 +389,8 @@ interface Finish {
   readonly conflict?: { readonly files: readonly ConflictFile[] };
   readonly error?: ChangeSetError;
   readonly appliedAt?: string;
+  /** The hook mode a change parked as pending asked for (P6-B). */
+  readonly runHooks?: RunHooks;
 }
 
 interface NewChangeSet {
@@ -406,6 +420,7 @@ export class ChangeSetService {
   readonly #snapshots: SnapshotStore;
   readonly #activity: ActivityService;
   readonly #entitlement: EntitlementGate;
+  readonly #hooks: HookService | null;
   readonly #now: () => Date;
   readonly #locks = new Map<string, Promise<void>>();
   #lastStamp = 0;
@@ -417,6 +432,7 @@ export class ChangeSetService {
     this.#snapshots = options.snapshots;
     this.#activity = options.activity;
     this.#entitlement = options.entitlement;
+    this.#hooks = options.hooks ?? null;
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -514,6 +530,7 @@ export class ChangeSetService {
       lint: JSON.stringify(input.lint),
       conflict: null,
       error: null,
+      runHooks: null,
       restoreOf: input.restoreOf,
       createdAt: at,
       updatedAt: at,
@@ -537,6 +554,10 @@ export class ChangeSetService {
     if (fields.diff) values.diff = JSON.stringify(fields.diff);
     if (fields.lint) values.lint = JSON.stringify(fields.lint);
     if (fields.appliedAt) values.appliedAt = fields.appliedAt;
+    if (status === "pending" && fields.runHooks !== undefined) {
+      values.runHooks = fields.runHooks;
+    }
+    if (from === "pending") values.runHooks = null;
     const where = eq(changeSets.id, row.id);
     this.#store.db.update(changeSets).set(values).where(where).run();
   }
@@ -829,8 +850,19 @@ export class ChangeSetService {
     return viewOf(this.#require(id));
   }
 
-  /** Applies a draft (or a failed change set again) through the write path. */
-  async apply(id: string, actor: string): Promise<ChangeSetView> {
+  /**
+   * Applies a draft (or a failed change set again) through the write path,
+   * with the hook policy of P6-B (contract C5 runHooks): none writes only;
+   * restart runs the pack live-reload action instead when every changed
+   * setting supports it, else the restart hook; stop-start stops the server,
+   * writes while it is down and starts it again. A stopped-only change on a
+   * running server becomes pending in every mode.
+   */
+  async apply(
+    id: string,
+    actor: string,
+    runHooks: RunHooks = "none",
+  ): Promise<ChangeSetView> {
     const first = this.#require(id);
     const server = this.#servers.require(first.serverId);
     this.#servers.assertEditable(server.id);
@@ -841,9 +873,297 @@ export class ChangeSetService {
       if (!isApplicable(status)) {
         throw new ApiError(409, "invalid_state", { status });
       }
-      await this.#run(row, server, pack, actor);
+      await this.#apply(row, server, pack, actor, runHooks);
       return viewOf(this.#require(id));
     });
+  }
+
+  /** True when the payload changes at least one stopped-only file. */
+  #stoppedOnly(pack: Pack, payload: Payload): boolean {
+    const touched = new Set(touchedFiles(pack, payload));
+    return pack.files.some(
+      (file) => touched.has(file.id) && file.applyPolicy === "stopped-only",
+    );
+  }
+
+  /**
+   * True when every setting the payload edits is liveReloadable: the pack
+   * live-reload action can apply the change without a restart. Raw patches
+   * never qualify; the words they write are not known.
+   */
+  #liveReload(pack: Pack, payload: Payload): boolean {
+    if (payload.edits.length === 0) return false;
+    const settings = new Map(pack.settings.map((s) => [s.key, s]));
+    return payload.edits.every(
+      (edit) => settings.get(edit.key)?.liveReloadable === true,
+    );
+  }
+
+  /** One apply under the server lock; the hook policy decides the order. */
+  async #apply(
+    row: ChangeSetRow,
+    server: ServerRecord,
+    pack: Pack,
+    actor: string,
+    runHooks: RunHooks,
+  ): Promise<void> {
+    const hooks = this.#hooks;
+    const payload = this.#payloadOf(row);
+    const stoppedOnly = this.#stoppedOnly(pack, payload);
+    // The P4 path: no hooks asked for, and nothing in the change waits for a
+    // stopped server. Without the hook service (tests of P4) every apply is
+    // this one, exactly as before.
+    if (runHooks === "none" && (hooks === null || !stoppedOnly)) {
+      await this.#run(row, server, pack, actor);
+      return;
+    }
+    if (hooks === null) {
+      throw new ApiError(409, "hook_not_configured", { action: runHooks });
+    }
+    const states = await this.#readLocked(server, pack);
+    const values = this.#valuesOf(pack, states);
+    const context = hooks.contextFor(server, (key) => values.get(key));
+    const sources = await hooks.sources(server, context);
+    const answer = await hooks.probe(server, context, sources);
+    const running = answer.state === "running";
+    const live =
+      this.#liveReload(pack, payload) &&
+      !stoppedOnly &&
+      running &&
+      hooks.canRun(server, sources, "save") !== null;
+
+    if (runHooks === "none") {
+      if (running) {
+        this.#park(row, server, actor, runHooks);
+        return;
+      }
+      // Down: the change sets that waited for the stop are written first.
+      const pendingStart = await this.#writePending(server, pack, actor);
+      await this.#run(row, server, pack, actor);
+      if (pendingStart) {
+        await this.#afterWrite(server, sources, actor, "start", {});
+      }
+      return;
+    }
+    if (runHooks === "restart") {
+      // The pack live-reload action replaces the restart: the change is
+      // written and the game reloads it, no downtime.
+      if (live) {
+        const written = await this.#run(row, server, pack, actor);
+        if (written === "applied") {
+          await this.#afterWrite(server, sources, actor, "save", {
+            liveReload: true,
+          });
+        }
+        return;
+      }
+      if (stoppedOnly && running) {
+        this.#park(row, server, actor, runHooks);
+        return;
+      }
+      if (hooks.canRun(server, sources, "restart") === null) {
+        throw new ApiError(409, "hook_not_configured", { action: "restart" });
+      }
+      const pendingStart = running
+        ? false
+        : await this.#writePending(server, pack, actor);
+      const written = await this.#run(row, server, pack, actor);
+      if (written === "applied") {
+        await this.#afterWrite(server, sources, actor, "restart", {});
+      } else if (pendingStart) {
+        await this.#afterWrite(server, sources, actor, "start", {});
+      }
+      return;
+    }
+    // stop-start
+    if (!stoppedOnly) {
+      // Any-time files need no stop; the change is written and the game is
+      // brought back with whatever the server has.
+      const restart = hooks.canRun(server, sources, "restart") !== null;
+      const stop = hooks.canRun(server, sources, "stop");
+      const start = hooks.canRun(server, sources, "start");
+      if (!restart && (stop === null || start === null)) {
+        throw new ApiError(409, "hook_not_configured", {
+          action: "stop-start",
+        });
+      }
+      const pendingStart = running
+        ? false
+        : await this.#writePending(server, pack, actor);
+      const written = await this.#run(row, server, pack, actor);
+      if (written === "applied" && restart) {
+        await this.#afterWrite(server, sources, actor, "restart", {});
+      } else if (written === "applied") {
+        await this.#afterWrite(server, sources, actor, "stop", {});
+        await this.#afterWrite(server, sources, actor, "start", {});
+      } else if (pendingStart) {
+        await this.#afterWrite(server, sources, actor, "start", {});
+      }
+      return;
+    }
+    if (running) {
+      const stop = hooks.canRun(server, sources, "stop");
+      if (stop === null) {
+        this.#park(row, server, actor, runHooks);
+        return;
+      }
+      await hooks.runFrom(server, sources, "stop", actor);
+      if (!(await hooks.awaitStopped(server, context, sources))) {
+        this.#park(row, server, actor, runHooks);
+        return;
+      }
+      // The stop window: the older pending change sets first, oldest first,
+      // then this one (contract C5).
+      await this.#writePending(server, pack, actor);
+      await this.#run(row, server, pack, actor);
+      // This request stopped the server, so it starts it again whatever the
+      // writes did; a failed write is recorded in its change set.
+      await this.#afterWrite(server, sources, actor, "start", {});
+      return;
+    }
+    // Already down: the waiting change sets, then this one, and the start
+    // hook runs once after every write.
+    const pendingStart = await this.#writePending(server, pack, actor);
+    const written = await this.#run(row, server, pack, actor);
+    if (written === "applied" || pendingStart) {
+      await this.#afterWrite(server, sources, actor, "start", {});
+    }
+  }
+
+  /** Parks a change set as pending until the server is stopped (C5, C6). */
+  #park(
+    row: ChangeSetRow,
+    server: ServerRecord,
+    actor: string,
+    runHooks: RunHooks,
+  ): void {
+    this.#finish(row, "pending", { runHooks });
+    this.#activity.record("change.pending", {
+      serverId: server.id,
+      actor,
+      data: { changeSetId: row.id, runHooks },
+    });
+  }
+
+  /**
+   * Writes the pending change sets of a server while it is down, oldest
+   * first, under the lock the caller holds. True when one of them was
+   * applied and had asked for restart or stop-start: the caller then runs
+   * the start hook once, after every write, so no pending change lands on a
+   * server that was started again in between (contract C5).
+   */
+  async #writePending(
+    server: ServerRecord,
+    pack: Pack,
+    actor: string,
+    written?: ChangeSetView[],
+  ): Promise<boolean> {
+    let start = false;
+    for (const row of this.#pendingRows(server.id)) {
+      const mode = (row.runHooks ?? "none") as RunHooks;
+      const result = await this.#run(row, server, pack, actor);
+      written?.push(viewOf(this.#require(row.id)));
+      // A change set parked as none keeps the server down.
+      if (mode !== "none" && result === "applied") start = true;
+    }
+    return start;
+  }
+
+  /**
+   * Runs a hook after the write. Its failure never fails the apply: the
+   * change set says the write, the activity says the hook, and the next
+   * status probe says the server.
+   */
+  async #afterWrite(
+    server: ServerRecord,
+    sources: HookSources,
+    actor: string,
+    action: "save" | "stop" | "start" | "restart",
+    extra: Record<string, unknown>,
+  ): Promise<void> {
+    const hooks = this.#hooks;
+    if (hooks === null) return;
+    try {
+      await hooks.runFrom(server, sources, action, actor, extra);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      // hook_not_configured or the control failure was recorded as a
+      // hook.run event; the write stands.
+    }
+  }
+
+  /**
+   * Writes the pending change sets of a server while it is stopped (the
+   * stopped-only policy of P6-B): the probe is asked again under the lock,
+   * every pending change set is written in the order it was made, and the
+   * start hook runs once after the last write (contract C5).
+   */
+  async flushPending(
+    server: ServerRecord,
+    actor: string,
+  ): Promise<ChangeSetView[]> {
+    const hooks = this.#hooks;
+    if (hooks === null) return [];
+    return this.#exclusive(server.id, async () => {
+      const rows = this.#pendingRows(server.id);
+      if (rows.length === 0) return [];
+      const pack = this.#servers.pack(server);
+      const states = await this.#readLocked(server, pack);
+      const values = this.#valuesOf(pack, states);
+      const context = hooks.contextFor(server, (key) => values.get(key));
+      const sources = await hooks.sources(server, context);
+      const answer = await hooks.probe(server, context, sources);
+      if (answer.state === "running") return [];
+      const written: ChangeSetView[] = [];
+      if (await this.#writePending(server, pack, actor, written)) {
+        await this.#afterWrite(server, sources, actor, "start", {});
+      }
+      return written;
+    });
+  }
+
+  /** The pending change sets of a server, oldest first (contract C5). */
+  pending(server: ServerRecord): ChangeSetView[] {
+    return this.#pendingRows(server.id).map(viewOf);
+  }
+
+  #pendingRows(serverId: string): ChangeSetRow[] {
+    return this.#store.db
+      .select()
+      .from(changeSets)
+      .where(
+        and(
+          eq(changeSets.serverId, serverId),
+          eq(changeSets.status, "pending"),
+        ),
+      )
+      .orderBy(asc(changeSets.createdAt))
+      .all();
+  }
+
+  /**
+   * The live setting values of a server as the control clients need them:
+   * read from the files, never masked (a probe's password is the game's
+   * own), through the same read every other caller takes.
+   */
+  async controlValues(server: ServerRecord): Promise<SettingValue> {
+    const pack = this.#servers.pack(server);
+    const states = await this.read(server);
+    const values = this.#valuesOf(pack, states);
+    return (key) => values.get(key);
+  }
+
+  #valuesOf(
+    pack: Pack,
+    states: ReadonlyMap<string, FileState>,
+  ): Map<string, JsonValue> {
+    const values = new Map<string, JsonValue>();
+    for (const state of states.values()) {
+      if (state.bytes === null) continue;
+      const read = readFileValues(pack, state.fileId, state.bytes);
+      for (const [key, value] of read.values) values.set(key, value);
+    }
+    return values;
   }
 
   #payloadOf(row: ChangeSetRow): Payload {
@@ -857,7 +1177,7 @@ export class ChangeSetService {
     server: ServerRecord,
     pack: Pack,
     actor: string,
-  ): Promise<void> {
+  ): Promise<ChangeSetStatus> {
     const job: Job = {
       row,
       server,
@@ -874,6 +1194,7 @@ export class ChangeSetService {
       if (!(error instanceof ConnectorError)) throw error;
       this.#finish(row, "failed", { error: connectorFailure(error) });
     }
+    return this.#require(row.id).status as ChangeSetStatus;
   }
 
   async #attempts(job: Job, connector: Connector): Promise<void> {

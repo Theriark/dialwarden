@@ -192,12 +192,29 @@ CREATE TABLE presets (
 CREATE INDEX presets_created ON presets (created_at);
 `;
 
+// The per-server hook configuration (P6-B, contract C7) and the hook mode a
+// pending change set asked for. The hook column holds the ControlConfig as
+// JSON (an ssh command string or a docker-socket-proxy), the overrides column
+// one ProbeOverride per probe kind with any password already encrypted;
+// run_hooks on a change set says what the flush should do after the write.
+const serverHooks = `
+CREATE TABLE server_hooks (
+  server_id TEXT PRIMARY KEY NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  hook TEXT,
+  overrides TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT
+);
+ALTER TABLE change_sets ADD COLUMN run_hooks TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
   { id: "0003_connectors", sql: connectors },
   { id: "0004_servers", sql: servers },
   { id: "0005_presets", sql: presets },
+  { id: "0006_server_hooks", sql: serverHooks },
 ];
 
 /** The id of the newest migration this build knows. */
