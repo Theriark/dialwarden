@@ -274,8 +274,10 @@ test("the launch page shows the source, the live line and the snippets", async (
   await panel.getByRole("button", { name: "Copy" }).click();
   await expect(panel.getByRole("button", { name: "Copied" })).toBeVisible();
 
-  // One flag changes the line live and saves through the same dialog.
-  await page.getByLabel("Player slots (-players)").fill("16");
+  // One flag changes the line live and saves through the same dialog. The
+  // worker threads flag is one the pack leaves to the app: the port, player
+  // and announce flags are panel-managed and render locked by design.
+  await page.getByLabel("Worker threads", { exact: true }).fill("8");
   await expect(page.getByText("1 flag changed")).toBeVisible();
   await page.getByRole("button", { name: "Review and save" }).click();
   const dialog = page.getByRole("dialog", { name: "Save these changes?" });
@@ -284,5 +286,9 @@ test("the launch page shows the source, the live line and the snippets", async (
   await expect(
     page.getByText("The files hold the new values.").first(),
   ).toBeVisible();
-  await expect(page.getByLabel("Launch line")).toContainText("-players=16");
+  // An empty args file carries no style, so the renderer writes the value
+  // as a word; a file with inline values would write the equals form.
+  await expect(page.getByLabel("Launch line")).toContainText(
+    /-NumberOfWorkerThreadsServer[ =]8/,
+  );
 });
