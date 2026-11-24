@@ -140,7 +140,7 @@ test("every screen at 1440, 768 and 390 in light and dark", async ({
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
   await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
-  await page.getByRole("button", { name: "Sign in"}).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Fleet" })).toBeVisible();
 
   for (const theme of THEMES) {

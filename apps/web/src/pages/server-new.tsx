@@ -423,6 +423,7 @@ export function NewServerPage() {
                       setPassword(event.target.value);
                       connectionChanged();
                     }}
+                  />
                 ) : null}
                 {key.data === undefined ? null : (
                   <div className="flex flex-col gap-2 rounded-control border border-border bg-accent-soft p-3">

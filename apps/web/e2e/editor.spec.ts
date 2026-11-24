@@ -74,7 +74,7 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.getByLabel("Server folder").fill(SERVER_DIR);
   await page.getByRole("button", { name: "Test connection" }).click();
   await expect(page.getByText("Connected to").first()).toBeVisible();
-  await page.getByRole("button", { name: "Detect the game"}).click();
+  await page.getByRole("button", { name: "Detect the game" }).click();
   await expect(page.getByText("Palworld").first()).toBeVisible();
   await page.getByRole("button", { name: "Add server" }).click();
   await expect(page).toHaveURL("/servers/palworld-home/settings");
