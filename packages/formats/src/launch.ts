@@ -36,6 +36,7 @@ interface Char {
   /** Raw range of the byte, its escape included. */
   readonly from: number;
   readonly to: number;
+  readonly context: Context;
   /** Quoted segment the byte belongs to; -1 when unquoted. */
   readonly segment: number;
 }
@@ -108,7 +109,7 @@ function quoted(
     if (c === "") throw new ParseFail(open, `the ${quote} is not closed`);
     if (c === quote) return i + 1;
     const next = text.charAt(i + 1);
-    if (context === 1 && c === "\\" && /[\\\"$`]/.test(next)) {
+    if (context === 1 && c === "\\" && /[\\"$`]/.test(next)) {
       const byte = text.charCodeAt(i + 1);
       chars.push({ byte, from: i, to: i + 2, context, segment });
       i += 2;
@@ -382,7 +383,7 @@ function parse(bytes: Uint8Array): LaunchDoc {
 // Writing -------------------------------------------------------------------
 
 function doubleQuoted(text: string): string {
-  return text.replace(/[\\\"$`]/g, (c) => `\\${c}`);
+  return text.replace(/[\\$`]/g, (c) => `\\${c}`);
 }
 
 /** A whole word that the shell reads back as text. */
@@ -545,7 +546,7 @@ function insertArg(
     return [{ start: at, end: at, text: encodeIn(context, option) }];
   }
   const equals = doc.args.some((a) => a.inline !== undefined && !a.option);
-  let token: string = flag;
+  let token = flag;
   if (text !== undefined && flag.startsWith("-") && equals) {
     token = `${flag}=${encodeIn(0, text)}`;
   } else if (text !== undefined) {
