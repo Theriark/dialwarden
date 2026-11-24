@@ -17,7 +17,12 @@ import { ApiError } from "../http/errors.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
-import { actorOf, historySchema, lintEntrySchema } from "./changes.js";
+import {
+  actorOf,
+  changeSetSchema,
+  historySchema,
+  lintEntrySchema,
+} from "./changes.js";
 import {
   connectionSpecSchema,
   connectorFailure,
@@ -408,6 +413,25 @@ export function serverRoutes(app: FastifyInstance): void {
     async (request) => {
       const server = servers().require(request.params.slug);
       return app.ctx.changes.history(server);
+    },
+  );
+
+  api.get(
+    "/api/v1/servers/:slug/pending",
+    {
+      config: user,
+      schema: {
+        tags: ["servers"],
+        params: slugParams,
+        response: { 200: z.object({ items: z.array(changeSetSchema) }) },
+      },
+    },
+    async (request) => {
+      // The pending change sets of a server (P6-B, contract C5), oldest
+      // first: the pending badge and list read them, whatever the Free
+      // history cap hides.
+      const server = servers().require(request.params.slug);
+      return { items: app.ctx.changes.pending(server) };
     },
   );
 }
