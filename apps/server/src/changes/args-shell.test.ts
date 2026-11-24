@@ -62,4 +62,35 @@ describe("the app-managed args file under eval", () => {
     });
     expect(await fileText(root, ARGS_FILE)).toBe(before);
   });
+
+  // Threat test T12b (security re-review THE-2605, N1): a comment that only
+  // the parser sees, after a CR or a BOM, still fails validation.
+  it.each<[string, (line: string) => string]>([
+    ["a CR", (line) => `${line}\r# $(touch /tmp/dw-pwn)\n`],
+    ["a BOM", () => `${String.fromCharCode(0xfeff)}# $(touch /tmp/dw-pwn)\n`],
+  ])("refuses a command substitution hidden after %s", async (_, patch) => {
+    current = await testApp();
+    const api = apiOf(current.app, await setupOwner(current.app));
+    const root = await palworldFolder(base);
+    const slug = await addServer(api, "Lighthouse", root);
+    const before = await fileText(root, ARGS_FILE);
+    const made = (
+      await api.post(`/api/v1/servers/${slug}/change-sets`, {
+        patches: [{ fileId: "launch", text: patch(before.trimEnd()) }],
+      })
+    ).json<ChangeSetBody>();
+    expect(made.lint).toContainEqual(
+      expect.objectContaining({
+        fileId: "launch",
+        code: "shell-character",
+        severity: "error",
+      }),
+    );
+    const failed = await apply(api, made.id);
+    expect(failed).toMatchObject({
+      status: "failed",
+      error: { code: "validation" },
+    });
+    expect(await fileText(root, ARGS_FILE)).toBe(before);
+  });
 });
