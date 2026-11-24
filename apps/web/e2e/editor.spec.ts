@@ -58,12 +58,23 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.getByRole("link", { name: "Add server" }).first().click();
   await expect(page).toHaveURL("/servers/new");
 
+  // With the SFTP connector the wizard never scrolls sideways at 390: the
+  // fingerprint wraps and Copy key sits on its own row (live check F4).
+  await page.getByText("SFTP", { exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByText("This instance's public key")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByText("Local folder", { exact: true }).click();
+
   // The wizard: name, Local connector pointing at the fixture folder.
   await page.getByLabel("Server name").fill("Palworld Home");
   await page.getByLabel("Server folder").fill(SERVER_DIR);
   await page.getByRole("button", { name: "Test connection" }).click();
   await expect(page.getByText("Connected to").first()).toBeVisible();
-  await page.getByRole("button", { name: "Detect the game" }).click();
+  await page.getByRole("button", { name: "Detect the game"}).click();
   await expect(page.getByText("Palworld").first()).toBeVisible();
   await page.getByRole("button", { name: "Add server" }).click();
   await expect(page).toHaveURL("/servers/palworld-home/settings");
@@ -124,6 +135,21 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await page.goto("/servers/palworld-home/raw");
   await expect(page.locator(".monaco-editor")).toBeVisible();
   await expect(page.getByLabel("File")).toBeVisible();
+
+  // A malformed line marks the gutter at once (live check F3) and blocks
+  // the save with the typed editor's words (F1), so no failed change set
+  // is ever created.
+  await page.locator(".monaco-editor").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("this line has no key value pair");
+  await expect(page.locator(".squiggly-error").first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Review and save" }),
+  ).toBeDisabled();
+  await expect(page.getByText("fix the errors first")).toBeVisible();
+  await page.reload();
+  await expect(page.locator(".monaco-editor")).toBeVisible();
 
   // The Free plan selection shows the one server as editable.
   await page.goto("/settings/plan");
