@@ -197,3 +197,44 @@ describe("Rust WebRCON client (simulated)", () => {
     expect(await down.probe()).toEqual({ state: "stopped" });
   });
 });
+
+// Threat tests T5 and T11 (security review THE-2598): a command with a line
+// break never reaches the console, and a refusal never names the secret or
+// the console URL that carries it.
+describe("Rust WebRCON client: refusals (simulated)", () => {
+  it("refuses an allow-listed command holding a line break", async () => {
+    paths = [];
+    frames = [];
+    const control = new RustWebRcon({
+      host: "127.0.0.1",
+      port,
+      password: PASSWORD,
+      allow: ["server.write\nquit"],
+      saveCommand: "server.write\nquit",
+      readMs: 2_000,
+    });
+    await expect(control.save?.()).rejects.toMatchObject({ code: "Refused" });
+    expect(frames).toEqual([]);
+    expect(paths).toEqual([]);
+  });
+
+  it("keeps the secret and the console URL out of a failed save", async () => {
+    acceptHandshake = false;
+    const control = new RustWebRcon({
+      host: "127.0.0.1",
+      port,
+      password: PASSWORD,
+      allow: ALLOW,
+      saveCommand: "server.write",
+      readMs: 2_000,
+    });
+    const error: unknown = await control
+      .save?.()
+      .catch((caught: unknown) => caught);
+    const { code, message } = error as { code: string; message: string };
+    const shown = JSON.stringify({ code, message });
+    expect(shown).not.toContain(PASSWORD);
+    expect(shown).not.toContain(`ws://127.0.0.1:${port}`);
+    acceptHandshake = true;
+  });
+});
