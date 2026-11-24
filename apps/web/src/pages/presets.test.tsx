@@ -132,4 +132,99 @@ describe("PresetsPage", () => {
       expect(screen.queryByText(/answered 422/)).toBeNull();
     });
   });
+
+  it("labels a stopped-only file in the save dialog of a preset apply", async () => {
+    stubViewport(1280);
+    stubWorld(([method, path]) => {
+      if (method === "POST" && path === "/api/v1/presets/p1/apply") {
+        return {
+          status: 200,
+          body: {
+            id: "cs-9",
+            serverId: "home",
+            status: "draft",
+            cause: "preset",
+            author: "owner@example.test",
+            createdAt: "2026-11-23T12:00:00Z",
+            updatedAt: "2026-11-23T12:00:00Z",
+            appliedAt: null,
+            restoreOf: null,
+            diff: {
+              semantic: [
+                {
+                  kind: "changed",
+                  fileId: "settings",
+                  settingKey: "expRate",
+                  label: "Exp rate",
+                  from: 1,
+                  to: 2,
+                  restartRequired: true,
+                },
+              ],
+              text: [{ fileId: "settings", unifiedDiff: "" }],
+            },
+            lint: [],
+            conflict: null,
+            error: null,
+          },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/games/testpack/settings-meta") {
+        return {
+          status: 200,
+          body: {
+            displayName: "Test Pack",
+            version: "1.0.0",
+            settings: [],
+            files: [
+              {
+                id: "settings",
+                path: "settings.ini",
+                adapter: "ini",
+                applyPolicy: "stopped-only",
+              },
+            ],
+          },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers/home/hooks") {
+        return {
+          status: 200,
+          body: {
+            packId: "testpack",
+            hooksSupported: [],
+            hook: null,
+            probes: [],
+            available: { save: null, stop: null, start: null, restart: null },
+            updatedAt: null,
+            updatedBy: null,
+          },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers/home/status") {
+        return {
+          status: 200,
+          body: {
+            state: "running",
+            players: 0,
+            source: "a2s",
+            at: "2026-11-23T12:00:00Z",
+            pending: 0,
+          },
+        };
+      }
+      return undefined;
+    });
+    startRouter("/presets");
+
+    const select = (await screen.findByLabelText(
+      "Apply to",
+    )) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "home" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply with diff" }));
+
+    await screen.findByRole("dialog", { name: "Save these changes?" });
+    await screen.findByText("Read at start only");
+    expect(screen.getByText(/waits as pending/)).toBeTruthy();
+  });
 });

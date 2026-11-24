@@ -1,7 +1,6 @@
 // Screens that later phases build render a designed empty state, never a
 // blank page and never a dead button (dev-work-plan P1-B).
 import {
-  Activity,
   CalendarClock,
   FileText,
   Layers,
@@ -91,17 +90,6 @@ export function ReportsPage() {
       description="Change reports you can print, copy or post."
       icon={<FileText className={ICON} aria-hidden="true" />}
       phase="phase P9"
-    />
-  );
-}
-
-export function ActivityPage() {
-  return (
-    <ComingSoon
-      title="Activity"
-      description="Everything that happened across the fleet."
-      icon={<Activity className={ICON} aria-hidden="true" />}
-      phase="phase P6"
     />
   );
 }

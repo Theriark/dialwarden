@@ -5,20 +5,29 @@
 // the five most recent versions are visible; the older ones are kept and
 // visible on Paid.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import {
+  Clock,
   Download,
   FileWarning,
   History,
   RotateCcw,
+  Square,
   Undo2,
   CalendarClock,
   Layers,
 } from "lucide-react";
 import { useState, type ComponentType } from "react";
-import { restoreSnapshot } from "../api/changes";
+import { restoreSnapshot, runHook } from "../api/changes";
 import { errorMessage } from "../api/errors";
-import { historyQuery, p4keys, serverQuery } from "../api/queries";
+import {
+  historyQuery,
+  hooksQuery,
+  p4keys,
+  p6keys,
+  pendingQuery,
+  serverQuery,
+} from "../api/queries";
 import type {
   Cause,
   ChangeSet,
@@ -26,16 +35,21 @@ import type {
   HistoryEntry as Entry,
   HistorySnapshot,
 } from "../api/schema";
+import { useCanRunHooks } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { ChangeChip } from "../components/change-chip";
+import { ServerTabs } from "../components/server-tabs";
 import { UpgradeHint } from "../components/upgrade-hint";
 import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { Card } from "../components/ui/card";
+import { ConfirmDialog } from "../components/ui/dialog";
 import { EmptyState, ErrorState, RowsSkeleton } from "../components/ui/states";
 import { useToast } from "../components/ui/toast";
 import { formatDateTime } from "../lib/format";
 import { cn } from "../lib/cn";
+import { sourceWord } from "./server-hooks";
 
 const CAUSE_WORDS: Record<Cause, string> = {
   app: "Changed in Dialwarden",
@@ -172,6 +186,145 @@ export function TimelineRow({
   );
 }
 
+/**
+ * The pending list (dev-work-plan P6-C step 3): the change sets of this
+ * server waiting for it to stop, oldest first, from GET pending (contract
+ * C5), with the stop hook at hand when one can run it.
+ */
+export function PendingList({ slug }: { slug: string }) {
+  const pending = useQuery(pendingQuery(slug));
+  const hooks = useQuery(hooksQuery(slug));
+  const canRun = useCanRunHooks();
+  const client = useQueryClient();
+  const toast = useToast();
+  const [confirming, setConfirming] = useState(false);
+
+  const stop = useMutation({
+    mutationFn: () => runHook(slug, "stop"),
+    onSuccess: (answer) => {
+      const flushed = answer.flushed ?? 0;
+      toast.push({
+        kind: "success",
+        title: answer.stopped === true ? "Server stopped" : "Stop sent",
+        description:
+          answer.stopped === true
+            ? `${flushed} pending ${flushed === 1 ? "change was" : "changes were"} written.`
+            : "The probe did not see the server stopped within the wait; the pending changes are written at the next check that does.",
+      });
+    },
+    onError: (error) => {
+      toast.push({
+        kind: "error",
+        title: "The stop hook did not run",
+        description: errorMessage(error),
+      });
+    },
+    onSettled: () => {
+      setConfirming(false);
+      void client.invalidateQueries({ queryKey: p6keys.pending(slug) });
+      void client.invalidateQueries({ queryKey: p6keys.status(slug) });
+      void client.invalidateQueries({ queryKey: p4keys.history(slug) });
+      void client.invalidateQueries({ queryKey: p4keys.settings(slug) });
+      void client.invalidateQueries({ queryKey: ["activity"] });
+    },
+  });
+
+  if (pending.isPending) {
+    return <RowsSkeleton rows={2} />;
+  }
+  if (pending.isError) {
+    return (
+      <ErrorState
+        message="The pending changes could not be loaded."
+        onRetry={() => {
+          void pending.refetch();
+        }}
+      />
+    );
+  }
+  const items = pending.data.items;
+  if (items.length === 0) {
+    return null;
+  }
+  const stopSource = hooks.data?.available.stop ?? null;
+  return (
+    <Card
+      title="Waiting for the server to stop"
+      description="The game reads these files when it starts, so each change is written once the server is seen stopped, oldest first."
+      aside={
+        <Badge kind="pending">
+          {items.length} pending {items.length === 1 ? "change" : "changes"}
+        </Badge>
+      }
+    >
+      <ol className="flex flex-col divide-y divide-border">
+        {items.map((item) => (
+          <li key={item.id} className="flex flex-col gap-2 py-3 first:pt-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
+              <span className="flex items-center gap-1 font-medium text-fg">
+                <Clock className="size-3.5 shrink-0" aria-hidden="true" />
+                Saved as pending
+              </span>
+              <time dateTime={item.createdAt}>
+                {formatDateTime(item.createdAt)}
+              </time>
+              <span>by {item.author}</span>
+            </div>
+            <ul className="flex flex-wrap gap-1.5">
+              {item.diff.semantic.map((chip, index) => (
+                <ChangeChip key={`${item.id}-${index}`} chip={chip} />
+              ))}
+              {item.diff.semantic.length === 0
+                ? item.diff.text.map((part) => (
+                    <li
+                      key={part.fileId}
+                      className="inline-flex items-center rounded-full border border-info/40 bg-info-soft px-2 py-0.5 text-xs font-medium text-info"
+                    >
+                      {part.fileId}: text edited
+                    </li>
+                  ))
+                : null}
+            </ul>
+          </li>
+        ))}
+      </ol>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-fg-muted">
+          {stopSource === null
+            ? "No hook can stop this server from here: stop it the way you always do, and the next status check writes the changes."
+            : `The stop hook runs through the ${sourceWord(stopSource)} client and writes the changes once the server is down.`}
+        </span>
+        {stopSource !== null ? (
+          <Button
+            variant="primary"
+            disabled={!canRun}
+            loading={stop.isPending}
+            icon={<Square className="size-4" aria-hidden="true" />}
+            title={canRun ? undefined : "Running a hook needs the editor role"}
+            onClick={() => {
+              setConfirming(true);
+            }}
+          >
+            Stop the server now
+          </Button>
+        ) : null}
+      </div>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Stop the server now?"
+        description="Players are disconnected. The pending changes are written once the probe sees the server stopped, and the start hook runs again when one asked for it."
+        confirmLabel="Stop the server"
+        destructive
+        loading={stop.isPending}
+        onConfirm={() => {
+          stop.mutate();
+        }}
+      />
+    </Card>
+  );
+}
+
 export function ServerHistoryPage() {
   const params = useParams({ strict: false }) as { slug: string };
   const slug = params.slug;
@@ -282,16 +435,11 @@ export function ServerHistoryPage() {
       <PageHeader
         title={`${server.data.name} history`}
         description="Every change of this server, newest first. One click puts the settings back to how they were before a change."
-        actions={
-          <Link
-            to="/servers/$slug/settings"
-            params={{ slug }}
-            className="inline-flex h-8 items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft"
-          >
-            Back to settings
-          </Link>
-        }
       />
+      <ServerTabs slug={slug} current="history" />
+      <div className="mb-6 empty:hidden">
+        <PendingList slug={slug} />
+      </div>
       {history.isError ? (
         <ErrorState
           message="The history could not be loaded."

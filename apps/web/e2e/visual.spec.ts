@@ -1,11 +1,14 @@
-// The visual walk of the P5 editor (THE-2493, references/ui-standard.md):
-// every screen of the phase at 1440, 768 and 390 in light and dark, saved as
-// CI artifacts for the phase report. It runs after the editor walk, so the
-// server and the Paid licence exist. The shots are JPEG because the artifact
-// download of the CI evidence path is bounded at 8 MiB per artifact.
+// The visual walk (references/ui-standard.md): every screen of the current
+// phase at 1440, 768 and 390 in light and dark, saved as CI artifacts for the
+// phase report. It runs last, after the editor and P6 walks, so the server,
+// the licence, the hook and a pending change exist. The docker hook is the
+// SimProxy of the P6 walk pattern: the status it reports is simulated. The
+// shots are JPEG because the artifact download of the CI evidence path is
+// bounded at 8 MiB per artifact.
 /* eslint-disable security/detect-non-literal-fs-filename -- one shots folder the CI job owns */
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { CONTAINER_LABEL, SimProxy } from "./sim-proxy";
 
 const OWNER = {
   email: "owner@example.net",
@@ -62,6 +65,39 @@ const SCREENS: readonly Screen[] = [
     path: "/servers/palworld-home/history",
     ready: async (page) => {
       await expect(page.getByText("First import")).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Waiting for the server to stop" }),
+      ).toBeVisible();
+    },
+  },
+  {
+    name: "hooks",
+    path: "/servers/palworld-home/hooks",
+    ready: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: "Palworld Home hooks" }),
+      ).toBeVisible();
+      await expect(page.getByText("Running").first()).toBeVisible();
+    },
+  },
+  {
+    name: "launch",
+    path: "/servers/palworld-home/launch",
+    ready: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: "Palworld Home launch" }),
+      ).toBeVisible();
+      await expect(page.getByLabel("Bash snippet")).toBeVisible();
+    },
+  },
+  {
+    name: "activity",
+    path: "/activity",
+    ready: async (page) => {
+      await expect(
+        page.getByRole("heading", { name: "Activity" }),
+      ).toBeVisible();
+      await expect(page.getByText("Change applied").first()).toBeVisible();
     },
   },
   {
@@ -131,10 +167,17 @@ const SCREENS: readonly Screen[] = [
       if ((page.viewportSize()?.width ?? 0) < 640) {
         await page.getByText("Rates", { exact: true }).first().click();
       }
-      await page.getByLabel("Experience rate").fill("2");
+      // Whatever the walks before this one left in the field, the next
+      // value up (wrapped inside the pack's range) is always a change.
+      const field = page.getByLabel("Experience rate");
+      const current = Number(await field.inputValue());
+      await field.fill(String((current % 20) + 1));
       await page.getByRole("button", { name: "Review and save" }).click();
       await expect(
         page.getByRole("dialog", { name: "Save these changes?" }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("radio", { name: /Save and restart/ }),
       ).toBeVisible();
     },
   },
@@ -156,11 +199,50 @@ test("every screen at 1440, 768 and 390 in light and dark", async ({
 }) => {
   test.setTimeout(600_000);
   mkdirSync(SHOTS, { recursive: true });
+  const sim = new SimProxy();
+  await sim.start();
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
   await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Fleet" })).toBeVisible();
+
+  // The hook of the P6 walk points at a port of its own worker, so this
+  // walk re-points it at this one's simulated proxy through the same API
+  // the Hooks page uses, and puts the container back up.
+  const session = (await (
+    await page.request.get("/api/v1/auth/session")
+  ).json()) as { csrfToken: string };
+  const saved = await page.request.put("/api/v1/servers/palworld-home/hooks", {
+    headers: { "x-csrf-token": session.csrfToken },
+    data: {
+      hook: {
+        kind: "dockerProxy",
+        url: `http://127.0.0.1:${sim.port}`,
+        containerLabel: CONTAINER_LABEL,
+      },
+    },
+  });
+  expect(saved.ok()).toBeTruthy();
+  sim.running = true;
+
+  // One pending change for the pending list of the history screen: the
+  // simulated container runs, so the stopped-only change parks.
+  await page.goto("/servers/palworld-home/settings");
+  await page.getByLabel("Search settings").fill("Experience rate");
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    await page.getByText("Rates", { exact: true }).first().click();
+  }
+  const field = page.getByLabel("Experience rate");
+  const current = Number(await field.inputValue());
+  await field.fill(String((current % 20) + 1));
+  await page.getByRole("button", { name: "Review and save" }).click();
+  const dialog = page.getByRole("dialog", { name: "Save these changes?" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "1 pending change" }),
+  ).toBeVisible();
 
   for (const theme of THEMES) {
     await page.emulateMedia({ colorScheme: theme });
@@ -173,7 +255,7 @@ test("every screen at 1440, 768 and 390 in light and dark", async ({
         await page.goto(screen.path);
         await screen.ready(page);
         await page.screenshot({
-          path: `${SHOTS}/p5-${screen.name}-${width}-${theme}.jpg`,
+          path: `${SHOTS}/p6-${screen.name}-${width}-${theme}.jpg`,
           type: "jpeg",
           quality: 75,
           fullPage: screen.full !== false,
@@ -181,4 +263,5 @@ test("every screen at 1440, 768 and 390 in light and dark", async ({
       }
     }
   }
+  sim.close();
 });

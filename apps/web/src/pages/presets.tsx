@@ -31,7 +31,7 @@ import { SelectField, TextField } from "../components/ui/field";
 import { EmptyState, ErrorState, RowsSkeleton } from "../components/ui/states";
 import { useToast } from "../components/ui/toast";
 import { formatDate } from "../lib/format";
-import type { Setting } from "@dialwarden/packs-schema";
+import type { PackFile, Setting } from "@dialwarden/packs-schema";
 
 function PresetCard({
   preset,
@@ -131,6 +131,19 @@ export function PresetsPage() {
     ...settingsMetaQuery(settings.data?.packId ?? ""),
     enabled: settings.data !== undefined,
   });
+  // The pack of the server a preset is applied to: the save dialog labels a
+  // change to a file the game reads at start only (the create form's meta
+  // above follows the server chosen for a new preset, not this one).
+  const appliedPackId = servers.data?.items.find(
+    (server) => server.id === changeSet?.serverId,
+  )?.packId;
+  const appliedMeta = useQuery({
+    ...settingsMetaQuery(appliedPackId ?? ""),
+    enabled: appliedPackId !== undefined,
+  });
+  const stoppedOnlyFiles = ((appliedMeta.data?.files ?? []) as PackFile[])
+    .filter((file) => file.applyPolicy === "stopped-only")
+    .map((file) => file.id);
 
   const create = useMutation({
     mutationFn: () => {
@@ -408,6 +421,7 @@ export function PresetsPage() {
         <SaveDialog
           slug={changeSet.serverId}
           changeSet={changeSet}
+          stoppedOnlyFiles={stoppedOnlyFiles}
           onClose={() => {
             setChangeSet(null);
           }}

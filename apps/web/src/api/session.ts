@@ -55,6 +55,22 @@ export function useIsOwner(): boolean {
   return user?.role === "owner";
 }
 
+/** The roles that may set or change a server's hooks (routes/hooks.ts). */
+export const HOOK_CONFIG_ROLES: readonly string[] = ["owner", "admin"];
+
+/** The roles that may run a hook action; a viewer only looks. */
+export const HOOK_RUN_ROLES: readonly string[] = ["owner", "admin", "editor"];
+
+export function useCanConfigureHooks(): boolean {
+  const user = useSessionUser();
+  return user !== null && HOOK_CONFIG_ROLES.includes(user.role);
+}
+
+export function useCanRunHooks(): boolean {
+  const user = useSessionUser();
+  return user !== null && HOOK_RUN_ROLES.includes(user.role);
+}
+
 /**
  * The second sign-in step challenge, kept in memory only (never in the URL).
  * Reading never clears it, because the page reads it in a state initialiser

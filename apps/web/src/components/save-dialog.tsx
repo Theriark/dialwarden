@@ -1,15 +1,18 @@
 // The save dialog (screen 5 of dev-work-plan P5): what a change set will do
 // before it is applied — the semantic chips, the text diff in the Monaco diff
-// editor, the lint, the restart-required badges — and apply. Hooks (restart,
-// stop and start) arrive with P6, so only "without a restart" is offered and
-// the choice is shown disabled, never hidden.
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { RotateCw } from "lucide-react";
+// editor, the lint, the restart-required badges — and the apply choice of
+// P6-C: save only, or save and restart. Save and restart maps to the C5
+// runHooks restart, or stop-start when the change touches a stopped-only
+// file, so the server stops, writes and starts. A stopped-only change saved
+// on a running server comes back pending and is written at the next stop.
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Pause, RotateCw } from "lucide-react";
 import { useState } from "react";
-import { applyChangeSet } from "../api/changes";
+import { applyChangeSet, type RunHooks } from "../api/changes";
+import { ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
-import { p4keys } from "../api/queries";
-import type { ChangeSet } from "../api/schema";
+import { hooksQuery, p4keys, p6keys, serverStatusQuery } from "../api/queries";
+import type { ChangeSet, HooksView } from "../api/schema";
 import { Alert } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -19,6 +22,7 @@ import { ChangeChip } from "./change-chip";
 import { LazyDiffEditor } from "./code-editor";
 import { splitUnifiedDiff } from "../lib/unified-diff";
 import { formatDateTime } from "../lib/format";
+import { cn } from "../lib/cn";
 
 function lintWord(severity: string): string {
   if (severity === "error") return "Blocks the save";
@@ -31,6 +35,44 @@ function lintKind(severity: string): "error" | "warning" | "info" | undefined {
   if (severity === "warning") return "warning";
   if (severity === "info") return "info";
   return undefined;
+}
+
+export type ApplyChoice = "save" | "restart";
+
+/**
+ * The C5 runHooks of a choice: a change that touches a stopped-only file
+ * needs the stop, write, start cycle; any other change is written and the
+ * server restarted (or reloaded live when every setting allows it).
+ */
+export function runHooksOf(
+  choice: ApplyChoice,
+  stoppedOnly: boolean,
+): RunHooks {
+  if (choice === "save") return "none";
+  return stoppedOnly ? "stop-start" : "restart";
+}
+
+/**
+ * True when a client can restart the server after a write: the restart
+ * action, or stop and start together. The pack's live-reload save does not
+ * count — it writes settings into the running game and cannot bring a
+ * stopped server back, so a stop-start apply must never rely on it.
+ */
+export function canRestart(hooks: HooksView | undefined): boolean {
+  if (hooks === undefined) return false;
+  const { available } = hooks;
+  return (
+    available.restart !== null ||
+    (available.stop !== null && available.start !== null)
+  );
+}
+
+/** The files a change set writes, from its semantic and text diffs. */
+export function touchedFiles(changeSet: ChangeSet): string[] {
+  const files = new Set<string>();
+  for (const chip of changeSet.diff.semantic) files.add(chip.fileId);
+  for (const part of changeSet.diff.text) files.add(part.fileId);
+  return [...files];
 }
 
 export interface SaveDialogProps {
@@ -46,12 +88,21 @@ export interface SaveDialogProps {
    * presets flow has no file paths).
    */
   fileLanguage?: ((fileId: string) => string) | undefined;
+  /**
+   * The ids of the pack files with applyPolicy stopped-only: a change to
+   * one of them is read by the game at start only.
+   */
+  stoppedOnlyFiles?: readonly string[] | undefined;
 }
+
+const OPTION =
+  "flex cursor-pointer gap-3 rounded-control border border-border-strong bg-surface p-3 has-[:checked]:border-primary has-[:checked]:bg-accent-soft has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60";
 
 export function SaveDialog({
   slug,
   changeSet,
   fileLanguage,
+  stoppedOnlyFiles = [],
   onClose,
   onApplied,
 }: SaveDialogProps) {
@@ -61,11 +112,28 @@ export function SaveDialog({
   // apply answers, then the returned one - the server also answers HTTP 200
   // with conflict or failed, and those must change this dialog, not vanish.
   const [returned, setReturned] = useState<ChangeSet | null>(null);
+  const [choice, setChoice] = useState<ApplyChoice>("save");
+  const [refused, setRefused] = useState<string | null>(null);
   const current = returned ?? changeSet;
+  const hooks = useQuery(hooksQuery(slug));
+  const status = useQuery(serverStatusQuery(slug));
+
+  const stoppedOnly = touchedFiles(current).some((fileId) =>
+    stoppedOnlyFiles.includes(fileId),
+  );
+  const running = status.data?.state === "running";
+  const restartable = canRestart(hooks.data);
 
   const apply = useMutation({
-    mutationFn: () => applyChangeSet(changeSet.id, "none"),
+    mutationFn: () =>
+      applyChangeSet(changeSet.id, runHooksOf(choice, stoppedOnly)),
     onError: (error) => {
+      if (error instanceof ApiError && error.code === "hook_not_configured") {
+        setRefused(
+          "No hook can restart this server yet, so nothing was written. Set one up on the Hooks tab, or save only.",
+        );
+        return;
+      }
       toast.push({
         kind: "error",
         title: "The save failed",
@@ -74,9 +142,13 @@ export function SaveDialog({
     },
     onSuccess: (applied) => {
       setReturned(applied);
+      setRefused(null);
       void client.invalidateQueries({ queryKey: p4keys.settings(slug) });
       void client.invalidateQueries({ queryKey: p4keys.history(slug) });
       void client.invalidateQueries({ queryKey: p4keys.servers });
+      void client.invalidateQueries({ queryKey: p6keys.status(slug) });
+      void client.invalidateQueries({ queryKey: p6keys.pending(slug) });
+      void client.invalidateQueries({ queryKey: ["activity"] });
       if (applied.status === "applied" || applied.status === "pending") {
         toast.push({
           kind: "success",
@@ -85,7 +157,11 @@ export function SaveDialog({
           description:
             applied.status === "pending"
               ? "These files are written when the server is stopped next."
-              : "The files hold the new values.",
+              : choice === "restart"
+                ? stoppedOnly
+                  ? "The server was stopped, the files were written and the start hook ran."
+                  : "The files hold the new values and the restart hook ran."
+                : "The files hold the new values.",
         });
         onApplied(applied);
         return;
@@ -129,6 +205,18 @@ export function SaveDialog({
   const failedReason = (
     current.error?.message ?? "the server could not write the files"
   ).replace(/\.+$/, "");
+
+  const saveOnlyHelp =
+    stoppedOnly && running
+      ? "The game reads these files at start only, and the server is running: the change waits as pending and is written when the server is stopped next."
+      : stoppedOnly
+        ? "The game reads these files at start only. The server is not seen running, so the files are written now."
+        : "The files are written now; a restart is up to you.";
+  const restartHelp = !restartable
+    ? "No hook can restart this server yet."
+    : stoppedOnly
+      ? "Stops the server, writes the files, then starts it again."
+      : "Writes the files, then restarts the server; a change the game reloads live is sent without a restart.";
 
   return (
     <Dialog
@@ -180,17 +268,16 @@ export function SaveDialog({
               variant="primary"
               loading={apply.isPending}
               disabled={blocking}
+              icon={
+                choice === "restart" ? (
+                  <RotateCw className="size-4" aria-hidden="true" />
+                ) : undefined
+              }
               onClick={() => {
                 apply.mutate();
               }}
             >
-              Save without restart
-            </Button>
-            <Button
-              disabled
-              title="Restarting from Dialwarden arrives with phase P6"
-            >
-              Restart after save (P6)
+              {choice === "restart" ? "Save and restart" : "Save"}
             </Button>
           </>
         )
@@ -203,6 +290,7 @@ export function SaveDialog({
             : `The last try failed: ${failedReason}. A failed change set can be applied again.`}
         </Alert>
       ) : null}
+      {refused !== null ? <Alert kind="error">{refused}</Alert> : null}
       {conflict && current.conflict !== null ? (
         <div className="flex flex-col gap-3">
           {current.conflict.files.map((file) =>
@@ -244,11 +332,23 @@ export function SaveDialog({
           )}
         </div>
       ) : null}
-      <ul className="flex flex-wrap gap-1.5">
-        {current.diff.semantic.map((chip, index) => (
-          <ChangeChip key={`${current.id}-${index}`} chip={chip} />
-        ))}
-      </ul>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <ul className="flex flex-wrap gap-1.5">
+          {current.diff.semantic.map((chip, index) => (
+            <ChangeChip key={`${current.id}-${index}`} chip={chip} />
+          ))}
+        </ul>
+        {stoppedOnly ? (
+          <span title="The game reads these files when it starts; a running server keeps the change pending until it stops.">
+            <Badge
+              kind="pending"
+              icon={<Pause className="size-3.5 shrink-0" aria-hidden="true" />}
+            >
+              Read at start only
+            </Badge>
+          </span>
+        ) : null}
+      </div>
       {restarts > 0 ? (
         <Alert kind="warning">
           <span className="flex items-center gap-1.5 font-medium">
@@ -257,11 +357,67 @@ export function SaveDialog({
             server restart to take effect.
           </span>
           <p className="mt-1">
-            Restarting the server from Dialwarden arrives with phase P6; until
-            then restart it the way you always do.
+            Choose Save and restart below, or restart the server the way you
+            always do.
           </p>
         </Alert>
       ) : null}
+      {done || conflict ? null : (
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-sm font-medium text-fg">
+            After saving
+          </legend>
+          <label className={OPTION}>
+            <input
+              type="radio"
+              name="apply-choice"
+              value="save"
+              className="mt-1 accent-primary"
+              checked={choice === "save"}
+              onChange={() => {
+                setChoice("save");
+              }}
+            />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-sm font-medium text-fg">Save only</span>
+              <span className="text-sm text-fg-muted">{saveOnlyHelp}</span>
+            </span>
+          </label>
+          <label className={OPTION}>
+            <input
+              type="radio"
+              name="apply-choice"
+              value="restart"
+              className="mt-1 accent-primary"
+              checked={choice === "restart"}
+              disabled={!restartable}
+              onChange={() => {
+                setChoice("restart");
+              }}
+            />
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-sm font-medium text-fg">
+                Save and restart
+              </span>
+              <span className={cn("text-sm text-fg-muted")}>
+                {restartHelp}
+                {restartable ? null : (
+                  <>
+                    {" "}
+                    <a
+                      href={`/servers/${slug}/hooks`}
+                      className="font-medium text-primary underline"
+                    >
+                      Set up a hook
+                    </a>
+                    .
+                  </>
+                )}
+              </span>
+            </span>
+          </label>
+        </fieldset>
+      )}
       {current.lint.length > 0 ? (
         <div className="flex flex-col gap-1.5">
           {current.lint.map((entry, index) => {

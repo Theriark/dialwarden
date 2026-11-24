@@ -15,8 +15,8 @@ import { sessionQuery, setupQuery } from "./api/queries";
 import { AppShell } from "./components/layout/app-shell";
 import { SettingsLayout } from "./components/layout/settings-layout";
 import { AboutPage } from "./pages/about";
+import { ActivityPage } from "./pages/activity";
 import {
-  ActivityPage,
   MatrixPage,
   ReportsPage,
   SchedulesPage,
@@ -29,6 +29,8 @@ import { NotFoundPage } from "./pages/not-found";
 import { FleetPage } from "./pages/fleet";
 import { NewServerPage } from "./pages/server-new";
 import { ServerHistoryPage } from "./pages/server-history";
+import { ServerHooksPage } from "./pages/server-hooks";
+import { ServerLaunchPage } from "./pages/server-launch";
 import { ServerRawPage } from "./pages/server-raw";
 import { ServerSettingsPage } from "./pages/server-settings";
 import { SetupPage } from "./pages/setup";
@@ -174,6 +176,20 @@ const serverHistoryRoute = createRoute({
   component: ServerHistoryPage,
 });
 
+const serverHooksRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/hooks",
+  staticData: { title: "Hooks" },
+  component: ServerHooksPage,
+});
+
+const serverLaunchRoute = createRoute({
+  getParentRoute: () => serverRoute,
+  path: "/launch",
+  staticData: { title: "Launch" },
+  component: ServerLaunchPage,
+});
+
 const schedulesRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/schedules",
@@ -272,6 +288,8 @@ const routeTree = rootRoute.addChildren([
       serverSettingsRoute,
       serverRawRoute,
       serverHistoryRoute,
+      serverHooksRoute,
+      serverLaunchRoute,
     ]),
     schedulesRoute,
     matrixRoute,

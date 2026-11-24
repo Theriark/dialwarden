@@ -25,6 +25,11 @@ const MESSAGES = new Map<string, string>([
   ["no_change", "This server already holds these values."],
   ["internal", "The server hit an error. Check its log."],
   ["validation", "Some fields are not valid."],
+  ["server_not_found", "This server no longer exists."],
+  ["hook_not_configured", "No hook can run this action on this server."],
+  ["invalid_state", "This change set was already applied or closed."],
+  ["control_error", "The game server could not be reached."],
+  ["connector_error", "The server files could not be reached."],
 ]);
 
 /** The fields the P1 screens send, as the subject of a sentence. */

@@ -534,3 +534,115 @@ export interface CreatePresetBody {
 export interface ApplyPresetBody {
   readonly server: string;
 }
+
+// ---- P6: hooks, status, pending and activity (contracts C5, C6 and C7) ----
+// The shapes the P6-A and P6-B server declares in apps/server/src/routes/
+// hooks.ts, servers.ts and activity.ts at 2641ff7. Field names are exact.
+
+export const HOOK_ACTIONS = ["save", "stop", "start", "restart"] as const;
+
+export type HookAction = (typeof HOOK_ACTIONS)[number];
+
+/** The per-server hook of contract C7: an SSH command or a docker proxy. */
+export type HookConfig =
+  | { readonly kind: "sshCommand"; readonly command: string }
+  | {
+      readonly kind: "dockerProxy";
+      readonly url: string;
+      readonly containerLabel: string;
+    };
+
+/** One probe of the pack with its per-server override; no password ever. */
+export interface ProbeOverrideView {
+  readonly kind: string;
+  readonly host: string | null;
+  readonly port: number | null;
+  readonly hasPassword: boolean;
+}
+
+/** The client kind that runs each action today, or null when none can. */
+export type HookActions = Readonly<Record<HookAction, string | null>>;
+
+/** GET and PUT /api/v1/servers/:slug/hooks. */
+export interface HooksView {
+  readonly packId: string;
+  readonly hooksSupported: readonly string[];
+  readonly hook: HookConfig | null;
+  readonly probes: readonly ProbeOverrideView[];
+  readonly available: HookActions;
+  readonly updatedAt: string | null;
+  readonly updatedBy: string | null;
+}
+
+export interface ProbeInput {
+  readonly host?: string;
+  readonly port?: number;
+  readonly password?: string;
+}
+
+/** PUT body: a missing hook keeps the current one, null clears it. */
+export interface PutHooksBody {
+  readonly hook?: HookConfig | null;
+  readonly probes?: Readonly<Record<string, ProbeInput | null>>;
+}
+
+/** POST /api/v1/servers/:slug/hooks/run. */
+export interface RunAnswer {
+  readonly action: HookAction;
+  readonly source: string;
+  readonly at: string;
+  /** Set for a stop only: whether the probe saw the server down. */
+  readonly stopped: boolean | null;
+  /** Set for a stop only: the pending change sets written after it. */
+  readonly flushed: number | null;
+}
+
+export type ServerState = "running" | "stopped" | "unknown";
+
+/** GET /api/v1/servers/:slug/status: the probe answer and the pending count. */
+export interface ServerStatus {
+  readonly state: ServerState;
+  readonly players: number | null;
+  /** The probe kind that answered, or null when no probe exists. */
+  readonly source: string | null;
+  readonly at: string;
+  readonly pending: number;
+}
+
+/** GET /api/v1/servers/:slug/pending: the change sets waiting for a stop. */
+export interface PendingList {
+  readonly items: readonly ChangeSet[];
+}
+
+export const ACTIVITY_TYPES = [
+  "change.applied",
+  "change.pending",
+  "change.conflict",
+  "hook.run",
+  "drift.detected",
+  "schedule.run",
+  "schedule.reverted",
+  "backup.done",
+  "backup.failed",
+  "licence.changed",
+  "user.changed",
+] as const;
+
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
+
+/** One event of contract C6. */
+export interface ActivityEvent {
+  readonly id: number;
+  readonly type: ActivityType;
+  readonly serverId: string | null;
+  readonly at: string;
+  /** "system" or the e-mail of the user who acted. */
+  readonly actor: string;
+  readonly data: Readonly<Record<string, unknown>>;
+}
+
+/** GET /api/v1/activity, newest first; nextBefore pages onwards. */
+export interface ActivityPage {
+  readonly items: readonly ActivityEvent[];
+  readonly nextBefore: number | null;
+}

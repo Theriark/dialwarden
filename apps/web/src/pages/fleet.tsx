@@ -1,8 +1,9 @@
 // The fleet wall (screen 1 of dev-work-plan P5): one card per server with our
-// neutral game glyph, the status placeholder (probes arrive with P6), the
-// plan state, the drift and pending badges from the server's history and the
-// last change with its author. The strip on top counts the servers, the drift
-// alerts and the changes scheduled this week (schedules arrive with P9).
+// neutral game glyph, the status chip from the probe (P6-C, contract C7), the
+// plan state, the drift badge from the server's history, the pending badge
+// from the status answer and the last change with its author. The strip on
+// top counts the servers, the drift alerts and the changes scheduled this
+// week (schedules arrive with P9).
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -16,13 +17,21 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { entitlementQuery, historyQuery, serversQuery } from "../api/queries";
+import {
+  entitlementQuery,
+  historyQuery,
+  serverStatusQuery,
+  serversQuery,
+} from "../api/queries";
 import type {
   History as ServerHistory,
   Server as ServerData,
+  ServerStatus,
 } from "../api/schema";
 import { useIsOwner } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
+import { PendingBadge } from "../components/pending-badge";
+import { StatusChip } from "../components/status-chip";
 import { Badge } from "../components/ui/badge";
 import { CardSkeleton, EmptyState, ErrorState } from "../components/ui/states";
 import { formatDateTime } from "../lib/format";
@@ -87,15 +96,27 @@ export function pulseOf(history: ServerHistory | undefined): ServerPulse {
   return { drift, pending, lastChange };
 }
 
+/** What the card knows about one server's probe answer. */
+export interface CardStatus {
+  readonly status: ServerStatus | undefined;
+  readonly loading: boolean;
+  readonly error: unknown;
+}
+
 function ServerCard({
   server,
   pulse,
+  probe,
   isOwner,
 }: {
   server: ServerData;
   pulse: ServerPulse;
+  probe: CardStatus;
   isOwner: boolean;
 }) {
+  // The status answer counts the pending change sets exactly; until it
+  // arrives the latest history entry says whether one waits.
+  const pendingCount = probe.status?.pending ?? (pulse.pending ? 1 : 0);
   return (
     <article className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card sm:p-5">
       <div className="flex items-start justify-between gap-3">
@@ -121,9 +142,13 @@ function ServerCard({
             </p>
           </div>
         </div>
-        <span title="Server probes arrive with phase P6">
-          <Badge kind="neutral">No probe yet</Badge>
-        </span>
+        <StatusChip
+          status={probe.status}
+          loading={probe.loading}
+          error={probe.error}
+          simulated={server.demo}
+          className="shrink-0 justify-end"
+        />
       </div>
       <div className="flex flex-wrap gap-1.5">
         {server.editable ? null : (
@@ -136,7 +161,7 @@ function ServerCard({
             Drift
           </Badge>
         ) : null}
-        {pulse.pending ? <Badge kind="pending">Pending change</Badge> : null}
+        <PendingBadge count={pendingCount} slug={server.id} />
       </div>
       {server.editable ? null : (
         <p className="text-xs text-fg-muted">
@@ -189,6 +214,9 @@ export function FleetPage() {
   const histories = useQueries({
     queries: items.map((server) => historyQuery(server.id)),
   });
+  const statuses = useQueries({
+    queries: items.map((server) => serverStatusQuery(server.id)),
+  });
 
   if (servers.isPending) {
     return (
@@ -227,6 +255,12 @@ export function FleetPage() {
     return history !== undefined && pulseOf(history).drift;
   }).length;
   const scheduledThisWeek = 0;
+  const runningCount = statuses.filter(
+    (query) => query.data?.state === "running",
+  ).length;
+  const stoppedCount = statuses.filter(
+    (query) => query.data?.state === "stopped",
+  ).length;
 
   if (items.length === 0) {
     return (
@@ -285,7 +319,7 @@ export function FleetPage() {
             entitlement.data?.limits.servers === null
               ? "no limit"
               : `${entitlement.data?.limits.servers ?? 3} on Free`
-          }`}
+          } · ${runningCount} running, ${stoppedCount} stopped`}
         />
         <StatTile
           icon={<Radar className={STAT_ICON} aria-hidden="true" />}
@@ -304,11 +338,18 @@ export function FleetPage() {
         {items.map((server, index) => {
           // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
           const pulse = pulseOf(histories[index]?.data);
+          // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel status queries
+          const status = statuses[index];
           return (
             <ServerCard
               key={server.id}
               server={server}
               pulse={pulse}
+              probe={{
+                status: status?.data,
+                loading: status?.isPending ?? true,
+                error: status?.error ?? undefined,
+              }}
               isOwner={isOwner}
             />
           );
