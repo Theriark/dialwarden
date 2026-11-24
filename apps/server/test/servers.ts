@@ -155,6 +155,104 @@ export async function apply(api: Api, id: string): Promise<ChangeSetBody> {
   return response.json<ChangeSetBody>();
 }
 
+/**
+ * Applies a change set with a hook mode (P6-B, contract C5 runHooks) and
+ * returns the whole response, because a refused apply is part of the test.
+ */
+export async function applyHooks(
+  api: Api,
+  id: string,
+  runHooks: string,
+): Promise<LightMyRequestResponse> {
+  return api.post(`/api/v1/change-sets/${id}/apply`, { runHooks });
+}
+
+/** The status probe answer of a server (GET .../status). */
+export async function statusOf(
+  api: Api,
+  slug: string,
+): Promise<{
+  state: string;
+  players: number | null;
+  source: string | null;
+  pending: number;
+}> {
+  const response = await api.get(`/api/v1/servers/${slug}/status`);
+  if (response.statusCode !== 200) {
+    throw new Error(`status: ${response.statusCode} ${response.body}`);
+  }
+  return response.json();
+}
+
+/** The hook configuration view of a server (GET .../hooks). */
+export async function hooksOf(api: Api, slug: string): Promise<unknown> {
+  const response = await api.get(`/api/v1/servers/${slug}/hooks`);
+  if (response.statusCode !== 200) {
+    throw new Error(`hooks: ${response.statusCode} ${response.body}`);
+  }
+  return response.json();
+}
+
+/** Sets the hook configuration of a server (PUT .../hooks). */
+export async function putHooks(
+  api: Api,
+  slug: string,
+  body: object,
+): Promise<LightMyRequestResponse> {
+  return api.put(`/api/v1/servers/${slug}/hooks`, body);
+}
+
+/** Runs one hook action (POST .../hooks/run). */
+export async function runHook(
+  api: Api,
+  slug: string,
+  action: string,
+): Promise<LightMyRequestResponse> {
+  return api.post(`/api/v1/servers/${slug}/hooks/run`, { action });
+}
+
+/** The pending change sets of a server (GET .../pending). */
+export async function pendingOf(
+  api: Api,
+  slug: string,
+): Promise<ChangeSetBody[]> {
+  const response = await api.get(`/api/v1/servers/${slug}/pending`);
+  if (response.statusCode !== 200) {
+    throw new Error(`pending: ${response.statusCode} ${response.body}`);
+  }
+  return response.json<{ items: ChangeSetBody[] }>().items;
+}
+
+/** The activity events of a server, oldest first (GET /api/v1/activity). */
+export async function activityOf(
+  app: FastifyInstance,
+  slug: string,
+): Promise<
+  { id: number; type: string; at: string; actor: string; data: unknown }[]
+> {
+  const rows: { id: number; type: string; at: string; actor: string }[] = [];
+  let before: number | undefined;
+  for (;;) {
+    const url = new URLSearchParams({ serverId: slug, limit: "50" });
+    if (before !== undefined) url.set("before", String(before));
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/v1/activity?${url.toString()}`,
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(`activity: ${response.statusCode} ${response.body}`);
+    }
+    const page = response.json<{
+      items: { id: number; type: string; at: string; actor: string }[];
+      nextBefore: number | null;
+    }>();
+    rows.push(...page.items);
+    if (page.nextBefore === null) break;
+    before = page.nextBefore;
+  }
+  return rows.reverse();
+}
+
 /** Makes and applies a change set of setting edits. */
 export async function change(
   api: Api,
