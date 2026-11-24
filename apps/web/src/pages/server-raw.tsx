@@ -5,7 +5,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { FileText, History, Save, Settings2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { createChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import {
@@ -53,19 +53,32 @@ export function ServerRawPage() {
   const [text, setText] = useState<string | null>(null);
   const [changeSet, setChangeSet] = useState<ChangeSet | null>(null);
 
+  // The draft is the editor's own text (text) until a file switch or a
+  // reload after a save makes the server text the document again. The
+  // editor owns its model: the version below tells it when the document is
+  // a new one, so typing never races a render (live check F13).
+  const draft = text ?? file.data?.text ?? null;
+  const textVersion = `${chosen ?? ""}:${file.dataUpdatedAt}`;
+
   // The draft's own lint, the same lintFile the server runs (live check
   // F3): the gutter marks the malformed line as it is typed, not only
-  // after a save refuses, and a clean file stays clean.
-  const draft = text ?? file.data?.text ?? null;
+  // after a save refuses, and a clean file stays clean. It runs a beat
+  // behind the keystroke, and Review waits for it, so a blocking error
+  // still disables the save (P5-D F1).
+  const lintedDraft = useDeferredValue(draft);
   const lint = useMemo(
     () =>
-      draft === null || meta.data === undefined
+      lintedDraft === null || meta.data === undefined
         ? []
-        : draftLint(packOf(meta.data), chosen ?? "", draft),
-    [draft, meta.data, chosen],
+        : draftLint(packOf(meta.data), chosen ?? "", lintedDraft),
+    [lintedDraft, meta.data, chosen],
   );
-  const markers = useMemo(() => lintMarkers(draft ?? "", lint), [draft, lint]);
+  const markers = useMemo(
+    () => lintMarkers(lintedDraft ?? "", lint),
+    [lintedDraft, lint],
+  );
   const blocked = lint.some((issue) => issue.severity === "error");
+  const linting = lintedDraft !== draft;
 
   const save = useMutation({
     mutationFn: () =>
@@ -201,7 +214,7 @@ export function ServerRawPage() {
           <Button
             variant="primary"
             loading={save.isPending}
-            disabled={!editable || !dirty || blocked}
+            disabled={!editable || !dirty || blocked || linting}
             icon={<Save className="size-4" aria-hidden="true" />}
             onClick={() => {
               save.mutate();
@@ -233,7 +246,8 @@ export function ServerRawPage() {
               </Alert>
             )}
             <LazyEditor
-              value={current}
+              text={current}
+              textVersion={textVersion}
               language={
                 file.data !== undefined
                   ? languageOf(file.data.path)
@@ -257,6 +271,9 @@ export function ServerRawPage() {
             setChangeSet(null);
           }}
           onApplied={() => {
+            // The saved file is the document again: the refetch gives it
+            // a new version and the editor takes the stored text as one
+            // edit, caret and undo kept.
             setChangeSet(null);
             setText(null);
             void file.refetch();
