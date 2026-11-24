@@ -152,7 +152,7 @@ function editor(
         textVersion={version}
         language="ini"
         onChange={onChange}
-        lint={lint}
+        {...(lint === undefined ? {} : { lint })}
       />
     </ThemeProvider>
   );

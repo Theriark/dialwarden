@@ -40,7 +40,7 @@ async function renderedLines(page: Page): Promise<string[]> {
     Array.from(document.querySelectorAll<HTMLElement>(".view-line"))
       .map((line) => ({
         top: Number.parseFloat(line.style.top),
-        text: (line.textContent ?? "").replace(/ /g, " "),
+        text: (line.textContent ?? "").replace(/\xa0/g, " "),
       }))
       .sort((a, b) => a.top - b.top)
       .map((line) => line.text),
@@ -50,7 +50,7 @@ async function renderedLines(page: Page): Promise<string[]> {
 async function signIn(page: Page): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("E-mail address").fill(OWNER.email);
-  await page.getByLabel("Password").fill(OWNER.password);
+  await page.getByLabel("Password", { exact: true }).fill(OWNER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/");
 }
