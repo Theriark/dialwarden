@@ -382,11 +382,12 @@ export interface TextDiffPart {
 export interface ConflictSetting {
   readonly settingKey: string;
   readonly label: string;
-  readonly from: unknown;
-  readonly to: unknown;
+  readonly base: unknown;
+  readonly ours: unknown;
+  readonly theirs: unknown;
 }
 
-export interface ConflictFile
+export type ConflictFile =
   | {
       readonly kind: "settings";
       readonly fileId: string;
