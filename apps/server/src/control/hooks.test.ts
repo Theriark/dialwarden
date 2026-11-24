@@ -180,6 +180,7 @@ const VERBS = /^\/containers\/[0-9a-f]{64}\/(start|stop|restart)$/;
  */
 class SimGame {
   readonly restCalls: { path: string; auth: string | null }[] = [];
+  /** The container verbs asked for; the label lookups are not recorded. */
   readonly dockerCalls: string[] = [];
   readonly #rest;
   readonly #docker;
@@ -222,7 +223,6 @@ class SimGame {
         response.end(body);
       };
       if (request.method === "GET" && url.startsWith("/containers/json")) {
-        this.dockerCalls.push("list");
         answer(
           200,
           JSON.stringify([

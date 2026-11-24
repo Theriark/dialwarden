@@ -56,6 +56,9 @@ export const HOOK_WAIT_MS = 10_000;
 /** How often the probe is asked while a stop takes effect. */
 const HOOK_POLL_MS = 500;
 
+/** Every hook action, in the order the settings page lists them. */
+const ACTIONS: readonly ControlAction[] = ["save", "stop", "start", "restart"];
+
 /** The hook configuration as the API stores and shows it. */
 export type HookConfig = ControlConfig;
 
@@ -74,6 +77,19 @@ export interface ProbeInput {
 export interface HookSetInput {
   readonly hook?: HookConfig | null;
   readonly probes?: { readonly [kind: string]: ProbeInput | null };
+}
+
+/** Who set the hook configuration of a server, and when. */
+export interface HookUpdated {
+  readonly updatedAt: string;
+  readonly updatedBy: string | null;
+}
+
+/** A probe override while it is checked; stored as a ProbeOverride. */
+interface OverrideDraft {
+  host?: string;
+  port?: number;
+  passwordEnc?: string;
 }
 
 /** The probe overrides of a server, by probe kind. */
@@ -224,10 +240,7 @@ export class HookService {
   }
 
   /** Who set the configuration and when, for the settings page. */
-  updated(serverId: string): {
-    readonly updatedAt: string;
-    readonly updatedBy: string | null;
-  } | null {
+  updated(serverId: string): HookUpdated | null {
     const row = this.#row(serverId);
     if (row === null) return null;
     return { updatedAt: row.updatedAt, updatedBy: row.updatedBy };
@@ -239,11 +252,7 @@ export class HookService {
    * command hook needs the server's own SSH access, so a local server cannot
    * have one.
    */
-  setConfig(
-    server: ServerRecord,
-    input: HookSetInput,
-    actor: string,
-  ): void {
+  setConfig(server: ServerRecord, input: HookSetInput, actor: string): void {
     const pack = this.#servers.pack(server);
     const row = this.#row(server.id);
     let hook: string | null;
@@ -316,8 +325,7 @@ export class HookService {
 
   /** A probe override as far as it can be checked at set time. */
   #checkedOverride(kind: string, input: ProbeInput): ProbeOverride {
-    const override: { host?: string; port?: number; passwordEnc?: string } =
-      {};
+    const override: OverrideDraft = {};
     if (input.host !== undefined) {
       if (!usableHost(input.host)) {
         throw new ApiError(422, "probe_host_not_usable", { kind });
@@ -332,10 +340,8 @@ export class HookService {
     }
     if (input.password !== undefined) {
       checkLineSafePassword(input.password);
-      override.passwordEnc = encryptControlPassword(
-        this.#aead,
-        input.password,
-      );
+      const sealed = encryptControlPassword(this.#aead, input.password);
+      override.passwordEnc = sealed;
     }
     return override;
   }
@@ -416,14 +422,13 @@ export class HookService {
     } else {
       auth = { method: "key", privateKey: this.#connectors.key.privateKey() };
     }
+    const pinned = this.#connectors.knownHosts.get(stored.host, stored.port);
     const options: SshCommandOptions = {
       host: stored.host,
       port: stored.port,
       username: stored.username,
       auth,
-      pinnedFingerprint:
-        this.#connectors.knownHosts.get(stored.host, stored.port)
-          ?.fingerprint ?? null,
+      pinnedFingerprint: pinned?.fingerprint ?? null,
       command: config.command,
     };
     return hookClient({ kind: "sshCommand", options });
@@ -559,12 +564,10 @@ export class HookService {
     server: ServerRecord,
     sources: HookSources,
   ): Promise<Record<ControlAction, string | null>> {
-    const entries = (["save", "stop", "start", "restart"] as const).map(
-      (action): [ControlAction, string | null] => {
-        const where = this.#where(server, sources, action);
-        return [action, where === null ? null : where.source];
-      },
-    );
+    const entries = ACTIONS.map((action): [ControlAction, string | null] => {
+      const where = this.#where(server, sources, action);
+      return [action, where === null ? null : where.source];
+    });
     return Object.fromEntries(entries) as Record<ControlAction, string | null>;
   }
 
