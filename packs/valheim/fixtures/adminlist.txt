@@ -1,0 +1,1 @@
+// Dialwarden synthetic adminlist header.
