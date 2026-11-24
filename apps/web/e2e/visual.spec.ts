@@ -72,6 +72,19 @@ const SCREENS: readonly Screen[] = [
     },
   },
   {
+    name: "presets-create",
+    path: "/presets",
+    full: false,
+    ready: async (page) => {
+      await expect(page.getByText("No presets yet")).toBeVisible();
+      await page.getByRole("button", { name: "Create preset" }).click();
+      await expect(
+        page.getByRole("dialog", { name: "Create a preset" }),
+      ).toBeVisible();
+      await expect(page.getByLabel("From server")).toHaveValue("");
+    },
+  },
+  {
     name: "plan",
     path: "/settings/plan",
     ready: async (page) => {
