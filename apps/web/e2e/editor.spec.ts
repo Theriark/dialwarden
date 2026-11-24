@@ -113,7 +113,7 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(
     page.getByText("1 setting needs a server restart to take effect.").first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Save without restart" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Changes saved").first()).toBeVisible();
   await expect(
     page.getByRole("dialog", { name: "Save these changes?" }),
