@@ -228,6 +228,25 @@ export const snapshotBlobs = sqliteTable("snapshot_blobs", {
   createdAt: text("created_at").notNull(),
 });
 
+/**
+ * The saved user presets (screen 7 of the P5 plan): named bundles of typed
+ * setting values, applied to a server through a change set of cause preset.
+ * The built-in pack presets of P3 stay in the pack data, not here.
+ */
+export const presets = sqliteTable(
+  "presets",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description").notNull(),
+    packId: text("pack_id").notNull(),
+    /** JSON: typed values by setting key, secrets as their mask. */
+    values: text("values").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("presets_created").on(table.createdAt)],
+);
+
 export const schema = {
   users,
   recoveryCodes,
@@ -242,4 +261,5 @@ export const schema = {
   changeSets,
   snapshots,
   snapshotBlobs,
+  presets,
 };

@@ -11,7 +11,14 @@ import { reencrypt } from "../backup/import.js";
 import { createAead, ENCRYPTED_COLUMNS } from "../crypto/aead.js";
 import { DB_FILE } from "../db/store.js";
 import { publicKeyFingerprint } from "./host-key.js";
-import { InstanceKey, KEY_CONTEXT } from "./keys.js";
+import {
+  type GeneratedPair,
+  InstanceKey,
+  KEY_ATTEMPTS,
+  KEY_CONTEXT,
+  parsesBack,
+  usableInstanceKey,
+} from "./keys.js";
 
 let current: TestApp | undefined;
 
@@ -93,5 +100,70 @@ describe("instance SSH key", () => {
     if (parsed instanceof Error) throw parsed;
     expect(parsed.type).toBe("ssh-ed25519");
     expect(moved.publicKey()).toEqual(before);
+  });
+
+  it("parsesBack: a good pair yes, a corrupt key or a wrong public no", () => {
+    const good = ssh2.utils.generateKeyPairSync("ed25519");
+    const other = ssh2.utils.generateKeyPairSync("ed25519");
+    expect(parsesBack(good)).toBe(true);
+    const corrupt: GeneratedPair = {
+      private: "not a key",
+      public: good.public,
+    };
+    expect(parsesBack(corrupt)).toBe(false);
+    const mismatched: GeneratedPair = {
+      private: good.private,
+      public: other.public,
+    };
+    expect(parsesBack(mismatched)).toBe(false);
+  });
+
+  it("is made again while its generator writes keys ssh2 cannot parse", () => {
+    const good = ssh2.utils.generateKeyPairSync("ed25519");
+    const bad: GeneratedPair = { private: "not a key", public: good.public };
+    let calls = 0;
+    const generate = (): GeneratedPair => {
+      calls += 1;
+      return calls <= 2 ? bad : good;
+    };
+    expect(usableInstanceKey(generate)).toEqual(good);
+    expect(calls).toBe(3);
+  });
+
+  it("gives up with a clear error when no key parses back", () => {
+    const bad: GeneratedPair = { private: "not a key", public: "" };
+    expect(() => usableInstanceKey(() => bad)).toThrow(
+      `no usable instance key in ${KEY_ATTEMPTS} attempts`,
+    );
+  });
+
+  it("stores only a key that was made after unusable ones", async () => {
+    current = await testApp();
+    const { app } = current;
+    const good = ssh2.utils.generateKeyPairSync("ed25519", {
+      comment: "dialwarden",
+    });
+    const bad: GeneratedPair = { private: "not a key", public: good.public };
+    let calls = 0;
+    const generate = (): GeneratedPair => {
+      calls += 1;
+      return calls <= 2 ? bad : good;
+    };
+    const key = new InstanceKey(
+      app.ctx.store,
+      app.ctx.aead,
+      undefined,
+      generate,
+    );
+    const made = key.publicKey();
+    expect(calls).toBe(3);
+    expect(made.publicKey).toBe(good.public.trim());
+    // What was stored parses back, and the app serves the same key.
+    const parsed = ssh2.utils.parseKey(key.privateKey());
+    if (parsed instanceof Error) throw parsed;
+    expect(parsed.getPublicSSH().toString("base64")).toBe(
+      made.publicKey.split(" ")[1],
+    );
+    expect(app.ctx.connectors.key.publicKey()).toEqual(made);
   });
 });

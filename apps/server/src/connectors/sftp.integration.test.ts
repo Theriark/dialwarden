@@ -17,6 +17,7 @@ import ssh2 from "ssh2";
 import type { StartedTestContainer } from "testcontainers";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { headersOf, setupOwner, testApp } from "../../test/helpers.js";
+import { usablePair } from "../../test/ssh-server.js";
 import { detectServer } from "./detect.js";
 import { fingerprintOf } from "./host-key.js";
 import { SftpConnector, type SftpAuth, type SftpOptions } from "./sftp.js";
@@ -131,7 +132,7 @@ async function codeOf(promise: Promise<unknown>): Promise<string | null> {
 describe.skipIf(!dockerAvailable)("SFTP connector against OpenSSH", () => {
   beforeAll(async () => {
     password = randomBytes(18).toString("base64url");
-    const pair = ssh2.utils.generateKeyPairSync("ed25519", { comment: "test" });
+    const pair = usablePair();
     privateKey = pair.private;
     // Loaded here, so a run without Docker never loads testcontainers.
     const { GenericContainer, Wait } = await import("testcontainers");

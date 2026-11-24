@@ -3,7 +3,10 @@
 // its private key is stored only encrypted with APP_SECRET_KEY (column
 // instance_ssh_key.private_key_enc, registered in ENCRYPTED_COLUMNS so an app
 // backup import re-encrypts it) and never leaves the server. The public key
-// is what the owner adds to authorized_keys on a game server.
+// is what the owner adds to authorized_keys on a game server. A pair is
+// stored only when ssh2 parses its private key back and it matches its
+// public key: the generator sometimes writes a key its own parser calls
+// malformed, so it is made again, a few times at most (THE-2534 follow-up).
 import { eq, and } from "drizzle-orm";
 import ssh2 from "ssh2";
 import type { Aead } from "../crypto/aead.js";
@@ -15,6 +18,50 @@ import { publicKeyFingerprint, type HostKeyId } from "./host-key.js";
 export const KEY_CONTEXT = "instance_ssh_key.private_key";
 export const KEY_ALGORITHM = "ssh-ed25519";
 const KEY_COMMENT = "dialwarden";
+
+/** How many generated keys may fail before the instance key gives up. */
+export const KEY_ATTEMPTS = 10;
+
+/** An OpenSSH key pair as ssh2.utils.generateKeyPairSync returns it. */
+export interface GeneratedPair {
+  readonly private: string;
+  readonly public: string;
+}
+
+const ed25519 = (): GeneratedPair =>
+  ssh2.utils.generateKeyPairSync("ed25519", { comment: KEY_COMMENT });
+
+/**
+ * True when ssh2 parses the private key back (as its SFTP client does when
+ * the connector signs in) and the key matches the public key stored with
+ * it. The generator now and then writes an OpenSSH private key its own
+ * parser calls malformed, so such a pair is never stored.
+ */
+export function parsesBack(pair: GeneratedPair): boolean {
+  try {
+    const parsed = ssh2.utils.parseKey(pair.private);
+    if (parsed instanceof Error) return false;
+    const blob = parsed.getPublicSSH().toString("base64");
+    return pair.public.trim().split(/\s+/)[1] === blob;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A new Ed25519 key pair ssh2 can parse back, for the instance key: made
+ * again while it does not parse, a few times at most, then a clear error.
+ * The same approach as usablePair() in test/ssh-server.ts (THE-2534).
+ */
+export function usableInstanceKey(
+  generate: () => GeneratedPair = ed25519,
+): GeneratedPair {
+  for (let attempt = 0; attempt < KEY_ATTEMPTS; attempt += 1) {
+    const pair = generate();
+    if (parsesBack(pair)) return pair;
+  }
+  throw new Error(`no usable instance key in ${KEY_ATTEMPTS} attempts`);
+}
 
 export interface InstancePublicKey {
   readonly algorithm: string;
@@ -35,11 +82,18 @@ export class InstanceKey {
   readonly #store: Store;
   readonly #aead: Aead;
   readonly #now: () => Date;
+  readonly #generate: () => GeneratedPair;
 
-  constructor(store: Store, aead: Aead, now: () => Date = () => new Date()) {
+  constructor(
+    store: Store,
+    aead: Aead,
+    now: () => Date = () => new Date(),
+    generate: () => GeneratedPair = ed25519,
+  ) {
     this.#store = store;
     this.#aead = aead;
     this.#now = now;
+    this.#generate = generate;
   }
 
   #row() {
@@ -54,9 +108,7 @@ export class InstanceKey {
   #ensure() {
     const found = this.#row();
     if (found !== undefined) return found;
-    const pair = ssh2.utils.generateKeyPairSync("ed25519", {
-      comment: KEY_COMMENT,
-    });
+    const pair = usableInstanceKey(this.#generate);
     const publicKey = pair.public.trim();
     this.#store.db
       .insert(instanceSshKey)

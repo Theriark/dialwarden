@@ -133,11 +133,10 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(page.getByText("Palworld Home").first()).toBeVisible();
   await expect(page.getByText("1 of 3 in use").first()).toBeVisible();
 
-  // The presets screen holds its designed state while the API is missing.
+  // The presets screen answers with its real empty state now that the API
+  // ships (THE-2542).
   await page.goto("/presets");
-  await expect(
-    page.getByText("Presets are not on this build yet").first(),
-  ).toBeVisible();
+  await expect(page.getByText("No presets yet").first()).toBeVisible();
 });
 
 test("the Paid plan: the licence page switches the entitlement", async ({
