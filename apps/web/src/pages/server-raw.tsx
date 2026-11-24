@@ -3,9 +3,10 @@
 // set with the same save dialog (contract C5). Reading a raw file is owner
 // only, so everyone else sees the designed owner-only state.
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
-import { FileText, History, Save, Settings2 } from "lucide-react";
+import { useParams } from "@tanstack/react-router";
+import { FileText, Save } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
+import type { PackFile } from "@dialwarden/packs-schema";
 import { createChangeSet } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import {
@@ -22,14 +23,12 @@ import { draftLint, lintMarkers } from "../lib/raw-lint";
 import { PageHeader } from "../components/layout/page-header";
 import { LazyEditor } from "../components/code-editor";
 import { SaveDialog } from "../components/save-dialog";
+import { ServerTabs } from "../components/server-tabs";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { SelectField } from "../components/ui/field";
 import { EmptyState, ErrorState, RowsSkeleton } from "../components/ui/states";
 import { useToast } from "../components/ui/toast";
-
-const FILE_LABEL =
-  "flex items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft";
 
 export function ServerRawPage() {
   const params = useParams({ strict: false }) as { slug: string };
@@ -161,33 +160,17 @@ export function ServerRawPage() {
     languageOf(
       settings.data?.files.find((file) => file.fileId === fileId)?.path ?? "",
     );
+  const stoppedOnlyFiles = ((meta.data?.files ?? []) as PackFile[])
+    .filter((item) => item.applyPolicy === "stopped-only")
+    .map((item) => item.id);
 
   return (
     <>
       <PageHeader
         title={`${server.data.name} raw files`}
         description="Edit the text exactly as the file holds it. Saves go through the same review as the typed editor."
-        actions={
-          <>
-            <Link
-              to="/servers/$slug/settings"
-              params={{ slug }}
-              className={FILE_LABEL}
-            >
-              <Settings2 className="size-4" aria-hidden="true" />
-              Typed editor
-            </Link>
-            <Link
-              to="/servers/$slug/history"
-              params={{ slug }}
-              className={FILE_LABEL}
-            >
-              <History className="size-4" aria-hidden="true" />
-              History
-            </Link>
-          </>
-        }
       />
+      <ServerTabs slug={slug} current="raw" />
       {editable ? null : (
         <Alert kind="warning">
           This server is read-only on the Free plan: choose the three editable
@@ -267,6 +250,7 @@ export function ServerRawPage() {
           slug={slug}
           changeSet={changeSet}
           fileLanguage={fileLanguage}
+          stoppedOnlyFiles={stoppedOnlyFiles}
           onClose={() => {
             setChangeSet(null);
           }}

@@ -6,13 +6,12 @@
 // through a change set (contract C5) and the save dialog.
 /* eslint-disable security/detect-object-injection -- the keys are the pack's setting keys and the server's own JSON answer, never free-form input */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   ChevronDown,
   EyeOff,
   FileWarning,
-  History,
   Search,
   Save,
   SlidersHorizontal,
@@ -22,6 +21,7 @@ import {
   sameAsDefault,
   sameJson,
   type JsonValue,
+  type PackFile,
   type Setting,
 } from "@dialwarden/packs-schema";
 import { createChangeSet, type EditInput } from "../api/changes";
@@ -34,6 +34,7 @@ import {
 import { PageHeader } from "../components/layout/page-header";
 import { SettingField } from "../components/editor/setting-field";
 import { SaveDialog } from "../components/save-dialog";
+import { ServerTabs } from "../components/server-tabs";
 import { UpgradeHint } from "../components/upgrade-hint";
 import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
@@ -342,32 +343,19 @@ export function ServerSettingsPage() {
     settings.data.packVersion === meta.data.version
       ? "pack matches the server"
       : `server files of pack ${settings.data.packVersion}`;
+  // The files the game reads at start only: a change to one of them is
+  // parked as pending while the server runs (contract C5, P6-B).
+  const stoppedOnlyFiles = (meta.data.files as PackFile[])
+    .filter((file) => file.applyPolicy === "stopped-only")
+    .map((file) => file.id);
 
   return (
     <>
       <PageHeader
         title={`${server.data.name} settings`}
         description={`${meta.data.displayName} ${meta.data.version} · ${packLine}`}
-        actions={
-          <>
-            <Link
-              to="/servers/$slug/history"
-              params={{ slug }}
-              className="inline-flex h-8 items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft"
-            >
-              <History className="size-4" aria-hidden="true" />
-              History
-            </Link>
-            <Link
-              to="/servers/$slug/raw"
-              params={{ slug }}
-              className="inline-flex h-8 items-center gap-2 rounded-control border border-border-strong bg-surface px-3 text-sm font-medium text-fg transition-colors duration-150 hover:bg-accent-soft"
-            >
-              Raw files
-            </Link>
-          </>
-        }
       />
+      <ServerTabs slug={slug} current="settings" />
       {editable ? null : (
         <div className="mb-4 flex flex-col gap-2">
           <Alert kind="warning">
@@ -490,6 +478,7 @@ export function ServerSettingsPage() {
           slug={slug}
           changeSet={changeSet}
           fileLanguage={fileLanguage}
+          stoppedOnlyFiles={stoppedOnlyFiles}
           onClose={() => {
             setChangeSet(null);
           }}
