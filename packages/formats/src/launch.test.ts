@@ -224,3 +224,84 @@ describe("launch arguments: plus convars and quoting", () => {
     );
   });
 });
+
+describe("launch arguments: keyed flags and order (Valheim, P6)", () => {
+  const source =
+    "-name 'Quarry Lane' -port 2456 -modifier combat easy " +
+    "-modifier raids none -setkey nomap";
+  const data = bytes(source);
+  const doc = launch.parse(data);
+
+  function keyed(name: string, key: string): LaunchLocator {
+    return { kind: "launch", flag: name, key };
+  }
+
+  it("reads a keyed flag by its key word", () => {
+    expect(launch.get(doc, keyed("-modifier", "combat"))).toBe("easy");
+    expect(launch.get(doc, keyed("-modifier", "raids"))).toBe("none");
+    expect(launch.get(doc, keyed("-setkey", "nomap"))).toBe(true);
+    expect(launch.get(doc, keyed("-modifier", "portals"))).toBeUndefined();
+  });
+
+  it("changes, removes and adds a keyed flag", () => {
+    const combat = keyed("-modifier", "combat");
+    const changed = edited(launch, data, (d) =>
+      launch.set(d, combat, "veryhard"),
+    );
+    expect(changed).toBe(source.replace("combat easy", "combat veryhard"));
+    const removed = edited(launch, data, (d) => launch.remove(d, combat));
+    expect(removed).toBe(source.replace(" -modifier combat easy", ""));
+    const added = edited(launch, data, (d) =>
+      launch.insert(d, keyed("-modifier", "portals"), "casual"),
+    );
+    expect(added).toBe(`${source} -modifier portals casual`);
+  });
+
+  it("turns a keyed switch off and on", () => {
+    const nomap = keyed("-setkey", "nomap");
+    const off = edited(launch, data, (d) => launch.set(d, nomap, false));
+    expect(off).toBe(source.replace(" -setkey nomap", ""));
+    const on = edited(launch, off, (d) => launch.insert(d, nomap, true));
+    expect(on).toBe(source);
+    expect(launch.set(doc, nomap, true)).toEqual([]);
+  });
+
+  it("keeps the second value word out of the next plain flag", () => {
+    const line = launch.parse(bytes("-a 1 2 -b 3"));
+    expect(launch.get(line, flag("-a"))).toBe("1");
+    expect(launch.get(line, flag("-b"))).toBe("3");
+    const removed = edited(launch, "-a 1 2 -b 3", (d) =>
+      launch.remove(d, flag("-a")),
+    );
+    expect(removed).toBe("-b 3");
+  });
+
+  it("places a before-flag in front of the flags it names", () => {
+    const preset: LaunchLocator = {
+      kind: "launch",
+      flag: "-preset",
+      before: ["-modifier", "-setkey"],
+    };
+    const placed = edited(launch, data, (d) =>
+      launch.insert(d, preset, "casual"),
+    );
+    expect(placed).toBe(
+      source.replace("2456 -modifier", "2456 -preset casual -modifier"),
+    );
+    // Without the field the argument goes to the end, as before.
+    const plain = edited(launch, data, (d) =>
+      launch.insert(d, flag("-preset"), "casual"),
+    );
+    expect(plain).toBe(`${source} -preset casual`);
+  });
+
+  it("refuses a keyed write to a key that is not on the line", () => {
+    const missing = keyed("-modifier", "no-such");
+    expect(errorCode(() => launch.set(doc, missing, "hard"))).toBe(
+      "not-found",
+    );
+    expect(errorCode(() => launch.get(doc, keyed("-modifier", "a b")))).toBe(
+      "invalid-locator",
+    );
+  });
+});
