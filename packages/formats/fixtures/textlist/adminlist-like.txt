@@ -1,0 +1,6 @@
+// Server admin list: one id per line.
+76561198000000001
+
+  V_76561198000000002  
+// a comment between ids
+Steam_76561198000000003

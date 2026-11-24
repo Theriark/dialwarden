@@ -6,6 +6,7 @@ import { cfgAdapter } from "./cfg.js";
 import { iniAdapter, ueIniAdapter } from "./ini.js";
 import { jsonAdapter, jsoncAdapter } from "./json.js";
 import { launchAdapter } from "./launch.js";
+import { textListAdapter } from "./textlist.js";
 import { luaAdapter } from "./lua.js";
 import { shellVarAdapter, systemdEnvAdapter } from "./shellvar.js";
 import type { FormatAdapter, Locator } from "./types.js";
@@ -22,6 +23,7 @@ export {
   luaAdapter,
   shellVarAdapter,
   systemdEnvAdapter,
+  textListAdapter,
   ueIniAdapter,
   xmlAdapter,
 };
@@ -57,6 +59,7 @@ export const ADAPTER_IDS = [
   "shellvar",
   "shellvar-systemd",
   "launch",
+  "textlist",
 ] as const;
 
 export type AdapterId = (typeof ADAPTER_IDS)[number];
@@ -72,6 +75,7 @@ const ADAPTERS = new Map<string, FormatAdapter>([
   ["shellvar", shellVarAdapter],
   ["shellvar-systemd", systemdEnvAdapter],
   ["launch", launchAdapter],
+  ["textlist", textListAdapter],
 ]);
 
 /** The adapter for an id, or undefined. */
