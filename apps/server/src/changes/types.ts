@@ -74,13 +74,7 @@ export function isApplicable(status: ChangeSetStatus): boolean {
  * without a known setting changing: their to says how many lines.
  */
 export type ChipKind =
-  | "changed"
-  | "added"
-  | "removed"
-  | "masked"
-  | "lines"
-  | "external"
-  | "import";
+  "changed" | "added" | "removed" | "masked" | "lines" | "external" | "import";
 
 export interface Chip {
   readonly kind: ChipKind;
