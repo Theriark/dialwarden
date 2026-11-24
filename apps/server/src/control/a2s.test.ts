@@ -126,6 +126,30 @@ describe("A2S probe (simulated)", () => {
     expect(result.state).toBe("stopped");
   });
 
+  it("reports unknown for a host that does not resolve, without throwing", async () => {
+    const lost = new A2sProbe({
+      host: "dialwarden-probe.invalid",
+      port: 2457,
+      readMs: 2_000,
+      connectMs: 2_000,
+    });
+    const result = await lost.probe();
+    expect(result).toEqual({ state: "unknown" });
+    // Give a nextTick throw from the dgram send path the chance to surface.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  it("queries an IPv6 literal on a udp6 socket", async () => {
+    const six = new A2sProbe({
+      host: "::1",
+      port: 1,
+      readMs: 1_000,
+      connectMs: 1_000,
+    });
+    const result = await six.probe();
+    expect(["stopped", "unknown"]).toContain(result.state);
+  });
+
   it("reports unknown when nothing answers in time", async () => {
     mode = "silent";
     const result = await probe(false).probe();

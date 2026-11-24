@@ -18,7 +18,8 @@ import {
   type ControlContext,
 } from "./control.js";
 import type { JsonValue, Pack, Probe } from "@dialwarden/packs-schema";
-import { isControlError } from "./types.js";
+import { SourceRcon } from "./source-rcon.js";
+import { allowedCommand, isControlError, LIMITS } from "./types.js";
 
 const PACKS = fileURLToPath(new URL("../../../../packs/", import.meta.url));
 const { packs } = loadPacks(PACKS);
@@ -28,11 +29,16 @@ if (palworld === undefined) throw new Error("the palworld pack is missing");
 const key = randomBytes(32);
 const aead: Aead = createAead(key);
 
-const context = (values: {
-  readonly [key: string]: JsonValue;
-}): ControlContext => ({
+/** The server connection host the resolver falls back to. */
+const GAME_HOST = "game.example";
+
+const context = (
+  values: { readonly [key: string]: JsonValue },
+  host: string | null = GAME_HOST,
+): ControlContext => ({
   values: (name) => new Map(Object.entries(values)).get(name),
   secret: (encrypted) => decryptControlPassword(aead, encrypted),
+  ...(host === null ? {} : { host }),
 });
 
 const palworldProbe = palworld.probes[0] as Probe;
@@ -51,12 +57,23 @@ describe("control resolver", () => {
     const options =
       resolved?.kind === "palworldRest" ? resolved.options : undefined;
     expect(options).toMatchObject({
-      host: "127.0.0.1",
+      host: GAME_HOST,
       port: 8212,
       user: "admin",
       password: "admin-file-secret",
       infoPath: "/v1/api/info",
     });
+  });
+
+  it("stays silent when no host is known, never probing itself", async () => {
+    const resolved = await probeOptions({
+      probe: palworldProbe,
+      context: context(
+        { RESTAPIEnabled: true, RESTAPIPort: 8212, AdminPassword: "secret" },
+        null,
+      ),
+    });
+    expect(resolved).toBeNull();
   });
 
   it("stays silent when the pack's own switch is off", async () => {
@@ -180,6 +197,134 @@ describe("control resolver: RCON packs", () => {
   });
 });
 
+describe("control resolver: overrides cannot redirect a client", () => {
+  const values = {
+    RESTAPIEnabled: true,
+    RESTAPIPort: 8212,
+    AdminPassword: "override-secret",
+  };
+
+  it.each([
+    "evil.example/x?",
+    "evil.example/x#",
+    "user@evil.example",
+    "http://evil.example",
+    "[::1]:80",
+    "",
+  ])("refuses the override host %j", async (host) => {
+    await expect(
+      probeOptions({
+        probe: palworldProbe,
+        override: { host },
+        context: context(values),
+      }),
+    ).rejects.toMatchObject({ code: "Refused" });
+  });
+
+  it.each([0, 70_000, 1.5, -1])(
+    "refuses the override port %j",
+    async (port) => {
+      await expect(
+        probeOptions({
+          probe: palworldProbe,
+          override: { port },
+          context: context(values),
+        }),
+      ).rejects.toMatchObject({ code: "Refused" });
+    },
+  );
+
+  it("refuses a port the offset pushes past 65535", async () => {
+    await expect(
+      probeOptions({
+        probe: { kind: "a2s", portSetting: "port", portOffset: 1 },
+        context: context({ port: 65_535 }),
+      }),
+    ).rejects.toMatchObject({ code: "Refused" });
+  });
+
+  it("accepts an IPv6 literal and a plain name", async () => {
+    for (const host of ["::1", "game-01.lan"]) {
+      const resolved = await probeOptions({
+        probe: palworldProbe,
+        override: { host },
+        context: context(values),
+      });
+      expect(
+        resolved?.kind === "palworldRest" ? resolved.options.host : undefined,
+      ).toBe(host);
+    }
+  });
+});
+
+describe("control resolver: the allow-list at the resolver", () => {
+  const rcon = (extra: { readonly [key: string]: JsonValue }): Probe =>
+    ({
+      kind: "sourceRcon",
+      portSetting: "port",
+      passwordSetting: "password",
+      ...extra,
+    }) as Probe;
+  const values = { port: 27015, password: "file-rcon-secret" };
+
+  it("refuses a save command that is not on the allow-list", async () => {
+    await expect(
+      probeOptions({
+        probe: rcon({ allow: ["sav"], saveCommand: "kick all" }),
+        context: context(values),
+      }),
+    ).rejects.toThrowError("the probe command is not allowed");
+  });
+
+  it("refuses a probe without an allow-list", async () => {
+    await expect(
+      probeOptions({ probe: rcon({}), context: context(values) }),
+    ).rejects.toThrowError("the probe has no command allow-list");
+  });
+
+  it.each([
+    [[1]],
+    [[""]],
+    [["sav\nquit"]],
+    [["sav\rquit"]],
+    [["x".repeat(129)]],
+  ])("refuses the allow-list %j", async (allow) => {
+    await expect(
+      probeOptions({
+        probe: rcon({ allow: allow as JsonValue }),
+        context: context(values),
+      }),
+    ).rejects.toMatchObject({ code: "Refused" });
+  });
+});
+
+describe("allow-list bound", () => {
+  it("matches exactly, up to 128 characters and one line", () => {
+    const edge = "x".repeat(128);
+    const long = "x".repeat(129);
+    expect(LIMITS.maxCommandLength).toBe(128);
+    expect(allowedCommand([edge], edge)).toBe(edge);
+    expect(allowedCommand([long], long)).toBeUndefined();
+    expect(allowedCommand(["sav"], "sav ")).toBeUndefined();
+    expect(allowedCommand(["sav"], "SAV")).toBeUndefined();
+    expect(allowedCommand(["sav\nquit"], "sav\nquit")).toBeUndefined();
+    expect(allowedCommand(["sav\0"], "sav\0")).toBeUndefined();
+  });
+
+  it("refuses an over-long command before any connection", async () => {
+    const long = "x".repeat(129);
+    const client = new SourceRcon({
+      host: "127.0.0.1",
+      port: 1,
+      password: "short",
+      allow: [long],
+      saveCommand: long,
+      connectMs: 500,
+    });
+    await expect(client.save()).rejects.toMatchObject({ code: "Refused" });
+  });
+});
+
 describe("control secrets", () => {
   it("encrypts a control password for its own column", () => {
     const secret = "hook-rcon-secret";
@@ -216,7 +361,7 @@ describe("hook client", () => {
         kind: "dockerProxy",
         options: { url: "not-a-url", containerLabel: "dialwarden.game" },
       });
-    expect(docker).toThrowError();
+    expect(docker).toThrowError(/proxy URL is not usable/);
     expect(isControlError(new Error("x"))).toBe(false);
   });
 });
