@@ -143,8 +143,7 @@ export type SettingValue = (
 
 /** A password of a control endpoint, resolved when the client is built. */
 export type PasswordSource =
-  | { readonly fromSetting: string }
-  | { readonly encrypted: string };
+  { readonly fromSetting: string } | { readonly encrypted: string };
 
 /** The per-server control configuration P6-B stores (owner or admin only). */
 export type ControlConfig =
