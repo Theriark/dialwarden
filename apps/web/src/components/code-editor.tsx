@@ -120,11 +120,16 @@ export function LazyEditor({
   );
 }
 
+/** The diff editor is loading, shows, or could not load at all. */
+type DiffState = "loading" | "ready" | "failed";
+
 /**
  * The read-only diff of the save dialog (screen 5). The diff editor is
  * created straight on the Monaco API and disposed before its two text
  * models, so closing the dialog never logs the TextModel-disposed error
- * the react wrapper's dispose order caused (live check F2).
+ * the react wrapper's dispose order caused (live check F2). A load that
+ * fails, or settles after the dialog closed, is caught: a closed dialog
+ * needs nothing, an open one says so instead of the skeleton.
  */
 export const LazyDiffEditor = memo(function LazyDiffEditor({
   before,
@@ -137,15 +142,15 @@ export const LazyDiffEditor = memo(function LazyDiffEditor({
 }) {
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement | null>(null);
-  const [ready, setReady] = useState(false);
+  const [state, setState] = useState<DiffState>("loading");
   const diffRef = useRef<MonacoTypes.editor.IDiffEditor | null>(null);
   const modelsRef = useRef<readonly MonacoTypes.editor.ITextModel[] | null>(
     null,
   );
   useEffect(() => {
     let disposed = false;
-    void Promise.all([import("../lib/monaco"), import("monaco-editor")]).then(
-      ([, monaco]) => {
+    Promise.all([import("../lib/monaco"), import("monaco-editor")])
+      .then(([, monaco]) => {
         if (disposed || host.current === null) return;
         const original = monaco.editor.createModel(before, language);
         const modified = monaco.editor.createModel(after, language);
@@ -162,9 +167,14 @@ export const LazyDiffEditor = memo(function LazyDiffEditor({
         diff.setModel({ original, modified });
         diffRef.current = diff;
         modelsRef.current = [original, modified];
-        setReady(true);
-      },
-    );
+        setState("ready");
+      })
+      .catch(() => {
+        // The bundle did not load, or it settled once the dialog was gone
+        // (the jsdom teardown of the component tests): never an unhandled
+        // rejection, and no state update on an unmounted editor.
+        if (!disposed) setState("failed");
+      });
     return () => {
       disposed = true;
       // Dispose the diff editor before its text models: the other way
@@ -178,9 +188,15 @@ export const LazyDiffEditor = memo(function LazyDiffEditor({
   return (
     <div className="relative overflow-hidden rounded-control border border-border">
       <div ref={host} className="h-[40vh]" />
-      {ready ? null : (
+      {state === "ready" ? null : (
         <div className="absolute inset-0">
-          <Skeleton className="h-full w-full rounded-none" />
+          {state === "failed" ? (
+            <p role="alert" className="p-4 text-sm text-fg-muted">
+              The diff could not be shown because the editor failed to load.
+            </p>
+          ) : (
+            <Skeleton className="h-full w-full rounded-none" />
+          )}
         </div>
       )}
     </div>
