@@ -69,7 +69,7 @@ export const settings = sqliteTable("settings", {
 export const licence = sqliteTable(
   "licence",
   {
-    id: integer("id"),
+    id: integer("id").primaryKey(),
     tokenEnc: text("token_enc").notNull(),
     updatedAt: text("updated_at").notNull(),
     updatedBy: text("updated_by"),
@@ -100,7 +100,7 @@ export const activityEvents = sqliteTable(
 export const instanceSshKey = sqliteTable(
   "instance_ssh_key",
   {
-    id: integer("id"),
+    id: integer("id").primaryKey(),
     /** OpenSSH private key, encrypted with APP_SECRET_KEY. */
     privateKeyEnc: text("private_key_enc").notNull(),
     /** OpenSSH public key line (ssh-ed25519 AAAA... comment). */
