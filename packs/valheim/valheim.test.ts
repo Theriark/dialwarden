@@ -1,8 +1,8 @@
 // The Valheim pack (dev-work-plan P6-A step 6): the launch flags with their
 // keyed -modifier and -setkey arguments, the -preset-first rule (the pack
-// lint for hand-edited lines and the serializer for written ones), the three
-// secret access lists through the textlist adapter, the launch sources of
-// dev-work-plan P6-A step 5, and the rules of pack-draft-valheim.
+// lint for hand-edited lines and the serializer for written ones), the launch
+// sources of dev-work-plan P6-A step 5, and the rules of pack-draft-valheim.
+// The access lists wait for file paths that follow -savedir (THE-2596 F3).
 import { getAdapter } from "@dialwarden/formats";
 import {
   checkValue,
@@ -15,6 +15,7 @@ import {
   readLaunchSourceValues,
   renderLaunchLine,
   validate,
+  writeFileValues,
   writeLaunchSourceValues,
   type JsonValue,
 } from "@dialwarden/packs-schema";
@@ -93,9 +94,6 @@ describe("Valheim pack", () => {
   it("declares its files with the right policies and sources", () => {
     expect(pack.files.map((f) => [f.id, f.adapter, f.applyPolicy])).toEqual([
       ["launch", "launch", "anytime"],
-      ["adminlist", "textlist", "stopped-only"],
-      ["bannedlist", "textlist", "stopped-only"],
-      ["permittedlist", "textlist", "stopped-only"],
     ]);
     expect(pack.hooksSupported).toEqual(["restart"]);
     expect(pack.probes).toEqual([
@@ -229,13 +227,6 @@ describe("Valheim pack", () => {
       severity: "error",
       message: expect.stringContaining("passes this value to a shell"),
     });
-    // The lists are never read by a shell: no X1 issue there.
-    fixture.set("adminlist", ["76561198000000001; rm"]);
-    expect(
-      validate(pack, fixture).filter(
-        (issue) => issue.key === "adminlist" && issue.severity === "error",
-      ),
-    ).toEqual([]);
   });
 
   it("checks the password rules on the server only", () => {
@@ -269,32 +260,6 @@ describe("Valheim pack", () => {
       severity: "error",
       message: expect.stringContaining("appears inside the server name"),
     });
-  });
-
-  it("keeps the list files byte-exact outside the ids it holds", () => {
-    const permitted = new Uint8Array(
-      readFileSync(`${FIXTURES}/permittedlist.txt`),
-    );
-    const adapter = getAdapter("textlist");
-    if (adapter === undefined) throw new Error("no textlist adapter");
-    const doc = adapter.parse(permitted);
-    const setting = settingOf(pack, "permittedlist");
-    expect(adapter.get(doc, setting.locator)).toEqual([]);
-    const writeSettingOf = (value: JsonValue) =>
-      writeSetting(adapter, doc, setting.locator, value);
-    const withId = writeSettingOf(["76561198000000002"]);
-    expect(text(withId)).toBe(
-      "// Dialwarden synthetic permittedlist header.\r\n76561198000000002\r\n",
-    );
-    // The decoder drops the BOM from the text; the byte comparison below
-    // shows the BOM, the CRLF header and the header text never change.
-    const restored = writeSetting(
-      adapter,
-      adapter.parse(withId),
-      setting.locator,
-      [],
-    );
-    expect(restored).toEqual(permitted);
   });
 
   it("reads and writes the LinuxGSM instance cfg source", () => {
@@ -405,9 +370,142 @@ describe("Valheim pack", () => {
     // eval keeps the quoted words of the line together; Compose and systemd
     // need $$ for the $ of the command substitution.
     expect(snippets.bash).toBe(
-      'eval "exec ./valheim_server.x86_64 $(cat dialwarden-args.txt)"',
+      'set -f; eval "exec ./valheim_server.x86_64 $(cat dialwarden-args.txt)"',
     );
     expect(snippets.compose).toContain("$$(cat dialwarden-args.txt)");
     expect(snippets.systemd).toContain("$$(cat dialwarden-args.txt)");
+    // set -f comes before eval in every shell form (no file patterns).
+    for (const form of [snippets.bash, snippets.compose, snippets.systemd]) {
+      expect(form.indexOf("set -f")).toBeGreaterThanOrEqual(0);
+      expect(form.indexOf("set -f")).toBeLessThan(form.indexOf("eval"));
+    }
+  });
+
+  it("refuses to add a line variable to a default LinuxGSM instance cfg", () => {
+    const source = pack.files[0]?.launchSources?.find(
+      (s) => s.kind === "linuxgsm",
+    );
+    if (source === undefined) throw new Error("no linuxgsm source");
+    // A new instance cfg holds only a comment header (written here in our
+    // own words); the start line lives in _default.cfg.
+    const fresh = bytesOf(
+      "##################################\n" +
+        "# Instance settings: values here win over _default.cfg.\n" +
+        "##################################\n",
+    );
+    for (const edit of [
+      { key: "crossplay", value: true },
+      { key: "crossplay", value: false },
+      { key: "combat", value: "hard" },
+    ]) {
+      expect(() =>
+        writeLaunchSourceValues(pack, "launch", source, fresh, [edit]),
+      ).toThrowError(/copy the \w+ line from _default.cfg/);
+    }
+    // A flag with its own variable is still added: LinuxGSM reads it into
+    // the default start line.
+    const port = text(
+      writeLaunchSourceValues(pack, "launch", source, fresh, [
+        { key: "port", value: 2457 },
+      ]),
+    );
+    expect(port).toContain("2457");
+    expect(port).not.toContain("startparameters");
+  });
+
+  it("reads and writes the args source through the launch-source functions", () => {
+    const source = { kind: "args" as const };
+    const fixture = args();
+    const values = readLaunchSourceValues(pack, "launch", source, fixture);
+    expect(values.get("name")).toBe("Quarry Lane");
+    expect(values.get("port")).toBe(2456);
+    expect(values.get("public")).toBe(1);
+    expect(values.get("combat")).toBe("easy");
+    expect(values.get("crossplay")).toBe(true);
+    expect(values.get("nomap")).toBe(true);
+    const written = writeLaunchSourceValues(pack, "launch", source, fixture, [
+      { key: "port", value: 2457 },
+      { key: "combat", value: "hard" },
+      { key: "nomap", value: false },
+    ]);
+    const expected = text(fixture)
+      .replace("2456", "2457")
+      .replace("combat easy", "combat hard")
+      .replace(" -setkey nomap", "");
+    expect(text(written)).toBe(expected);
+    const reread = readLaunchSourceValues(pack, "launch", source, written);
+    expect(reread.get("port")).toBe(2457);
+    expect(reread.get("combat")).toBe("hard");
+    expect(reread.get("nomap")).toBe(false);
+    // An absent keyed switch reads as off on an empty file too.
+    const empty = readLaunchSourceValues(
+      pack,
+      "launch",
+      source,
+      new Uint8Array(0),
+    );
+    expect(empty.get("nomap") ?? false).toBe(false);
+  });
+
+  it("rereads the container env source after a write", () => {
+    const source = pack.files[0]?.launchSources?.find((s) => s.kind === "env");
+    if (source === undefined) throw new Error("no env source");
+    const env = bytesOf(
+      "SERVER_NAME=Quarry Lane\n" +
+        "SERVER_PORT=2456\n" +
+        "SERVER_PUBLIC=true\n" +
+        "SERVER_ARGS=-crossplay -saveinterval 1800\n" +
+        "CROSSPLAY=false\n",
+    );
+    const next = writeLaunchSourceValues(pack, "launch", source, env, [
+      { key: "public", value: 0 },
+      { key: "saveinterval", value: 900 },
+    ]);
+    const reread = readLaunchSourceValues(pack, "launch", source, next);
+    expect(reread.get("public")).toBe(0);
+    expect(reread.get("saveinterval")).toBe(900);
+    expect(reread.get("name")).toBe("Quarry Lane");
+  });
+
+  it("finds a keyed modifier whatever the case of its key", () => {
+    // LinuxGSM documents the key as deathPenalty.
+    const line = "-name x -modifier deathPenalty casual";
+    expect(launchValue(line, "deathpenalty")).toBe("casual");
+    const written = launchWrite(line, "deathpenalty", "hardcore");
+    expect(written.match(/-modifier/g)).toHaveLength(1);
+    expect(launchValue(written, "deathpenalty")).toBe("hardcore");
+  });
+
+  // Threat test T3 (security review THE-2598): typed values stay eval-safe.
+  it("writes typed values with spaces and quotes that lint clean and read back", () => {
+    const tricky = `Quarry "Lane" it's`;
+    const written = writeFileValues(pack, "launch", args(), [
+      { key: "name", value: `Quarry "Lane" it is` },
+      { key: "world", value: "Dunninger" },
+      { key: "savedir", value: tricky },
+    ]);
+    const errors = lintFile(pack, "launch", written).filter(
+      (issue) => issue.severity === "error",
+    );
+    expect(errors).toEqual([]);
+    const values = readLaunchSourceValues(
+      pack,
+      "launch",
+      { kind: "args" },
+      written,
+    );
+    expect(values.get("name")).toBe(`Quarry "Lane" it is`);
+    expect(values.get("world")).toBe("Dunninger");
+    expect(values.get("savedir")).toBe(tricky);
+  });
+
+  // Threat test T1 at pack level (security review THE-2598 F1).
+  it("blocks a raw args line that holds a command substitution", () => {
+    const raw = bytesOf(`${text(args()).trim()} -zz "$(touch /tmp/dw-pwn)"\n`);
+    const issues = lintFile(pack, "launch", raw).filter(
+      (issue) => issue.code === "shell-character",
+    );
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues.every((issue) => issue.severity === "error")).toBe(true);
   });
 });
