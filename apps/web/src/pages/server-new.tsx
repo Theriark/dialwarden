@@ -440,9 +440,7 @@ export function NewServerPage() {
                     {/* F4 at 390: the fingerprint wraps and Copy key sits
                         on its own row, so the card never overflows. */}
                     <div className="flex flex-col items-start gap-2">
-                      <span
-                        className="w-full font-mono text-xs break-all text-fg-muted"
-                      >
+                      <span className="w-full font-mono text-xs break-all text-fg-muted">
                         {key.data.fingerprint}
                       </span>
                       <CopyKey publicKey={key.data.publicKey} />

@@ -3,7 +3,7 @@
 // paint never pull the editor bundle. The theme follows the app theme, and
 // the raw editor's lint reaches the Monaco gutter as markers.
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
-import type * as Monaco from "monaco-editor";
+import type * as MonacoTypes from "monaco-editor";
 import { useTheme } from "../theme/theme-provider";
 import { Skeleton } from "./ui/states";
 
@@ -138,35 +138,41 @@ export const LazyDiffEditor = memo(function LazyDiffEditor({
   const { resolved } = useTheme();
   const host = useRef<HTMLDivElement | null>(null);
   const [ready, setReady] = useState(false);
+  const diffRef = useRef<MonacoTypes.editor.IDiffEditor | null>(null);
+  const modelsRef = useRef<readonly MonacoTypes.editor.ITextModel[] | null>(
+    null,
+  );
   useEffect(() => {
     let disposed = false;
-    let diff: Monaco.editor.IDiffEditor | undefined;
-    let original: Monaco.editor.ITextModel | undefined;
-    let modified: Monaco.editor.ITextModel | undefined;
-    void import("../lib/monaco").then((monaco) => {
-      if (disposed || host.current === null) return;
-      original = monaco.editor.createModel(before, language);
-      modified = monaco.editor.createModel(after, language);
-      diff = monaco.editor.createDiffEditor(host.current, {
-        readOnly: true,
-        renderSideBySide: true,
-        automaticLayout: true,
-        minimap: { enabled: false },
-        scrollBeyondLastLine: false,
-        fontFamily: "JetBrains Mono, ui-monospace, monospace",
-        fontSize: 13,
-        theme: resolved === "dark" ? "dw-dark" : "dw-light",
-      });
-      diff.setModel({ original, modified });
-      setReady(true);
-    });
+    void Promise.all([import("../lib/monaco"), import("monaco-editor")]).then(
+      ([, monaco]) => {
+        if (disposed || host.current === null) return;
+        const original = monaco.editor.createModel(before, language);
+        const modified = monaco.editor.createModel(after, language);
+        const diff = monaco.editor.createDiffEditor(host.current, {
+          readOnly: true,
+          renderSideBySide: true,
+          automaticLayout: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          fontFamily: "JetBrains Mono, ui-monospace, monospace",
+          fontSize: 13,
+          theme: resolved === "dark" ? "dw-dark" : "dw-light",
+        });
+        diff.setModel({ original, modified });
+        diffRef.current = diff;
+        modelsRef.current = [original, modified];
+        setReady(true);
+      },
+    );
     return () => {
       disposed = true;
       // Dispose the diff editor before its text models: the other way
       // round, Monaco logs the console error of live check F2.
-      diff?.dispose();
-      original?.dispose();
-      modified?.dispose();
+      diffRef.current?.dispose();
+      for (const model of modelsRef.current ?? []) {
+        model.dispose();
+      }
     };
   }, [before, after, language, resolved]);
   return (

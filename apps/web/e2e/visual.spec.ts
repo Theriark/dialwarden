@@ -125,9 +125,7 @@ const SCREENS: readonly Screen[] = [
         page.getByRole("heading", { name: "Add server" }),
       ).toBeVisible();
       await page.getByText("SFTP", { exact: true }).click();
-      await expect(
-        page.getByText("This instance's public key"),
-      ).toBeVisible();
+      await expect(page.getByText("This instance's public key")).toBeVisible();
     },
   },
 ];

@@ -101,9 +101,7 @@ describe("TimelineRow", () => {
         />
       </ol>,
     );
-    expect(
-      screen.getByText("Nothing to restore for this entry"),
-    ).toBeTruthy();
+    expect(screen.getByText("Nothing to restore for this entry")).toBeTruthy();
   });
 });
 
