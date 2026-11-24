@@ -59,9 +59,7 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
 
   // The owner points the hook at the simulated docker proxy.
   await page.getByText("Docker socket proxy").click();
-  await page
-    .getByLabel("Proxy address")
-    .fill(`http://127.0.0.1:${sim.port}`);
+  await page.getByLabel("Proxy address").fill(`http://127.0.0.1:${sim.port}`);
   await page.getByLabel("Container label").fill(CONTAINER_LABEL);
   await page.getByRole("button", { name: "Save hook" }).click();
   await expect(page.getByText("Hook saved")).toBeVisible();
@@ -109,7 +107,7 @@ test("save and restart stops, writes and starts the game again, simulated", asyn
   // The start hook brings the simulated container back up.
   await page.goto("/servers/palworld-home/hooks");
   await expect(page.getByText("Stopped").first()).toBeVisible();
-  await page.getByRole("button", { name: "Run start"}).click();
+  await page.getByRole("button", { name: "Run start" }).click();
   const startConfirm = page.getByRole("alertdialog", {
     name: "Run the start hook?",
   });
@@ -130,7 +128,9 @@ test("save and restart stops, writes and starts the game again, simulated", asyn
   });
   await expect(saveAndRestart).toBeChecked();
   await expect(
-    dialog.getByText("Stops the server, writes the files, then starts it again."),
+    dialog.getByText(
+      "Stops the server, writes the files, then starts it again.",
+    ),
   ).toBeVisible();
   const apply = dialog.getByRole("button", { name: "Save and restart" });
   await apply.focus();
@@ -192,14 +192,16 @@ test("the Activity page renders the fleet in words and pages onwards", async ({
   // The feed pages onwards with the server's cursor.
   await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
   await page.getByRole("button", { name: "Load more" }).click();
-  await expect(page.getByText(/events shown · everything loaded/)).toBeVisible();
+  await expect(
+    page.getByText(/events shown · everything loaded/),
+  ).toBeVisible();
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 
   // The tabs narrow the feed; the arrows move them on the keyboard.
   await page.getByRole("tab", { name: "Applies" }).click();
-  await expect(
-    page.getByText("The stop hook ran (dockerProxy)"),
-  ).toHaveCount(0);
+  await expect(page.getByText("The stop hook ran (dockerProxy)")).toHaveCount(
+    0,
+  );
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("tab", { name: "Failures" })).toHaveAttribute(
     "aria-selected",
