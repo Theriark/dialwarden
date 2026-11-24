@@ -78,8 +78,10 @@ const SCREENS: readonly Screen[] = [
     ready: async (page) => {
       await expect(page.getByText("No presets yet")).toBeVisible();
       await page.getByRole("button", { name: "Create preset" }).click();
+      // The confirm dialog is a Radix alert dialog, so its role is
+      // alertdialog, unlike the save dialog's plain dialog.
       await expect(
-        page.getByRole("dialog", { name: "Create a preset" }),
+        page.getByRole("alertdialog", { name: "Create a preset" }),
       ).toBeVisible();
       await expect(page.getByLabel("From server")).toHaveValue("");
     },
