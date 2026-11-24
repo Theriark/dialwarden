@@ -23,6 +23,7 @@ import type { Settings } from "../db/settings.js";
 import type { Store } from "../db/store.js";
 import type { LicenceService } from "../licence/service.js";
 import type { EditableServers } from "../plan/editable.js";
+import type { PresetService } from "../presets/service.js";
 import type { ServerService } from "../servers/service.js";
 import type { SnapshotStore } from "../snapshots/store.js";
 
@@ -53,6 +54,8 @@ export interface AppContext {
   servers: ServerService;
   /** Change sets, the write path, outside edits and history (C5). */
   changes: ChangeSetService;
+  /** The saved user presets and their apply as change sets (P5 screen 7). */
+  presets: PresetService;
   /** Content-addressed snapshot blobs under DATA_DIR/snapshots. */
   snapshots: SnapshotStore;
   /** True while a first-run import replaces the database: the API answers 503. */

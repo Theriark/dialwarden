@@ -176,11 +176,28 @@ CREATE TABLE snapshot_blobs (
 );
 `;
 
+// The saved user presets (P5 screen 7): typed values by setting key as JSON,
+// secrets as their mask (the settings read masks them and the write path
+// drops a masked secret, so a preset never carries a real secret). The
+// values column is quoted: VALUES is a keyword of SQL.
+const presets = `
+CREATE TABLE presets (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  pack_id TEXT NOT NULL,
+  "values" TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX presets_created ON presets (created_at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
   { id: "0003_connectors", sql: connectors },
   { id: "0004_servers", sql: servers },
+  { id: "0005_presets", sql: presets },
 ];
 
 /** The id of the newest migration this build knows. */

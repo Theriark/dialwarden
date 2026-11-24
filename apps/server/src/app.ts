@@ -44,6 +44,7 @@ import {
 import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
+import { PresetService } from "./presets/service.js";
 import { activityRoutes } from "./routes/activity.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
@@ -51,6 +52,7 @@ import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { licenceRoutes } from "./routes/licence.js";
+import { presetRoutes } from "./routes/presets.js";
 import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
 import { seedDemoServers } from "./servers/demo.js";
@@ -210,6 +212,14 @@ export async function buildApp(
     entitlement,
     now,
   });
+  const presets = new PresetService({
+    store,
+    packs: packs.packs,
+    servers,
+    changes,
+    entitlement,
+    now,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -239,6 +249,7 @@ export async function buildApp(
     packs: packs.packs,
     servers,
     changes,
+    presets,
     snapshots,
     maintenance: false,
     importing: false,
@@ -303,6 +314,7 @@ export async function buildApp(
   connectorRoutes(app);
   serverRoutes(app);
   changeRoutes(app);
+  presetRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
