@@ -760,10 +760,11 @@ describe("the hook run API and its roles (contract C7)", () => {
     const view = (await hooksOf(api, slug)) as {
       available: Record<string, string | null>;
     };
-    // The broken probe stays silent; the docker hook stays usable.
+    // The broken probe stays silent, so the pack's own save and stop are
+    // gone; the docker hook stays usable and takes the stop over.
     expect(view.available).toMatchObject({
       save: null,
-      stop: null,
+      stop: "dockerProxy",
       start: "dockerProxy",
       restart: "dockerProxy",
     });
