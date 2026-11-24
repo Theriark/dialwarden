@@ -10,6 +10,7 @@ import { PasswordField, SelectField, TextField } from "../ui/field";
 import { SwitchField } from "../ui/switch";
 import { Button } from "../ui/button";
 import { cn } from "../../lib/cn";
+import { AccessListField } from "./access-list-field";
 
 const BADGE =
   "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium";
@@ -198,6 +199,16 @@ export const SettingField = memo(function SettingField({
             }
             onChange(setting.key, event.target.value);
           }}
+        />
+      ) : setting.type === "list" && setting.secret === true ? (
+        <AccessListField
+          setting={setting}
+          value={value}
+          edited={edited}
+          issue={issue}
+          disabled={locked}
+          onChange={onChange}
+          onReset={onReset}
         />
       ) : setting.type === "list" ? (
         <ListField
