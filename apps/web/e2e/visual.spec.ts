@@ -66,7 +66,7 @@ const SCREENS: readonly Screen[] = [
     ready: async (page) => {
       await expect(page.getByText("First import")).toBeVisible();
       await expect(
-        page.getByText("Waiting for the server to stop"),
+        page.getByRole("heading", { name: "Waiting for the server to stop" }),
       ).toBeVisible();
     },
   },

@@ -62,7 +62,7 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
   await page.getByLabel("Proxy address").fill(`http://127.0.0.1:${sim.port}`);
   await page.getByLabel("Container label").fill(CONTAINER_LABEL);
   await page.getByRole("button", { name: "Save hook" }).click();
-  await expect(page.getByText("Hook saved")).toBeVisible();
+  await expect(page.getByText("Hook saved").first()).toBeVisible();
 
   // The probe answers through the hook: the simulated container runs.
   await page.getByRole("button", { name: "Check now" }).click();
@@ -76,7 +76,9 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
   await expect(dialog.getByText(/the change waits as pending/)).toBeVisible();
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(
-    page.getByText("These files are written when the server is stopped next."),
+    page
+      .getByText("These files are written when the server is stopped next.")
+      .first(),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "1 pending change" }),
@@ -84,7 +86,9 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
 
   // The pending list offers the stop; the simulated hook writes the change.
   await page.goto("/servers/palworld-home/history");
-  await expect(page.getByText("Waiting for the server to stop")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Waiting for the server to stop" }),
+  ).toBeVisible();
   await expect(page.getByText("Experience rate: 1 → 3")).toBeVisible();
   await page.getByRole("button", { name: "Stop the server now" }).click();
   const confirm = page.getByRole("alertdialog", {
@@ -92,8 +96,12 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
   });
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Stop the server" }).click();
-  await expect(page.getByText("1 pending change was written.")).toBeVisible();
-  await expect(page.getByText("Waiting for the server to stop")).toHaveCount(0);
+  await expect(
+    page.getByText("1 pending change was written.").first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Waiting for the server to stop" }),
+  ).toHaveCount(0);
   expect(sim.verbs).toContain("stop");
   await expect(page.getByText("Stopped").first()).toBeVisible();
 });
@@ -113,7 +121,7 @@ test("save and restart stops, writes and starts the game again, simulated", asyn
   });
   await expect(startConfirm).toBeVisible();
   await startConfirm.getByRole("button", { name: "Run start" }).click();
-  await expect(page.getByText("Start ran")).toBeVisible();
+  await expect(page.getByText("Start ran").first()).toBeVisible();
   await expect(page.getByText("Running").first()).toBeVisible();
 
   // The keyboard picks Save and restart in the dialog's radio group.
@@ -136,7 +144,9 @@ test("save and restart stops, writes and starts the game again, simulated", asyn
   await apply.focus();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByText("The files hold the new values and the restart hook ran."),
+    page
+      .getByText("The files hold the new values and the restart hook ran.")
+      .first(),
   ).toBeVisible();
 
   // The simulated proxy saw the full stop, write and start cycle.
@@ -260,6 +270,8 @@ test("the launch page shows the source, the live line and the snippets", async (
   const dialog = page.getByRole("dialog", { name: "Save these changes?" });
   await expect(dialog.getByText("Read at start only")).toBeVisible();
   await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("The files hold the new values.")).toBeVisible();
+  await expect(
+    page.getByText("The files hold the new values.").first(),
+  ).toBeVisible();
   await expect(page.getByLabel("Launch line")).toContainText("-players=16");
 });
