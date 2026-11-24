@@ -71,7 +71,7 @@ function bareFlag(adapter: FormatAdapter, setting: Setting): boolean {
   return adapter.id === "launch" && setting.type === "bool";
 }
 
-/** The settings of a pack file, in pack order. */
+/** The settings of a pack that live in one file, in pack order. */
 export function settingsOfFile(pack: Pack, fileId: string): Setting[] {
   return pack.settings.filter((setting) => setting.file === fileId);
 }
