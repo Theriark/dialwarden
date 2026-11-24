@@ -3,6 +3,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { api, ApiError, setCsrf } from "./client";
 import type {
+  ActivityPage,
+  ActivityType,
   BackupList,
   ChangeSet,
   EditableServers,
@@ -10,12 +12,15 @@ import type {
   GameList,
   Health,
   History,
+  HooksView,
   InstanceKey,
+  PendingList,
   RawFile,
   Registry,
   Server,
   ServerList,
   ServerSettings,
+  ServerStatus,
   SettingsMeta,
   SetupStatus,
   SignedIn,
@@ -199,3 +204,56 @@ export const presetsQuery = () =>
     staleTime: 15_000,
     retry: false,
   });
+
+// ---- P6: hooks, status, pending and activity (contracts C5, C6, C7) ----
+
+export const p6keys = {
+  hooks: (slug: string) => ["servers", slug, "hooks"] as const,
+  status: (slug: string) => ["servers", slug, "status"] as const,
+  pending: (slug: string) => ["servers", slug, "pending"] as const,
+  activity: (type: ActivityType | null) => ["activity", type ?? "all"] as const,
+};
+
+/** The hook configuration and the actions it makes available. */
+export const hooksQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p6keys.hooks(slug),
+    queryFn: () => api<HooksView>(`/api/v1/servers/${slug}/hooks`),
+    staleTime: 15_000,
+  });
+
+/**
+ * The probe answer of one server. A probe that cannot answer is not an
+ * error worth retrying: the chip shows unknown and the next read asks again.
+ */
+export const serverStatusQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p6keys.status(slug),
+    queryFn: () => api<ServerStatus>(`/api/v1/servers/${slug}/status`),
+    staleTime: 10_000,
+    retry: false,
+  });
+
+/** The change sets of a server waiting for it to stop, oldest first. */
+export const pendingQuery = (slug: string) =>
+  queryOptions({
+    queryKey: p6keys.pending(slug),
+    queryFn: () => api<PendingList>(`/api/v1/servers/${slug}/pending`),
+    staleTime: 10_000,
+  });
+
+/** One page of the activity feed; the Activity page chains them. */
+export function fetchActivityPage(params: {
+  readonly type: ActivityType | null;
+  readonly before: number | null;
+  readonly limit: number;
+}): Promise<ActivityPage> {
+  const search = new URLSearchParams({ limit: String(params.limit) });
+  if (params.type !== null) {
+    search.set("type", params.type);
+  }
+  if (params.before !== null) {
+    search.set("before", String(params.before));
+  }
+  return api<ActivityPage>(`/api/v1/activity?${search.toString()}`);
+}

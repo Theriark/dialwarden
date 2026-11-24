@@ -37,7 +37,7 @@ export function isSessionEnded(error: unknown): boolean {
 /**
  * Drops the local session once the server says it ended. The query client
  * calls this for every query and mutation (app.tsx); the shell then sends the
- * user to sign in again with the current page as the redirect.
+ * user to sign-in again with the current page as the redirect.
  */
 export function forgetSession(client: QueryClient): void {
   setCsrf(null);
@@ -53,6 +53,22 @@ export function useSessionUser(): User | null {
 export function useIsOwner(): boolean {
   const user = useSessionUser();
   return user?.role === "owner";
+}
+
+/** The roles that may set or change a server's hooks (routes/hooks.ts). */
+export const HOOK_CONFIG_ROLES: readonly string[] = ["owner", "admin"];
+
+/** The roles that may run a hook action; a viewer only looks. */
+export const HOOK_RUN_ROLES: readonly string[] = ["owner", "admin", "editor"];
+
+export function useCanConfigureHooks(): boolean {
+  const user = useSessionUser();
+  return user !== null && HOOK_CONFIG_ROLES.includes(user.role);
+}
+
+export function useCanRunHooks(): boolean {
+  const user = useSessionUser();
+  return user !== null && HOOK_RUN_ROLES.includes(user.role);
 }
 
 /**

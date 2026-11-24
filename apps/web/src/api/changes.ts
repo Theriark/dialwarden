@@ -7,7 +7,11 @@ import type {
   ConnectionSpec,
   Detection,
   EditableServers,
+  HookAction,
+  HooksView,
   PinnedHostKey,
+  PutHooksBody,
+  RunAnswer,
   Server,
   TestResult,
   UserPreset,
@@ -44,8 +48,11 @@ export function getChangeSet(id: string): Promise<ChangeSet> {
 }
 
 /**
- * POST /api/v1/change-sets/:id/apply. Hooks arrive with P6 (the server
- * answers hooks_not_available for anything but "none" until then).
+ * POST /api/v1/change-sets/:id/apply (contract C5). "none" writes now, or
+ * parks a stopped-only change as pending while the server runs; "restart"
+ * writes and runs the restart hook (or the pack's live-reload save);
+ * "stop-start" stops, writes and starts. The server answers 409
+ * hook_not_configured when no hook can run the action asked for.
  */
 export function applyChangeSet(
   id: string,
@@ -54,6 +61,22 @@ export function applyChangeSet(
   return api<ChangeSet>(`/api/v1/change-sets/${id}/apply`, {
     method: "POST",
     body: { runHooks },
+  });
+}
+
+/** PUT /api/v1/servers/:slug/hooks (owner or admin): the hook and probes. */
+export function putHooks(slug: string, body: PutHooksBody): Promise<HooksView> {
+  return api<HooksView>(`/api/v1/servers/${slug}/hooks`, {
+    method: "PUT",
+    body,
+  });
+}
+
+/** POST /api/v1/servers/:slug/hooks/run (owner, admin or editor). */
+export function runHook(slug: string, action: HookAction): Promise<RunAnswer> {
+  return api<RunAnswer>(`/api/v1/servers/${slug}/hooks/run`, {
+    method: "POST",
+    body: { action },
   });
 }
 
