@@ -52,14 +52,18 @@ export function runHooksOf(
   return stoppedOnly ? "stop-start" : "restart";
 }
 
-/** True when some client can bring the server back after a write. */
+/**
+ * True when a client can restart the server after a write: the restart
+ * action, or stop and start together. The pack's live-reload save does not
+ * count — it writes settings into the running game and cannot bring a
+ * stopped server back, so a stop-start apply must never rely on it.
+ */
 export function canRestart(hooks: HooksView | undefined): boolean {
   if (hooks === undefined) return false;
   const { available } = hooks;
   return (
     available.restart !== null ||
-    (available.stop !== null && available.start !== null) ||
-    available.save !== null
+    (available.stop !== null && available.start !== null)
   );
 }
 
@@ -154,7 +158,9 @@ export function SaveDialog({
             applied.status === "pending"
               ? "These files are written when the server is stopped next."
               : choice === "restart"
-                ? "The files hold the new values and the restart hook ran."
+                ? stoppedOnly
+                  ? "The server was stopped, the files were written and the start hook ran."
+                  : "The files hold the new values and the restart hook ran."
                 : "The files hold the new values.",
         });
         onApplied(applied);

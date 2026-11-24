@@ -462,6 +462,18 @@ describe("SaveDialog", () => {
         }),
       ),
     ).toBe(true);
+    expect(
+      canRestart(
+        hooks({
+          available: {
+            save: "palworldRest",
+            stop: null,
+            start: null,
+            restart: null,
+          },
+        }),
+      ),
+    ).toBe(false);
     expect(touchedFiles(changeSet())).toEqual(["settings"]);
   });
 });

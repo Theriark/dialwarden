@@ -89,9 +89,7 @@ test("a stopped-only save parks as pending until the stop hook writes it", async
   await expect(
     page.getByRole("heading", { name: "Waiting for the server to stop" }),
   ).toBeVisible();
-  await expect(
-    page.getByText("Experience rate: 1 → 3").first(),
-  ).toBeVisible();
+  await expect(page.getByText("Experience rate: 1 → 3").first()).toBeVisible();
   await page.getByRole("button", { name: "Stop the server now" }).click();
   const confirm = page.getByRole("alertdialog", {
     name: "Stop the server now?",
@@ -147,7 +145,9 @@ test("save and restart stops, writes and starts the game again, simulated", asyn
   await page.keyboard.press("Enter");
   await expect(
     page
-      .getByText("The files hold the new values and the restart hook ran.")
+      .getByText(
+        "The server was stopped, the files were written and the start hook ran.",
+      )
       .first(),
   ).toBeVisible();
 
