@@ -17,6 +17,28 @@ describe("pack.json schema (contract C3)", () => {
     expect(schemaProblems(testPack())).toEqual([]);
   });
 
+  it("bounds the commands, path, host and port of a probe", () => {
+    const probe = (fields: object) => ({
+      ...testPack(),
+      probes: [{ kind: "sourceRcon", ...fields }],
+    });
+    expect(
+      schemaProblems(probe({ allow: ["sav"], saveCommand: "sav" })),
+    ).toEqual([]);
+    for (const bad of [
+      { allow: ["sav\nquit"] },
+      { allow: [""] },
+      { allow: ["x".repeat(129)] },
+      { saveCommand: "sav\rquit" },
+      { infoPath: "/v1/api/info?x=1" },
+      { infoPath: "v1/api/info" },
+      { host: "evil.example/x" },
+      { port: 70_000 },
+    ]) {
+      expect(schemaProblems(probe(bad))).not.toEqual([]);
+    }
+  });
+
   it("refuses data that is not a pack object", () => {
     expect(schemaProblems(null)).not.toEqual([]);
     expect(schemaProblems("pack")).not.toEqual([]);

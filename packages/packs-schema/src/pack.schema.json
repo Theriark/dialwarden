@@ -553,8 +553,33 @@
             "sshCommand",
             "dockerProxy"
           ]
-        }
+        },
+        "allow": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/probeCommand" }
+        },
+        "saveCommand": { "$ref": "#/$defs/probeCommand" },
+        "stopCommand": { "$ref": "#/$defs/probeCommand" },
+        "infoPath": {
+          "type": "string",
+          "pattern": "^/[^?#\\s]*$",
+          "maxLength": 256
+        },
+        "host": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9.:-]+$",
+          "maxLength": 253
+        },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "portOffset": { "type": "integer", "minimum": 0, "maximum": 1000 }
       }
+    },
+    "probeCommand": {
+      "description": "One console command line: no control characters, so a pack entry can never send two commands.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
     }
   }
 }
