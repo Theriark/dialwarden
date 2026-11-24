@@ -4,8 +4,8 @@
 // the raw editor's lint reaches the Monaco gutter as markers.
 import { lazy, memo, Suspense, useEffect, useRef, useState } from "react";
 import type * as Monaco from "monaco-editor";
-import { useTheme } from "theme/theme-provider";
-import { Skeleton } from "ui/states";
+import { useTheme } from "../theme/theme-provider";
+import { Skeleton } from "./ui/states";
 
 const Monaco = lazy(async () => {
   await import("../lib/monaco");
