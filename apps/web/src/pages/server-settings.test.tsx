@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // The typed editor page (screen 3): Reset discards an edit back to the
 // server answer - never the pack default, which on a secret would queue a
-// wipe of the stored password - and the server's lint of the stored values,
-// including the server-evaluated rules, shows inline (the code review
-// findings H2 and M3 of THE-2518).
+// wipe of the stored password - a cleared secret box means keep, and the
+// server's lint of the stored values, including the server-evaluated rules,
+// shows inline until the user edits that value (the code review findings
+// H2 and M3 of THE-2518, M6 and L4 of THE-2526).
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { entitlement, OWNER } from "../test/fixtures";
@@ -28,6 +29,16 @@ const SETTING = {
   description: "How fast the experience grows.",
 };
 
+const SECRET = {
+  key: "adminSecret",
+  label: "Admin secret",
+  file: "settings",
+  locator: { kind: "ini", section: null, key: "AdminPassword" },
+  type: "string",
+  secret: true,
+  description: "Who may administer the server.",
+};
+
 const META = {
   id: "testpack",
   version: "1.0",
@@ -43,7 +54,7 @@ const META = {
       applyPolicy: "anytime",
     },
   ],
-  settings: [SETTING],
+  settings: [SETTING, SECRET],
   rules: [],
   presets: [],
   hooksSupported: [],
@@ -79,7 +90,7 @@ function settingsAnswer(overrides: Record<string, unknown> = {}) {
         sha256: null,
       },
     ],
-    values: { expRate: 1 },
+    values: { expRate: 1, adminSecret: "••••••" },
     lint: [],
     ...overrides,
   };
@@ -141,6 +152,34 @@ describe("ServerSettingsPage", () => {
     );
   });
 
+  it("a secret typed and cleared again keeps the stored value", async () => {
+    stubViewport(1280);
+    stubWorld();
+    startRouter("/servers/home/settings");
+
+    const field = (await screen.findByLabelText(
+      "Admin secret",
+    )) as HTMLInputElement;
+    expect(field.value).toBe("");
+
+    fireEvent.change(field, { target: { value: "n" } });
+    expect(screen.getByText("Edited")).toBeTruthy();
+    expect(screen.getByText("1 setting changed")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Admin secret"), {
+      target: { value: "" },
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("Edited")).toBeNull();
+    });
+    expect(
+      screen.queryByRole("button", { name: "Review and save" }),
+    ).toBeNull();
+    expect(
+      (screen.getByLabelText("Admin secret") as HTMLInputElement).placeholder,
+    ).toBe("Unchanged");
+  });
+
   it("shows the server's lint of the stored values inline", async () => {
     stubViewport(1280);
     stubWorld(([method, path]) => {
@@ -148,7 +187,7 @@ describe("ServerSettingsPage", () => {
         return {
           status: 200,
           body: settingsAnswer({
-            values: { expRate: 2 },
+            values: { expRate: 2, adminSecret: "••••••" },
             lint: [
               {
                 fileId: "settings",
@@ -170,7 +209,9 @@ describe("ServerSettingsPage", () => {
 
     await screen.findByText("The panel asks for a lower rate.");
 
-    // The server's word about the stored values never blocks the save.
+    // The server's word about the stored values never blocks the save, and
+    // it leaves the field once the user edits that value: it spoke about
+    // the stored 2, not the draft.
     const field = (await screen.findByLabelText(
       "Exp rate",
     )) as HTMLInputElement;
@@ -179,5 +220,14 @@ describe("ServerSettingsPage", () => {
       name: "Review and save",
     }) as HTMLButtonElement;
     expect(save.disabled).toBe(false);
+    await waitFor(() => {
+      expect(screen.queryByText("The panel asks for a lower rate.")).toBeNull();
+    });
+
+    // Back at the stored value, the server's message applies again.
+    fireEvent.change(screen.getByLabelText("Exp rate"), {
+      target: { value: "2" },
+    });
+    await screen.findByText("The panel asks for a lower rate.");
   });
 });

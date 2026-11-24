@@ -51,7 +51,7 @@ describe("SettingField", () => {
     );
   });
 
-  it("shows the edited marker and resets to the default", () => {
+  it("shows the edited marker and Reset hands the key back", () => {
     const onReset = vi.fn();
     render(
       <SettingField
@@ -101,6 +101,36 @@ describe("SettingField", () => {
     ).toBeTruthy();
     fireEvent.change(input, { target: { value: "new-secret" } });
     expect(onChange).toHaveBeenCalledWith("adminPassword", "new-secret");
+  });
+
+  // Typing into a secret and clearing it again must not queue an empty
+  // string: the server would write it over the stored secret (the code
+  // review finding M6 of THE-2526).
+  it("hands a cleared secret back instead of saving an empty string", () => {
+    const onChange = vi.fn();
+    const onReset = vi.fn();
+    render(
+      <SettingField
+        setting={setting({
+          key: "adminPassword",
+          label: "Admin password",
+          type: "string",
+          secret: true,
+          default: null,
+        })}
+        value="n"
+        edited
+        issue={undefined}
+        disabled={false}
+        onChange={onChange}
+        onReset={onReset}
+      />,
+    );
+    const input = screen.getByLabelText("Admin password") as HTMLInputElement;
+    expect(input.value).toBe("n");
+    fireEvent.change(input, { target: { value: "" } });
+    expect(onReset).toHaveBeenCalledWith("adminPassword");
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("disables a panel-managed setting and keeps it visible", () => {

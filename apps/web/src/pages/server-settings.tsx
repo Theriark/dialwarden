@@ -184,22 +184,29 @@ export function ServerSettingsPage() {
   // The answer's lint covers the stored values, including the rules marked
   // serverEvaluated that the browser cannot run on masked secrets; merged
   // in, the editor shows them inline. A browser issue of the draft wins for
-  // its setting.
+  // its setting, and a server message about a value the user has since
+  // edited is dropped: it spoke about the stored value, not the draft (the
+  // save dialog lints the after-state).
   const issues = useMemo(() => {
     const merged = new Map<string, { severity: string; message: string }>();
+    const stored = settings.data?.values ?? {};
     for (const entry of settings.data?.lint ?? []) {
-      if (entry.settingKey !== null) {
-        merged.set(entry.settingKey, {
-          severity: entry.severity,
-          message: entry.message,
-        });
-      }
+      if (entry.settingKey === null) continue;
+      const key = entry.settingKey;
+      const edited =
+        key in draft &&
+        !sameJson(
+          (draft[key] ?? null) as JsonValue,
+          (stored[key] ?? null) as JsonValue,
+        );
+      if (edited) continue;
+      merged.set(key, { severity: entry.severity, message: entry.message });
     }
     for (const [key, issue] of browserIssues) {
       merged.set(key, issue);
     }
     return merged;
-  }, [settings.data, browserIssues]);
+  }, [settings.data, draft, browserIssues]);
   const byKey = useMemo(
     () => settingsByKey((meta.data?.settings ?? []) as Setting[]),
     [meta.data],

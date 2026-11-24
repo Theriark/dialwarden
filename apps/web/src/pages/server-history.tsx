@@ -188,13 +188,15 @@ export function ServerHistoryPage() {
       // applied stops the loop - conflict and failed also come back with
       // HTTP 200, and a partial restore must not claim success.
       let last: ChangeSet | null = null;
+      let written = 0;
       for (const snapshot of snapshotsToRestore(entry)) {
         last = await restoreSnapshot(snapshot.id);
         if (last.status !== "applied" && last.status !== "pending") {
           break;
         }
+        written += 1;
       }
-      return last;
+      return { last, written };
     },
     onMutate: (entry) => {
       setRestoringId(entry.changeSetId);
@@ -205,12 +207,11 @@ export function ServerHistoryPage() {
       void client.invalidateQueries({ queryKey: p4keys.settings(slug) });
       void client.invalidateQueries({ queryKey: p4keys.servers });
     },
-    onSuccess: (last) => {
-      if (
-        last === null ||
-        last.status === "applied" ||
-        last.status === "pending"
-      ) {
+    onSuccess: ({ last, written }) => {
+      // The toast tells the truth about the files: pending means nothing
+      // is written yet (the save dialog says the same), and a failure after
+      // an earlier file applied says so instead of claiming nothing moved.
+      if (last === null || last.status === "applied") {
         toast.push({
           kind: "success",
           title: "Version restored",
@@ -218,13 +219,29 @@ export function ServerHistoryPage() {
         });
         return;
       }
+      if (last.status === "pending") {
+        toast.push({
+          kind: "success",
+          title: "Restore saved as pending",
+          description:
+            "The older values are written when the server is stopped next.",
+        });
+        return;
+      }
+      const reason =
+        last.status === "conflict"
+          ? "The file changed outside Dialwarden. Restore the newest version again from the timeline."
+          : (last.error?.message ?? "The server could not write the files.");
       toast.push({
         kind: "error",
-        title: "The version was not restored",
+        title:
+          written === 0
+            ? "The version was not restored"
+            : "The version was only partly restored",
         description:
-          last.status === "conflict"
-            ? "The file changed outside Dialwarden. Restore the newest version again from the timeline."
-            : (last.error?.message ?? "The server could not write the files."),
+          written === 0
+            ? reason
+            : `${written} ${written === 1 ? "file holds" : "files hold"} the older values; the next one did not. ${reason}`,
       });
     },
     onError: (error) => {
