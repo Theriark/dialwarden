@@ -23,6 +23,7 @@ let seen: Seen[] = [];
 let status = 200;
 let reply = "{}";
 let redirect = false;
+let redirectTo = "http://127.0.0.1:9/";
 let huge = false;
 const server: Server = createServer((request, response) => {
   const parts: Buffer[] = [];
@@ -36,7 +37,7 @@ const server: Server = createServer((request, response) => {
       body,
     });
     if (redirect) {
-      response.writeHead(302, { location: "http://127.0.0.1:9/" });
+      response.writeHead(302, { location: redirectTo });
       response.end();
       return;
     }
@@ -68,10 +69,28 @@ beforeAll(
     }),
 );
 
+/** Somewhere else: counts every request a followed redirect would make. */
+let elsewhereCount = 0;
+let elsewherePort = 0;
+const elsewhere: Server = createServer((_request, response) => {
+  elsewhereCount += 1;
+  response.writeHead(200, { "content-type": "application/json" }).end("{}");
+});
+
+beforeAll(
+  () =>
+    new Promise<void>((resolve) => {
+      elsewhere.listen(0, "127.0.0.1", () => {
+        elsewherePort = (elsewhere.address() as AddressInfo).port;
+        resolve();
+      });
+    }),
+);
+
 afterAll(
   () =>
     new Promise<void>((resolve) => {
-      server.close(() => resolve());
+      server.close(() => elsewhere.close(() => resolve()));
     }),
 );
 
@@ -170,5 +189,50 @@ describe("Palworld REST client (simulated)", () => {
     huge = true;
     expect(await client().probe()).toEqual({ state: "unknown" });
     huge = false;
+  });
+});
+
+describe("Palworld REST client: requests stay where they are sent (simulated)", () => {
+  it("never follows a redirect to another listener", async () => {
+    redirect = true;
+    redirectTo = `http://127.0.0.1:${elsewherePort}/v1/api/info`;
+    elsewhereCount = 0;
+    expect(await client().probe()).toEqual({ state: "unknown" });
+    const error: unknown = await client()
+      .save?.()
+      .catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "Connection" });
+    expect((error as Error).message).not.toContain(PASSWORD);
+    expect(elsewhereCount).toBe(0);
+    redirect = false;
+    redirectTo = "http://127.0.0.1:9/";
+  });
+
+  it.each(["127.0.0.1/x#", "127.0.0.1/x?", "user@127.0.0.1", "[::1]"])(
+    "refuses the host %j before any request",
+    async (host) => {
+      seen = [];
+      const moved = new PalworldRest({
+        host,
+        port,
+        user: "admin",
+        password: PASSWORD,
+        readMs: 2_000,
+      });
+      expect(await moved.probe()).toEqual({ state: "unknown" });
+      await expect(moved.save?.()).rejects.toMatchObject({ code: "Refused" });
+      expect(seen).toEqual([]);
+    },
+  );
+
+  it("keeps the credential out of a refusal", async () => {
+    status = 401;
+    const error: unknown = await client()
+      .save?.()
+      .catch((caught: unknown) => caught);
+    const { code, message } = error as { code: string; message: string };
+    expect(code).toBe("Auth");
+    expect(JSON.stringify({ code, message })).not.toContain(PASSWORD);
+    status = 200;
   });
 });
