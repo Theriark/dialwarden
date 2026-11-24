@@ -1,1 +1,0 @@
-// Dialwarden synthetic bannedlist header.
