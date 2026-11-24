@@ -20,6 +20,10 @@ import { SourceRcon, type SourceRconOptions } from "./source-rcon.js";
 import { Telnet7dtd, type Telnet7dtdOptions } from "./telnet-7dtd.js";
 import {
   ControlError,
+  LIMITS,
+  lineSafe,
+  usableHost,
+  usablePort,
   type ControlTimeouts,
   type GameControl,
   type ProbeOverride,
@@ -50,6 +54,11 @@ export interface ControlContext {
   readonly values: SettingValue;
   /** Decrypts a per-server control password (context control.password). */
   readonly secret: (encrypted: string) => string;
+  /**
+   * The host of the server connection (the SFTP host), used when neither the
+   * override nor the pack names one; without any host there is no probe.
+   */
+  readonly host?: string;
   readonly timeouts?: ControlTimeouts;
 }
 
@@ -92,7 +101,10 @@ function probeWords(
   if (!Array.isArray(found)) return undefined;
   const words = found.filter(
     (item): item is string =>
-      typeof item === "string" && item !== "" && item.length < 128,
+      typeof item === "string" &&
+      item !== "" &&
+      item.length <= LIMITS.maxCommandLength &&
+      lineSafe(item),
   );
   return words.length === found.length ? words : undefined;
 }
@@ -105,15 +117,35 @@ async function valueOf(
   return input.context.values(key);
 }
 
-/** The host to contact: the override, else what the pack names, else local. */
-function hostOf(input: ProbeInput): string {
-  return input.override?.host ?? probeText(input.probe, "host") ?? "127.0.0.1";
+/**
+ * The host to contact: the override, else what the pack names, else the host
+ * of the server connection. Undefined when none is known: Dialwarden runs in
+ * its own container, so a local fallback would probe the container itself and
+ * read a running game as stopped.
+ */
+function hostOf(input: ProbeInput): string | undefined {
+  const host =
+    input.override?.host ??
+    probeText(input.probe, "host") ??
+    input.context.host;
+  if (host === undefined) return undefined;
+  if (!usableHost(host)) {
+    throw new ControlError("Refused", "the probe host is not usable");
+  }
+  return host;
+}
+
+function checkedPort(port: number): number {
+  if (!usablePort(port)) {
+    throw new ControlError("Refused", "the probe port is not usable");
+  }
+  return port;
 }
 
 /** The port to contact: the override, else the pack's setting value. */
 async function portOf(input: ProbeInput): Promise<number> {
   const override = input.override?.port;
-  if (override !== undefined) return override;
+  if (override !== undefined) return checkedPort(override);
   // Valheim answers A2S on the game port plus one (pack-draft-valheim).
   const offset = probeNumber(input.probe, "portOffset") ?? 0;
   const fromSetting = await valueOf(
@@ -121,11 +153,20 @@ async function portOf(input: ProbeInput): Promise<number> {
     probeText(input.probe, "portSetting"),
   );
   if (typeof fromSetting === "number" && Number.isInteger(fromSetting)) {
-    return fromSetting + offset;
+    return checkedPort(fromSetting + offset);
   }
   const given = probeNumber(input.probe, "port");
-  if (given !== undefined) return given + offset;
+  if (given !== undefined) return checkedPort(given + offset);
   throw new ControlError("Refused", "the probe has no port");
+}
+
+/** Host and port of a probe, or null when no host is known. */
+async function endpointOf(
+  input: ProbeInput,
+): Promise<{ host: string; port: number } | null> {
+  const host = hostOf(input);
+  if (host === undefined) return null;
+  return { host, port: await portOf(input) };
 }
 
 /**
@@ -202,11 +243,12 @@ export async function probeOptions(
       }
       const credential = await passwordOf(input);
       if (credential === undefined) return null;
+      const endpoint = await endpointOf(input);
+      if (endpoint === null) return null;
       return {
         kind: "palworldRest",
         options: {
-          host: hostOf(input),
-          port: await portOf(input),
+          ...endpoint,
           user: probeText(input.probe, "user") ?? "admin",
           password: credential,
           infoPath: probeText(input.probe, "infoPath") ?? "/v1/api/info",
@@ -220,11 +262,12 @@ export async function probeOptions(
     case "sourceRcon": {
       const credential = await passwordOf(input);
       if (credential === undefined) return null;
+      const endpoint = await endpointOf(input);
+      if (endpoint === null) return null;
       return {
         kind: "sourceRcon",
         options: {
-          host: hostOf(input),
-          port: await portOf(input),
+          ...endpoint,
           password: credential,
           allow: allowOf(input),
           ...commandOption(input, "saveCommand"),
@@ -236,11 +279,12 @@ export async function probeOptions(
     case "rustWebRcon": {
       const credential = await passwordOf(input);
       if (credential === undefined) return null;
+      const endpoint = await endpointOf(input);
+      if (endpoint === null) return null;
       return {
         kind: "rustWebRcon",
         options: {
-          host: hostOf(input),
-          port: await portOf(input),
+          ...endpoint,
           password: credential,
           allow: allowOf(input),
           ...commandOption(input, "saveCommand"),
@@ -252,11 +296,12 @@ export async function probeOptions(
     case "telnet7dtd": {
       const credential = await passwordOf(input);
       if (credential === undefined) return null;
+      const endpoint = await endpointOf(input);
+      if (endpoint === null) return null;
       return {
         kind: "telnet7dtd",
         options: {
-          host: hostOf(input),
-          port: await portOf(input),
+          ...endpoint,
           password: credential,
           allow: allowOf(input),
           ...commandOption(input, "saveCommand"),
@@ -266,11 +311,12 @@ export async function probeOptions(
       };
     }
     case "a2s": {
+      const endpoint = await endpointOf(input);
+      if (endpoint === null) return null;
       return {
         kind: "a2s",
         options: {
-          host: hostOf(input),
-          port: await portOf(input),
+          ...endpoint,
           ...(probeField(input.probe, "players") === true
             ? { players: true }
             : {}),

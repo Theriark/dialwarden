@@ -4,9 +4,12 @@
 // pack probe reads from the settings file); the paths are the game's own
 // v1/api endpoints. The shutdown message is a fixed string of the client,
 // never text from the UI. Redirects are never followed.
+import { isIPv6 } from "node:net";
 import {
   ControlError,
   LIMITS,
+  usableHost,
+  usablePort,
   type ControlTimeouts,
   type GameControl,
   type ProbeResult,
@@ -107,8 +110,7 @@ export class PalworldRest implements GameControl {
    * ControlError, so probe() can map it to unknown.
    */
   async #request(request: Request): Promise<string> {
-    const scheme = this.#options.scheme ?? "http";
-    const url = `${scheme}://${this.#options.host}:${this.#options.port}${request.path}`;
+    const url = this.#url(request.path);
     const authorization = Buffer.from(
       `${this.#options.user}:${this.#options.password}`,
       "utf8",
@@ -146,5 +148,28 @@ export class PalworldRest implements GameControl {
       );
     }
     return body;
+  }
+
+  /**
+   * The request URL, built by the URL parser and checked to point at exactly
+   * the configured host and port: a host such as evil.example/x? must never
+   * move the request, and its credentials, somewhere else.
+   */
+  #url(path: string): URL {
+    const { host, port } = this.#options;
+    const hostPart = isIPv6(host) ? `[${host}]` : host;
+    const url = usableHost(host)
+      ? URL.parse(`${this.#options.scheme ?? "http"}://${hostPart}:${port}`)
+      : null;
+    if (
+      url === null ||
+      !usablePort(port) ||
+      url.hostname !== hostPart.toLowerCase() ||
+      url.pathname !== "/"
+    ) {
+      throw new ControlError("Refused", "the REST address is not usable");
+    }
+    url.pathname = path;
+    return url;
   }
 }
