@@ -530,6 +530,7 @@ export class ChangeSetService {
       lint: JSON.stringify(input.lint),
       conflict: null,
       error: null,
+      runHooks: null,
       restoreOf: input.restoreOf,
       createdAt: at,
       updatedAt: at,

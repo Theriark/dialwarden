@@ -29,6 +29,8 @@ import {
   encryptControlPassword,
   hookClient,
   probeClient,
+  type ControlContext,
+  type StatusProbe,
 } from "./control.js";
 import { DockerProxy } from "./docker-proxy.js";
 import type { SshCommandOptions } from "./ssh-command.js";
@@ -41,12 +43,11 @@ import {
   usablePort,
   type ControlAction,
   type ControlConfig,
-  type ControlContext,
+  type ControlErrorCode,
   type ControlState,
   type GameControl,
   type ProbeOverride,
   type SettingValue,
-  type StatusProbe,
 } from "./types.js";
 
 /** How long a stop or start waits for the probe to see the new state. */
@@ -58,11 +59,15 @@ const HOOK_POLL_MS = 500;
 /** The hook configuration as the API stores and shows it. */
 export type HookConfig = ControlConfig;
 
-/** A probe override as the set route takes it: the password is plain here. */
+/**
+ * A probe override as the set route takes it: the password is plain here.
+ * The fields accept undefined because the route hands over exactly what the
+ * body schema parsed (exactOptionalPropertyTypes).
+ */
 export interface ProbeInput {
-  readonly host?: string;
-  readonly port?: number;
-  readonly password?: string;
+  readonly host?: string | undefined;
+  readonly port?: number | undefined;
+  readonly password?: string | undefined;
 }
 
 /** What the set route may change: the hook and any probe overrides. */
@@ -117,7 +122,7 @@ type HookRow = typeof serverHooks.$inferSelect;
 /** A control error as an API error, with its code for the UI. */
 export function controlFailure(error: unknown): ApiError {
   if (!(error instanceof ControlError)) throw error;
-  const status: Record<string, number> = {
+  const status: Record<ControlErrorCode, number> = {
     Connection: 502,
     Timeout: 502,
     Auth: 502,
@@ -127,8 +132,6 @@ export function controlFailure(error: unknown): ApiError {
     Failed: 500,
     Unsupported: 501,
   };
-  // The key is a ControlErrorCode of this module's own union.
-  // eslint-disable-next-line security/detect-object-injection
   return new ApiError(status[error.code], "control_error", {
     code: error.code,
     message: error.message,
@@ -484,10 +487,20 @@ export class HookService {
     const hook = sources.packHook;
     if (hook === null || !pack.hooksSupported.includes(action)) return null;
     if (action === "save" && typeof hook.save === "function") {
-      return { client: hook, method: hook.save, source: hook.kind };
+      // The method runs bound to its client: it reads the client's own
+      // options, so it can never be called as a bare function.
+      return {
+        client: hook,
+        method: hook.save.bind(hook),
+        source: hook.kind,
+      };
     }
     if (action === "stop" && typeof hook.stop === "function") {
-      return { client: hook, method: hook.stop, source: hook.kind };
+      return {
+        client: hook,
+        method: hook.stop.bind(hook),
+        source: hook.kind,
+      };
     }
     return null;
   }
@@ -511,21 +524,21 @@ export class HookService {
     if (action === "stop" && typeof configured.stop === "function") {
       return {
         client: configured,
-        method: configured.stop,
+        method: configured.stop.bind(configured),
         source: configured.kind,
       };
     }
     if (action === "start" && typeof configured.start === "function") {
       return {
         client: configured,
-        method: configured.start,
+        method: configured.start.bind(configured),
         source: configured.kind,
       };
     }
     if (action === "restart" && typeof configured.restart === "function") {
       return {
         client: configured,
-        method: configured.restart,
+        method: configured.restart.bind(configured),
         source: configured.kind,
       };
     }
@@ -534,7 +547,7 @@ export class HookService {
       // start of a stopped service is its restart string.
       return {
         client: configured,
-        method: configured.restart,
+        method: configured.restart.bind(configured),
         source: configured.kind,
       };
     }
