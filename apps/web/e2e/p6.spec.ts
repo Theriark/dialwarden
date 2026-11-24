@@ -16,6 +16,9 @@ const OWNER = {
 const sim = new SimProxy();
 
 test.describe.configure({ mode: "serial" });
+// The copy buttons write through navigator.clipboard, which headless Chromium
+// refuses without the permission; the launch walk checks the Copied answer.
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
 test.beforeAll(async () => {
   await sim.start();
