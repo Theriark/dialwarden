@@ -106,6 +106,28 @@ async function patch(api: Api, slug: string, text: string) {
   return (await api.post(url, { patches })).json<ChangeSetBody>();
 }
 
+/** Makes and applies one change of both Palworld files. */
+const bothFiles = (api: Api, slug: string) =>
+  change(api, slug, { ExpRate: 2, "Launch.Players": 40 });
+
+/** The before snapshots of a visible history entry, by file. */
+async function beforeSnapshots(api: Api, slug: string, id: string) {
+  const past = await history(api, slug);
+  const entry = past.entries.find((item) => item.changeSetId === id);
+  const found = new Map<string, string>();
+  for (const snapshot of entry?.snapshots ?? []) {
+    if (snapshot.kind === "before") found.set(snapshot.fileId, snapshot.id);
+  }
+  const settings = found.get("settings") ?? "";
+  const launch = found.get("launch") ?? "";
+  expect(settings).not.toBe("");
+  expect(launch).not.toBe("");
+  return { settings, launch };
+}
+
+const restoreSnapshot = (api: Api, id: string) =>
+  api.post(`/api/v1/snapshots/${id}/restore`);
+
 describe("change sets (contract C5)", () => {
   it("makes a draft with its diff, then writes only the target bytes", async () => {
     const { api, root, slug } = await palworld();
@@ -682,6 +704,86 @@ describe("history limits (contract C1)", () => {
     expect(paid.hiddenCount).toBe(0);
     const restored = await api.post(`/api/v1/snapshots/${imported}/restore`);
     expect(restored.json()).toMatchObject({ status: "applied" });
+  });
+
+  it("restores a multi-file entry at the Free boundary whole, one call per file", async () => {
+    const { api, root, slug } = await palworld();
+    const settings = await settingsText(root);
+    const launch = await fileText(root, PALWORLD_LAUNCH);
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    for (const rate of [3, 4, 5, 6]) await change(api, slug, { ExpRate: rate });
+    const past = await history(api, slug);
+    expect(past.entries.at(4)?.changeSetId).toBe(made.id);
+    // The history page sends one restore per file; the first rollback is a
+    // new entry on top, and the second call must still reach this entry.
+    for (const id of [ids.settings, ids.launch]) {
+      const restored = await restoreSnapshot(api, id);
+      expect(restored.statusCode).toBe(200);
+      expect(restored.json()).toMatchObject({
+        cause: "rollback",
+        status: "applied",
+      });
+    }
+    expect(await settingsText(root)).toBe(settings);
+    expect(await fileText(root, PALWORLD_LAUNCH)).toBe(launch);
+    const shown = await api.get(`/api/v1/change-sets/${made.id}`);
+    expect(shown.json()).toMatchObject({ status: "reverted" });
+  });
+
+  it("refuses a multi-file entry past the Free boundary before any write, and restores it on Paid", async () => {
+    const { api, root, slug } = await palworld();
+    const settings = await settingsText(root);
+    const launch = await fileText(root, PALWORLD_LAUNCH);
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    for (const rate of [3, 4, 5, 6, 7]) {
+      await change(api, slug, { ExpRate: rate });
+    }
+    const now = {
+      settings: await settingsText(root),
+      launch: await fileText(root, PALWORLD_LAUNCH),
+    };
+    for (const id of [ids.settings, ids.launch]) {
+      const refused = await restoreSnapshot(api, id);
+      expect(refused.statusCode).toBe(402);
+      expect(refused.json()).toMatchObject({
+        limit: "historyVisible",
+        current: 7,
+        max: 5,
+      });
+    }
+    expect(await settingsText(root)).toBe(now.settings);
+    expect(await fileText(root, PALWORLD_LAUNCH)).toBe(now.launch);
+    expect((await history(api, slug)).hiddenCount).toBe(2);
+
+    const token = customerLicence();
+    expect((await api.put("/api/v1/licence", { token })).statusCode).toBe(200);
+    for (const id of [ids.settings, ids.launch]) {
+      const restored = await restoreSnapshot(api, id);
+      expect(restored.json()).toMatchObject({ status: "applied" });
+    }
+    expect(await settingsText(root)).toBe(settings);
+    expect(await fileText(root, PALWORLD_LAUNCH)).toBe(launch);
+  });
+
+  it("checks the Free boundary again after the read, so an outside edit found then writes nothing", async () => {
+    const { api, root, slug } = await palworld();
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    for (const rate of [3, 4, 5, 6]) await change(api, slug, { ExpRate: rate });
+    // The entry is the fifth; the restore's own read records this outside
+    // edit as a new entry on top, which pushes it out.
+    await outside(root, "ServerPlayerMaxNum=32", "ServerPlayerMaxNum=40");
+    const edited = await settingsText(root);
+    const launch = await fileText(root, PALWORLD_LAUNCH);
+    const refused = await restoreSnapshot(api, ids.settings);
+    expect(refused.statusCode).toBe(402);
+    expect(await settingsText(root)).toBe(edited);
+    expect(await fileText(root, PALWORLD_LAUNCH)).toBe(launch);
+    const past = await history(api, slug);
+    expect(past.entries.at(0)?.cause).toBe("external");
+    expect(past.hiddenCount).toBe(2);
   });
 
   it("meters the snapshot store for the owner", async () => {
