@@ -58,6 +58,12 @@ interface Arg {
   readonly word: Word;
   /** A separate value word (-port 8211). */
   readonly valueWord: Word | undefined;
+  /**
+   * A second value word, the shape of a keyed argument: -modifier combat
+   * veryhard names its key with the first word (combat) and holds the value
+   * in the second (veryhard).
+   */
+  readonly extraWord: Word | undefined;
   /** Decoded range of an inline value (-port=8211, ?Name=X). */
   readonly inline: Range | undefined;
   /** Decoded range of a chain option, from its ? to its end. */
@@ -186,7 +192,14 @@ function chainOptions(word: Word): Arg[] {
     const name = `?${decode(word.chars.slice(mark + 1, nameEnd))}`;
     const inline = hasValue ? { start: eq + 1, end } : undefined;
     const option = { start: mark, end };
-    out.push({ name, word, valueWord: undefined, inline, option });
+    out.push({
+      name,
+      word,
+      valueWord: undefined,
+      extraWord: undefined,
+      inline,
+      option,
+    });
     mark = next;
   }
   return out;
@@ -207,8 +220,22 @@ function classify(words: readonly Word[]): Arg[] {
       const inline = eq > 0 ? { start: eq + 1, end: text.length } : undefined;
       const takesNext = eq < 0 && next !== undefined && isValueWord(next.text);
       const valueWord = takesNext ? next : undefined;
-      args.push({ name, word, valueWord, inline, option: undefined });
-      if (takesNext) i++;
+      let extraWord: Word | undefined;
+      if (takesNext) {
+        i++;
+        const second = words.at(i + 1);
+        extraWord =
+          second !== undefined && isValueWord(second.text) ? second : undefined;
+        if (extraWord !== undefined) i++;
+      }
+      args.push({
+        name,
+        word,
+        valueWord,
+        extraWord,
+        inline,
+        option: undefined,
+      });
     } else if (text.includes("?")) {
       args.push(...chainOptions(word));
     }
@@ -293,9 +320,38 @@ function removeWords(doc: LaunchDoc, first: Word, last: Word): Splice {
 function removeArg(doc: LaunchDoc, arg: Arg): Splice {
   const { option, word } = arg;
   if (option === undefined) {
-    return removeWords(doc, word, arg.valueWord ?? word);
+    return removeWords(doc, word, arg.extraWord ?? arg.valueWord ?? word);
   }
   return replaceIn(word, option.start, option.end, "");
+}
+
+/** set of a keyed argument: the second word holds the value, or is added. */
+function setKeyed(launch: LaunchDoc, arg: Arg, value: Value): Splice[] {
+  const { word, valueWord, extraWord } = arg;
+  if (extraWord === undefined) {
+    // The group holds only its key word: true keeps it, false removes it,
+    // and a value adds the second word after the key.
+    if (value === true) return [];
+    if (value === false) {
+      return [removeWords(launch, word, valueWord ?? word)];
+    }
+    if (valueWord === undefined) {
+      throw new FormatError("invalid-value", "the key word is missing");
+    }
+    const text = scalar(value, undefined);
+    const at = valueWord.end;
+    return [{ start: at, end: at, text: ` ${encodeWord(text)}` }];
+  }
+  // The group holds its value word: every write replaces that word, the
+  // same way a plain flag with a value is rewritten.
+  const text = scalar(value, undefined);
+  return [
+    {
+      start: extraWord.start,
+      end: extraWord.end,
+      text: encodeWord(text),
+    },
+  ];
 }
 
 function scalar(value: Value, previous: string | undefined): string {
@@ -343,7 +399,12 @@ function isLoneBackslash(char: Char): boolean {
   return char.byte === 92 && char.to - char.from === 1 && char.context === 0;
 }
 
-function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
+function insertArg(
+  doc: LaunchDoc,
+  flag: string,
+  value: Value,
+  before?: readonly string[],
+): Splice[] {
   if (value === false) return [];
   const text = value === true ? undefined : scalar(value, undefined);
   if (flag.startsWith("?")) {
@@ -375,11 +436,54 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
     }
     token = `${flag} ${encodeWord(text)}`;
   }
+  return placeToken(doc, token, before);
+}
+
+/** insert of a keyed argument: the flag, its key word, and the value word. */
+function insertKeyed(
+  doc: LaunchDoc,
+  locator: LaunchLocator,
+  value: Value,
+): Splice[] {
+  if (value === false) return [];
+  const key = encodeWord(locator.key ?? "");
+  if (value === true) {
+    return placeToken(doc, `${locator.flag} ${key}`, locator.before);
+  }
+  const text = scalar(value, undefined);
+  if (!isValueWord(text)) {
+    throw new FormatError("invalid-value", `${text} would read as a flag`);
+  }
+  return placeToken(
+    doc,
+    `${locator.flag} ${key} ${encodeWord(text)}`,
+    locator.before,
+  );
+}
+
+/** Places one composed token: in front of a before-flag, else at the end. */
+function placeToken(
+  doc: LaunchDoc,
+  token: string,
+  before?: readonly string[],
+): Splice[] {
   const last = doc.words.at(-1);
   if (last === undefined) {
     const at = doc.source.begin;
     const text = at < doc.source.length ? `${token} ` : token;
     return [{ start: at, end: at, text }];
+  }
+  // A flag that must precede named others (LaunchLocator.before) is placed
+  // right in front of the first of them instead of the end of the line, so
+  // a game that wipes earlier arguments cannot wipe them (Valheim's -preset
+  // eats the -modifier and -setkey flags that follow it).
+  if (before !== undefined && before.length > 0) {
+    const wanted = new Set(before.map((name) => name.toLowerCase()));
+    const found = doc.args.find((arg) => wanted.has(arg.name.toLowerCase()));
+    if (found !== undefined) {
+      const at = found.word.start;
+      return [{ start: at, end: at, text: `${token} ` }];
+    }
   }
   const tail = last.chars.at(-1);
   if (tail !== undefined && isLoneBackslash(tail)) {
@@ -389,18 +493,34 @@ function insertArg(doc: LaunchDoc, flag: string, value: Value): Splice[] {
 }
 
 const FLAG = /^[-+?][^\s=?]+$/;
+const KEY = /^\S+$/;
+
+/** The key word of a keyed argument, as text. */
+function keyOf(arg: Arg): string | undefined {
+  return arg.valueWord === undefined ? undefined : decode(arg.valueWord.chars);
+}
 
 function find(doc: LaunchDoc, locator: LaunchLocator): Arg[] {
   if (locator.kind !== "launch") throw wrongLocator("launch", locator);
-  const { flag } = locator;
+  const { flag, key } = locator;
   if (typeof flag !== "string" || !FLAG.test(flag)) {
     throw new FormatError(
       "invalid-locator",
       "launch: a flag starts with -, + or ? and has a name",
     );
   }
-  const key = flag.toLowerCase();
-  return doc.args.filter((arg) => arg.name.toLowerCase() === key);
+  if (key !== undefined && (typeof key !== "string" || !KEY.test(key))) {
+    throw new FormatError(
+      "invalid-locator",
+      "launch: a key is one word without spaces",
+    );
+  }
+  const name = flag.toLowerCase();
+  return doc.args.filter(
+    (arg) =>
+      arg.name.toLowerCase() === name &&
+      (key === undefined || keyOf(arg) === key),
+  );
 }
 
 /** Launch argument adapter (dash flags, plus convars, ARK ? chains). */
@@ -409,7 +529,11 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
   parse,
   get(doc, locator) {
     const arg = find(own<LaunchDoc>(doc, "launch"), locator).at(-1);
-    return arg && argValue(arg);
+    if (arg === undefined) return undefined;
+    if (locator.key !== undefined) {
+      return arg.extraWord === undefined ? true : decode(arg.extraWord.chars);
+    }
+    return argValue(arg);
   },
   set(doc, locator, value) {
     const launch = own<LaunchDoc>(doc, "launch");
@@ -422,7 +546,11 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     if (arg === undefined) {
       throw new FormatError("not-found", `${locator.flag} is not given`);
     }
-    return verified(launchAdapter, launch, setArg(launch, arg, value));
+    const splices =
+      locator.key === undefined
+        ? setArg(launch, arg, value)
+        : setKeyed(launch, arg, value);
+    return verified(launchAdapter, launch, splices);
   },
   insert(doc, locator, value) {
     const launch = own<LaunchDoc>(doc, "launch");
@@ -430,7 +558,10 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     if (find(launch, locator).length > 0) {
       throw new FormatError("exists", `${locator.flag} is already given`);
     }
-    const splices = insertArg(launch, locator.flag, value);
+    const splices =
+      locator.key === undefined
+        ? insertArg(launch, locator.flag, value, locator.before)
+        : insertKeyed(launch, locator, value);
     return verified(launchAdapter, launch, splices);
   },
   remove(doc, locator) {
@@ -442,7 +573,17 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
     }
     const arg = found.at(0);
     if (arg === undefined) return [];
-    return verified(launchAdapter, launch, [removeArg(launch, arg)]);
+    const splices =
+      locator.key === undefined
+        ? [removeArg(launch, arg)]
+        : [
+            removeWords(
+              launch,
+              arg.word,
+              arg.extraWord ?? arg.valueWord ?? arg.word,
+            ),
+          ];
+    return verified(launchAdapter, launch, splices);
   },
   lint: (doc) => sortedIssues(own<LaunchDoc>(doc, "launch")),
   apply: (bytes, splices) => applySplices(bytes, splices),
@@ -450,9 +591,18 @@ export const launchAdapter: FormatAdapter<LaunchLocator> = {
 
 /** Every flag locator of a parsed launch line, for tests and fuzzing. */
 export function launchLocators(doc: ParsedDoc): LaunchLocator[] {
-  const all = (doc as LaunchDoc).args.map((a) => a.name);
-  const names = all.filter((name) => FLAG.test(name));
-  const lower = names.map((n) => n.toLowerCase());
-  const unique = names.filter((n, i) => lower.indexOf(n.toLowerCase()) === i);
-  return unique.map((flag): LaunchLocator => ({ kind: "launch", flag }));
+  const plain = new Map<string, LaunchLocator>();
+  const keyed = new Map<string, LaunchLocator>();
+  for (const arg of (doc as LaunchDoc).args) {
+    if (!FLAG.test(arg.name)) continue;
+    const name = arg.name.toLowerCase();
+    const key = keyOf(arg);
+    if (arg.extraWord !== undefined && key !== undefined) {
+      const by = `${name} ${key}`;
+      keyed.set(by, { kind: "launch", flag: arg.name, key });
+    } else {
+      plain.set(name, { kind: "launch", flag: arg.name });
+    }
+  }
+  return [...plain.values(), ...keyed.values()];
 }

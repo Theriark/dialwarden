@@ -91,7 +91,7 @@ describe("text list", () => {
       "76561198000000006",
     ]);
     expect(text(next)).toBe(
-      "﻿// Header line.\r\n76561198000000004\r\n76561198000000005\r\n76561198000000006",
+      "\\uFEFF// Header line.\r\n76561198000000004\r\n76561198000000005\r\n76561198000000006",
     );
     const reread = textListAdapter.parse(next);
     expect(valuesOf(reread)).toEqual([
