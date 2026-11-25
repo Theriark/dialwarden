@@ -200,13 +200,18 @@ describe("endpoints named by discovery, and redirects (O-26)", () => {
     expect(response.json()).toMatchObject({ error: "oidc_url_refused" });
   });
 
-  /** The host of every connection the spy saw. */
+  /**
+   * The host of every connection the spy saw. net.connect hands
+   * Socket.prototype.connect its normalised arguments as an array whose first
+   * item holds the options, so the array is unwrapped first.
+   */
   function hostsOf(spy: { mock: { calls: unknown[][] } }): string[] {
     return spy.mock.calls.map(([first]) => {
-      if (typeof first === "object" && first !== null && "host" in first) {
-        return String(first.host);
+      const options: unknown = Array.isArray(first) ? first[0] : first;
+      if (typeof options === "object" && options !== null) {
+        if ("host" in options) return String(options.host);
       }
-      return String(first);
+      return String(options);
     });
   }
 
@@ -269,8 +274,9 @@ describe("endpoints named by discovery, and redirects (O-26)", () => {
     const { response, hosts, fake } = await signInWith("jwks_uri");
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ error: "oidc_token_invalid" });
-    // The token request reached the provider; the keys request never left.
+    // The token request reached the provider; the keys request never left:
+    // the only connection went to the fake provider.
     expect(fake.tokenRequests).toBe(1);
-    expect(hosts).not.toContain("169.254.169.254");
+    expect(hosts).toEqual([new URL(fake.issuer).hostname]);
   });
 });
