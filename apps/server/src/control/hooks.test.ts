@@ -14,6 +14,7 @@ import type { AddressInfo } from "node:net";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { customerLicence } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/hashing.js";
@@ -42,7 +43,10 @@ import {
   type Api,
   type ChangeSetBody,
 } from "../../test/servers.js";
-import { users } from "../db/schema.js";
+import { userGrants, users } from "../db/schema.js";
+
+/** A Paid instance: roles beyond the owner act only on Paid (P8-A). */
+const PAID = { DIALWARDEN_LICENCE: customerLicence() };
 
 /* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
 
@@ -328,10 +332,15 @@ afterEach(async () => {
   await rm(base, { recursive: true, force: true });
 });
 
-/** A signed-in user of the given role (P8 names the roles; the column and
- * the login already carry them). The session is a real signed-in one: the
- * cookie the app sets and its CSRF token, taken from the login route. */
-async function roleUser(app: FastifyInstance, role: string): Promise<SignedIn> {
+/** A signed-in user of the given role, with a grant on the server (write
+ * for an editor, read for a viewer; P8-A grants). The session is a real
+ * signed-in one: the cookie the app sets and its CSRF token, taken from the
+ * login route. Roles act as stored only on Paid (see PAID). */
+async function roleUser(
+  app: FastifyInstance,
+  role: string,
+  slug: string,
+): Promise<SignedIn> {
   const id = randomUUID();
   const email = `${role}-${id.slice(0, 8)}@dialwarden.test`;
   const password = randomPassword();
@@ -347,6 +356,11 @@ async function roleUser(app: FastifyInstance, role: string): Promise<SignedIn> {
       createdAt: at,
       updatedAt: at,
     })
+    .run();
+  const level = role === "viewer" ? "read" : "write";
+  app.ctx.store.db
+    .insert(userGrants)
+    .values({ userId: id, serverId: slug, level })
     .run();
   const response = await app.inject({
     method: "POST",
@@ -438,7 +452,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
   });
 
   it("runs the whole sequence: pending, stop, write, start", async () => {
-    const { app, api, root, slug } = await setup();
+    const { app, api, root, slug } = await setup(PAID);
     // A stopped-only change on a running server waits as pending, even with
     // a restart asked for.
     const made = await draft(api, slug, { WorldSize: 2 });
@@ -451,7 +465,7 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
     // An editor stops the server: the pack's own REST shutdown runs, the
     // pending change is written while the server is down, and the start
     // hook the change asked for brings it back.
-    const editor = await roleUser(app, "editor");
+    const editor = await roleUser(app, "editor", slug);
     const run = await runHook(apiOf(app, editor), slug, "stop");
     expect(run.statusCode).toBe(200);
     expect(run.json()).toMatchObject({
@@ -470,11 +484,11 @@ describe("the stopped-only policy of the apply step (contract C5)", () => {
   });
 
   it("records change.pending, hook.run, change.applied in order", async () => {
-    const { app, api, root, slug } = await setup();
+    const { app, api, root, slug } = await setup(PAID);
     await putHooks(api, slug, dockerHook(game()));
     const made = await draft(api, slug, { WorldSize: 5 });
     await applyHooks(api, made.id, "restart");
-    const runner = await roleUser(app, "editor");
+    const runner = await roleUser(app, "editor", slug);
     await runHook(apiOf(app, runner), slug, "stop");
     const events = (await activityOf(api, slug)).map((row) => row.type);
     const pending = events.indexOf("change.pending");
@@ -682,9 +696,9 @@ describe("the hook run API and its roles (contract C7)", () => {
   });
 
   it("lets an editor trigger a hook and refuses a viewer", async () => {
-    const { app, slug } = await setup();
-    const editor = apiOf(app, await roleUser(app, "editor"));
-    const viewer = apiOf(app, await roleUser(app, "viewer"));
+    const { app, slug } = await setup(PAID);
+    const editor = apiOf(app, await roleUser(app, "editor", slug));
+    const viewer = apiOf(app, await roleUser(app, "viewer", slug));
     const allowed = await runHook(editor, slug, "save");
     expect(allowed.statusCode).toBe(200);
     const refused = await runHook(viewer, slug, "save");
@@ -697,9 +711,9 @@ describe("the hook run API and its roles (contract C7)", () => {
   });
 
   it("lets only the owner or an admin set the hook configuration", async () => {
-    const { app, api, slug } = await setup();
-    const editor = apiOf(app, await roleUser(app, "editor"));
-    const admin = apiOf(app, await roleUser(app, "admin"));
+    const { app, api, slug } = await setup(PAID);
+    const editor = apiOf(app, await roleUser(app, "editor", slug));
+    const admin = apiOf(app, await roleUser(app, "admin", slug));
     const refused = await putHooks(editor, slug, dockerHook(game()));
     expect(refused.statusCode).toBe(403);
     const allowed = await putHooks(admin, slug, dockerHook(game()));
