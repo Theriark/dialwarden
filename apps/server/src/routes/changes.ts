@@ -136,9 +136,13 @@ const slugParams = z.object({
   slug: z.string().max(63).regex(SERVER_ID, "not a server id"),
 });
 
-/** Who acts: the e-mail address of the signed-in user (or token owner). */
+/**
+ * Who acts: the internal user id of the signed-in user (or token owner). The
+ * display label is resolved when a row is shown (R&D decision Q4, D7), so
+ * erasing a person never rewrites their history rows.
+ */
 export function actorOf(request: FastifyRequest): string {
-  return request.principal?.email ?? "system";
+  return request.principal?.userId ?? "system";
 }
 
 /**

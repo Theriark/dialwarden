@@ -21,7 +21,7 @@ export const ACTIVITY_TYPES = [
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
-/** "system", or the e-mail address of the signed-in user who acted. */
+/** "system", or the internal user id of the signed-in user who acted (D7). */
 export type Actor = string;
 
 export interface ActivityEvent {

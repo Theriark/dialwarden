@@ -110,7 +110,7 @@ export function systemRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const actor = request.session?.user.email ?? "system";
+      const actor = request.principal?.userId ?? "system";
       const result = await app.ctx.backups.run(actor);
       const manifest = result.manifest;
       const blobBytes = manifest.blobs.reduce((sum, b) => sum + b.size, 0);
@@ -157,7 +157,7 @@ export function systemRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const actor = request.session?.user.email ?? "system";
+      const actor = request.principal?.userId ?? "system";
       const { id, stream } = await app.ctx.backups.export(
         actor,
         request.body.passphrase,
