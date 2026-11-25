@@ -11,7 +11,13 @@
 // sign-on walk checks the form, the redirect address and a refused address.
 /* eslint-disable security/detect-non-literal-fs-filename -- one shots folder the CI job owns */
 import { mkdirSync } from "node:fs";
-import { expect, test, type Page } from "@playwright/test";
+import {
+  expect,
+  request,
+  test,
+  type APIRequestContext,
+  type Page,
+} from "@playwright/test";
 
 const PAID_LICENCE = process.env.E2E_PAID_LICENCE ?? "";
 const SHOTS = "e2e-shots";
@@ -70,6 +76,12 @@ async function csrfOf(page: Page): Promise<string> {
   return session.csrfToken;
 }
 
+/** A request context with no cookie of the page: no session at all. */
+async function anonymous(): Promise<APIRequestContext> {
+  const baseURL = test.info().project.use.baseURL ?? "http://127.0.0.1:8080";
+  return request.newContext({ baseURL });
+}
+
 /** An invitation through the API, accepted through the API: a teammate. */
 async function addTeammate(
   page: Page,
@@ -84,26 +96,28 @@ async function addTeammate(
   });
   expect(invited.status()).toBe(201);
   const { token } = (await invited.json()) as { token: string };
-  // The accept is public: a fresh request context holds no session.
-  const accepted = await page
-    .context()
-    .request.fetch("/api/v1/invitations/accept", {
-      method: "POST",
-      headers: { cookie: "" },
-      data: { token, name: account.name, password: account.password },
-    });
+  // The accept is public: a fresh request context holds no session, so the
+  // owner's session in the page stays signed in.
+  const api = await anonymous();
+  const accepted = await api.post("/api/v1/invitations/accept", {
+    data: { token, name: account.name, password: account.password },
+  });
   expect(accepted.status()).toBe(201);
+  await api.dispose();
 }
 
 /** The reveal dialog: copy, confirm and close; the value shown is returned. */
 async function takeRevealed(page: Page, label: string): Promise<string> {
-  const value = (await page.getByLabel(label).textContent()) ?? "";
+  // The dialog may carry the same name as the value block: look inside it.
+  const dialog = page.getByRole("dialog");
+  const block = dialog.getByLabel(label, { exact: true });
+  const value = (await block.textContent()) ?? "";
   expect(value).not.toBe("");
-  await page.getByRole("button", { name: "Copy" }).click();
-  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
-  await page.getByRole("checkbox", { name: "I have copied it" }).check();
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByLabel(label)).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Copy", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Copied" })).toBeVisible();
+  await dialog.getByRole("checkbox", { name: "I have copied it" }).check();
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   return value;
 }
 
@@ -115,7 +129,9 @@ test("the owner invites the team; the admin joins through the invitation page", 
 
   // The Users page: the owner alone, every stored role in force.
   await page.goto("/users");
-  await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Users", level: 1 }),
+  ).toBeVisible();
   await expect(page.getByText(OWNER.name).first()).toBeVisible();
   await expect(page.getByText("Every stored role is in force")).toBeVisible();
   await expect(page.getByText("No open invitation")).toBeVisible();
@@ -180,29 +196,36 @@ test("the audit log: rows in words, the chain, the filters and the CSV export", 
   test.setTimeout(180_000);
   await signIn(page, OWNER);
   await page.goto("/audit");
-  await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Audit log", level: 1 }),
+  ).toBeVisible();
   await expect(page.getByText(/Chain valid, \d+ rows/).first()).toBeVisible();
-  await expect(page.getByText("Invitation made").first()).toBeVisible();
-  await expect(page.getByText("Invitation accepted").first()).toBeVisible();
+  // The row words also name the Action options: read them in the table.
+  const log = page.getByRole("table", { name: "Audit log" });
+  await expect(log.getByText("Invitation made").first()).toBeVisible();
+  await expect(log.getByText("Invitation accepted").first()).toBeVisible();
   // The refused second accept of the walk before is a refused sign-in.
-  await expect(page.getByText("Refused").first()).toBeVisible();
+  await expect(log.getByText("Refused").first()).toBeVisible();
 
   // The action filter asks the server for one route pattern.
-  await page.getByLabel("Action").selectOption("POST /api/v1/invitations");
-  await expect(page.getByText("Invitation accepted")).toHaveCount(0);
-  await expect(page.getByText("Invitation made").first()).toBeVisible();
-  await page.getByRole("button", { name: "Clear" }).click();
-  await expect(page.getByText("Invitation accepted").first()).toBeVisible();
+  await page
+    .getByLabel("Action", { exact: true })
+    .selectOption("POST /api/v1/invitations");
+  await expect(log.getByText("Invitation accepted")).toHaveCount(0);
+  await expect(log.getByText("Invitation made").first()).toBeVisible();
+  const clear = page.getByRole("button", { name: "Clear", exact: true });
+  await clear.click();
+  await expect(log.getByText("Invitation accepted").first()).toBeVisible();
 
   // The search narrows the loaded rows; the density toggle is remembered.
   await page.getByLabel("Search the loaded rows").fill("accepted");
-  await expect(page.getByText("Invitation made")).toHaveCount(0);
+  await expect(log.getByText("Invitation made")).toHaveCount(0);
   await page.getByRole("button", { name: "Compact" }).click();
   await expect(page.getByRole("button", { name: "Compact" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await page.getByRole("button", { name: "Clear" }).click();
+  await clear.click();
 
   // Verify again keeps the chain valid; the export downloads the CSV.
   await page.getByRole("button", { name: "Verify again" }).click();
@@ -217,10 +240,10 @@ test("API tokens: made once, copied, listed and revoked", async ({ page }) => {
   test.setTimeout(180_000);
   await signIn(page, OWNER);
   await page.goto("/settings/tokens");
-  await expect(page.getByText("Ready")).toBeVisible();
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
   await expect(page.getByText("No token yet")).toBeVisible();
-  await page.getByLabel("Name").fill("Backup script");
-  await page.getByLabel("Acts as").selectOption("viewer");
+  await page.getByLabel("Name", { exact: true }).fill("Backup script");
+  await page.getByLabel("Acts as", { exact: true }).selectOption("viewer");
   await page.getByRole("button", { name: "Create token" }).click();
   await expect(
     page.getByRole("dialog", { name: "Your new API token" }),
@@ -233,10 +256,11 @@ test("API tokens: made once, copied, listed and revoked", async ({ page }) => {
   await expect(page.getByText(value)).toHaveCount(0);
   await expect(page.getByText(`${value.slice(0, 8)}`).first()).toBeVisible();
 
-  // The token reads the servers as a viewer: a bearer request works.
-  const listed = await page.context().request.fetch("/api/v1/servers", {
-    headers: { authorization: `Bearer ${value}`, cookie: "" },
-  });
+  // The token reads the servers as a viewer: a bearer request with no
+  // session cookie works.
+  const api = await anonymous();
+  const bearer = { authorization: `Bearer ${value}` };
+  const listed = await api.get("/api/v1/servers", { headers: bearer });
   expect(listed.status()).toBe(200);
 
   await page.getByRole("button", { name: "Revoke" }).first().click();
@@ -247,10 +271,9 @@ test("API tokens: made once, copied, listed and revoked", async ({ page }) => {
   await confirm.getByRole("button", { name: "Revoke" }).click();
   await expect(page.getByText("Token revoked").first()).toBeVisible();
   await expect(page.getByText("No token yet")).toBeVisible();
-  const refused = await page.context().request.fetch("/api/v1/servers", {
-    headers: { authorization: `Bearer ${value}`, cookie: "" },
-  });
+  const refused = await api.get("/api/v1/servers", { headers: bearer });
   expect(refused.status()).toBe(401);
+  await api.dispose();
 });
 
 test("privacy: snapshot retention, the audit address setting and the own export", async ({
@@ -306,8 +329,10 @@ test("single sign-on: the form, the redirect address and a refused provider", as
   test.setTimeout(180_000);
   await signIn(page, OWNER);
   await page.goto("/settings/sso");
-  await expect(page.getByRole("heading", { name: "Provider" })).toBeVisible();
-  await expect(page.getByText("Off").first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Provider", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Off", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Redirect address")).toContainText(
     "/api/v1/auth/oidc/callback",
   );
@@ -320,8 +345,8 @@ test("single sign-on: the form, the redirect address and a refused provider", as
 
   // A group row, then an http issuer: refused before any connection.
   await page.getByRole("button", { name: "Add a group" }).click();
-  await page.getByLabel("Group 1").fill("game-admins");
-  await page.getByLabel("Role").selectOption("admin");
+  await page.getByLabel("Group 1", { exact: true }).fill("game-admins");
+  await page.getByLabel("Role", { exact: true }).selectOption("admin");
   await page.getByLabel("Discovery URL (issuer)").fill("http://127.0.0.1:1/x");
   await page.getByLabel("Client id").fill("dialwarden");
   await page
@@ -401,7 +426,7 @@ test("each role sees its own view: admin, editor and viewer", async ({
   ).toBeVisible();
   await page.goto("/settings/tokens");
   const roles = await page
-    .getByLabel("Acts as")
+    .getByLabel("Acts as", { exact: true })
     .locator("option")
     .allTextContents();
   expect(roles).toEqual(["Editor", "Viewer"]);
@@ -464,7 +489,7 @@ test("the Free fallback and the switch back, without a reload", async ({
   });
   await confirm.getByRole("button", { name: "Remove" }).click();
   await expect(page.getByText("Licence removed").first()).toBeVisible();
-  await expect(page.getByText("Dialwarden Free")).toBeVisible();
+  await expect(page.getByText("Dialwarden Free").first()).toBeVisible();
 
   // Client-side navigation only from here: the pages refetch what the
   // plan changes, with no reload.
@@ -472,7 +497,9 @@ test("the Free fallback and the switch back, without a reload", async ({
   await nav.getByRole("link", { name: "Users" }).click();
   await expect(page).toHaveURL("/users");
   await expect(page.getByText("Acts as viewer on Free")).toHaveCount(3);
-  await expect(page.getByText("Roles paused on the Free plan")).toBeVisible();
+  await expect(
+    page.getByText("Roles paused on the Free plan", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByText("More than one user is part of the Paid plan."),
   ).toBeVisible();
@@ -494,7 +521,7 @@ test("the Free fallback and the switch back, without a reload", async ({
     page.getByText("API tokens is part of the Paid plan."),
   ).toBeVisible();
   await sections.getByRole("link", { name: "Single sign-on" }).click();
-  await expect(page.getByText("Single sign-on is off")).toBeVisible();
+  await expect(page.getByText("Single sign-on is off").first()).toBeVisible();
   await expect(
     page.getByText("Single sign-on is part of the Paid plan."),
   ).toBeVisible();
@@ -504,7 +531,9 @@ test("the Free fallback and the switch back, without a reload", async ({
     page,
     "users-free",
     async (p) => {
-      await expect(p.getByText("Roles paused on the Free plan")).toBeVisible();
+      await expect(
+        p.getByText("Roles paused on the Free plan", { exact: true }),
+      ).toBeVisible();
     },
     "/users",
   );
@@ -530,7 +559,7 @@ test("the Free fallback and the switch back, without a reload", async ({
     page,
     "sso-free",
     async (p) => {
-      await expect(p.getByText("Single sign-on is off")).toBeVisible();
+      await expect(p.getByText("Single sign-on is off").first()).toBeVisible();
     },
     "/settings/sso",
   );
@@ -557,9 +586,11 @@ test("the Free fallback and the switch back, without a reload", async ({
   await expect(page.getByRole("button", { name: "Export CSV" })).toBeEnabled();
   await nav.getByRole("link", { name: "Settings" }).click();
   await sections.getByRole("link", { name: "API tokens" }).click();
-  await expect(page.getByText("Ready")).toBeVisible();
+  await expect(page.getByText("Ready", { exact: true })).toBeVisible();
   await sections.getByRole("link", { name: "Single sign-on" }).click();
-  await expect(page.getByRole("heading", { name: "Provider" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Provider", exact: true }),
+  ).toBeVisible();
 });
 
 test("every P8 screen at 1440, 768 and 390 in light and dark", async ({
@@ -599,7 +630,9 @@ test("every P8 screen at 1440, 768 and 390 in light and dark", async ({
     page,
     "users",
     async (p) => {
-      await expect(p.getByRole("heading", { name: "Users" })).toBeVisible();
+      await expect(
+        p.getByRole("heading", { name: "Users", level: 1 }),
+      ).toBeVisible();
       await expect(p.getByText(ADMIN.email)).toBeVisible();
     },
     "/users",
@@ -608,7 +641,9 @@ test("every P8 screen at 1440, 768 and 390 in light and dark", async ({
     page,
     "users-invite",
     async (p) => {
-      await expect(p.getByRole("heading", { name: "Users" })).toBeVisible();
+      await expect(
+        p.getByRole("heading", { name: "Users", level: 1 }),
+      ).toBeVisible();
       await p.getByRole("button", { name: "Invite" }).click();
       const dialog = p.getByRole("dialog", { name: "Invite a teammate" });
       await expect(dialog).toBeVisible();
@@ -655,7 +690,9 @@ test("every P8 screen at 1440, 768 and 390 in light and dark", async ({
     page,
     "sso",
     async (p) => {
-      await expect(p.getByRole("heading", { name: "Provider" })).toBeVisible();
+      await expect(
+        p.getByRole("heading", { name: "Provider", exact: true }),
+      ).toBeVisible();
     },
     "/settings/sso",
   );
