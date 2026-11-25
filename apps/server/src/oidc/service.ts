@@ -11,8 +11,10 @@
 // policy, and the ID token signature is checked against the provider keys
 // (non-repudiation checks), so a forged token never signs anyone in.
 import { createHash, timingSafeEqual } from "node:crypto";
+import { isIPv6 } from "node:net";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import * as client from "openid-client";
+import { cleanAddress, truncateAddress } from "../audit/ip.js";
 import type { Aead } from "../crypto/aead.js";
 import type { Settings } from "../db/settings.js";
 import { ApiError, featureRequired } from "../http/errors.js";
@@ -100,8 +102,20 @@ interface Transaction {
   verifier: string;
   returnTo: string;
   createdAt: number;
-  /** The client address that started it (the per-address cap). */
-  address: string;
+  /** The client network that started it (the per-address cap). */
+  network: string;
+}
+
+/**
+ * The network one cap counts: an IPv4 address on its own, an IPv6 address by
+ * its /48. One IPv6 client holds a whole /64 or more, so counting exact IPv6
+ * addresses would let it fill the store alone (code review B1).
+ */
+export function signInNetwork(address: string): string {
+  const clean = cleanAddress(address) ?? address;
+  // An IPv4-mapped address (::ffff:a.b.c.d) counts as its IPv4 address.
+  const mapped = clean.includes(".");
+  return isIPv6(clean) && !mapped ? truncateAddress(clean) : clean;
 }
 
 /** A slash, then a plain path character that is not a slash, then more. */
@@ -433,17 +447,17 @@ export class OidcService {
   }
 
   /**
-   * Drops expired sign-ins. One client address holds at most
+   * Drops expired sign-ins. One client network (signInNetwork) holds at most
    * MAX_PER_ADDRESS open sign-ins (its oldest goes first), and a full store
    * refuses new sign-ins rather than drop anyone else's, so a flood of start
    * requests never ends a real sign-in (L5).
    */
-  #makeRoom(now: number, address: string): void {
+  #makeRoom(now: number, network: string): void {
     const mine: string[] = [];
     for (const [key, item] of this.#transactions) {
       if (now - item.createdAt >= TRANSACTION_TTL_MS) {
         this.#transactions.delete(key);
-      } else if (item.address === address) {
+      } else if (item.network === network) {
         mine.push(key);
       }
     }
@@ -468,13 +482,14 @@ export class OidcService {
     const verifier = client.randomPKCECodeVerifier();
     const challenge = await client.calculatePKCECodeChallenge(verifier);
     const now = this.#now().getTime();
-    this.#makeRoom(now, address);
+    const network = signInNetwork(address);
+    this.#makeRoom(now, network);
     this.#transactions.set(hashOf(state), {
       nonce,
       verifier,
       returnTo: safeReturnTo(returnTo),
       createdAt: now,
-      address,
+      network,
     });
     const url = client.buildAuthorizationUrl(config, {
       redirect_uri: this.#redirectUri() ?? "",

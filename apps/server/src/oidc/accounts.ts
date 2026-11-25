@@ -13,7 +13,7 @@ import { apiTokens, userGrants, users } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { ApiError, limitReached } from "../http/errors.js";
 import type { AssignableRole } from "../team/roles.js";
-import { UNUSABLE_PASSWORD } from "../team/service.js";
+import { dropOpenResets, UNUSABLE_PASSWORD } from "../team/service.js";
 
 type UserRow = typeof users.$inferSelect;
 
@@ -75,8 +75,10 @@ export class OidcAccounts {
     const row = this.#linked(issuer, subject);
     if (row === null) return;
     this.#sessions.destroyForUser(row.id);
-    // The API tokens end with the sessions: no mapped group, no access (L2).
+    // The API tokens and the open reset links end with the sessions: no
+    // mapped group, no access (L2, appsec round 2 N1).
     this.#store.db.delete(apiTokens).where(eq(apiTokens.userId, row.id)).run();
+    dropOpenResets(this.#store, row.id);
   }
 
   /** The account of a login: found by issuer and subject, or made. */
@@ -144,6 +146,8 @@ export class OidcAccounts {
           .where(eq(userGrants.userId, found.id))
           .run();
       }
+      // A role change ends the open reset links, as in TeamService.setRole.
+      dropOpenResets(this.#store, found.id);
     })();
     this.#activity.record("user.changed", {
       actor: "system",
