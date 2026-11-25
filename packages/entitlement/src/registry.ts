@@ -85,7 +85,12 @@ export const FEATURES: readonly FeatureDefinition[] = [
     available: true,
     routes: ["PUT /api/v1/users/:id/role", "PUT /api/v1/users/:id/grants"],
   },
-  { key: "audit", label: "Audit log", available: true, routes: [] },
+  {
+    key: "audit",
+    label: "Audit log CSV export",
+    available: true,
+    routes: ["GET /api/v1/audit/export.csv"],
+  },
   { key: "oidc", label: "Single sign-on (OIDC)", available: true, routes: [] },
   { key: "apiTokens", label: "API tokens", available: true, routes: [] },
   {
@@ -133,6 +138,7 @@ export const ALWAYS_FREE: readonly string[] = [
   "Two-factor sign-in",
   "App backup",
   "Privacy controls",
+  "Audit log viewing and chain check",
 ];
 
 /**
@@ -217,6 +223,12 @@ export const ALWAYS_FREE_ROUTES: readonly string[] = [
   "POST /api/v1/users/:id/anonymise",
   "GET /api/v1/users/:id/export",
   "GET /api/v1/me/export",
+  "GET /api/v1/settings/audit",
+  "PUT /api/v1/settings/audit",
+  // The audit log is recorded on every plan, and the owner can always read
+  // and verify it; its CSV export is the Paid part (R&D default D5).
+  "GET /api/v1/audit",
+  "GET /api/v1/audit/verify",
 ];
 
 export const FREE_LIMITS: Limits = {

@@ -504,7 +504,9 @@ export class TeamService {
     address: string,
   ): Promise<UserRow> {
     const tokenHash = hashValue(input.token);
-    const account = `invitation:${tokenHash.slice(0, 16)}`;
+    // Each attempt is its own account in the limiter: the per-address limit
+    // is what stops guessing, and parallel accepts of one link get the 410.
+    const account = `invitation:${randomUUID()}`;
     const wait = this.#limiter.reserve(address, account);
     if (wait > 0) {
       throw new ApiError(429, "rate_limited", { retryAfter: wait });
@@ -601,7 +603,7 @@ export class TeamService {
     address: string,
   ): Promise<void> {
     const tokenHash = hashValue(input.token);
-    const account = `reset:${tokenHash.slice(0, 16)}`;
+    const account = `reset:${randomUUID()}`;
     const wait = this.#limiter.reserve(address, account);
     if (wait > 0) {
       throw new ApiError(429, "rate_limited", { retryAfter: wait });

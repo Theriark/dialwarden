@@ -160,7 +160,9 @@ describe("feature registry on the server (contract C1)", () => {
       (route) => route.entitlement !== null && route.url !== PROBE_URL,
     );
     for (const route of gated) {
-      const key = `${route.method} ${route.url}`;
+      // A HEAD route is the GET route of the same path.
+      const method = route.method === "HEAD" ? "GET" : route.method;
+      const key = `${method} ${route.url}`;
       expect(listed.get(key), key).toBe(route.entitlement);
     }
   });
