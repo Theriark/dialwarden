@@ -135,9 +135,12 @@ describe("the own-data export (P-01 to P-03)", () => {
     const byEditor = await call(app, editor, "GET", ofA);
     expect(byEditor.statusCode).toBe(403);
     expect(byEditor.json()).toEqual({ error: "forbidden" });
-    const byAdmin = await call(app, admin, "GET", ofO);
-    expect(byAdmin.statusCode).toBe(403);
-    expect(byAdmin.json()).toEqual({ error: "cannot_change_owner" });
+    // The route is owner only, so the guard refuses admins for anyone.
+    for (const url of [ofO, ofE]) {
+      const byAdmin = await call(app, admin, "GET", url);
+      expect(byAdmin.statusCode, url).toBe(403);
+      expect(byAdmin.json(), url).toEqual({ error: "forbidden" });
+    }
     const byOwner = await call(app, owner, "GET", ofE);
     expect(byOwner.statusCode).toBe(200);
     expect(byOwner.body).toContain(editor.email);

@@ -145,6 +145,36 @@ describe("audit chain (C-01 to C-12)", () => {
     });
   });
 
+  it("C-06 still finds the newest rows deleted after the next record", async () => {
+    const t = await fixture();
+    await actions(t, 3);
+    const last = Math.max(...rowsOf(t).map((row) => row.id));
+    sql(t, "DELETE FROM audit_events WHERE id > ?", last - 3);
+    await actions(t, 1);
+    const ids = rowsOf(t).map((row) => row.id);
+    expect(Math.max(...ids)).toBeGreaterThan(last);
+    expect(await verify(t)).toMatchObject({ valid: false, reason: "gap" });
+  });
+
+  it("C-06 still finds every row deleted after the next record", async () => {
+    const t = await fixture();
+    await actions(t, 3);
+    sql(t, "DELETE FROM audit_events");
+    await actions(t, 1);
+    expect(await verify(t)).toMatchObject({ valid: false, reason: "gap" });
+  });
+
+  it("C-06 keeps a removed head anchor visible after the next record", async () => {
+    const t = await fixture();
+    await actions(t, 3);
+    sql(t, "DELETE FROM settings WHERE key = 'audit.head'");
+    await actions(t, 2);
+    expect(await verify(t)).toMatchObject({
+      valid: false,
+      reason: "head_mismatch",
+    });
+  });
+
   it("C-07 keeps the chain through an anonymisation and a deletion", async () => {
     for (const erase of ["anonymise", "delete"] as const) {
       const t = await fixture();
