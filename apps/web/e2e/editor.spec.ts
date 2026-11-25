@@ -72,13 +72,15 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(page).toHaveURL("/servers/new");
 
   // With the SFTP connector the wizard never scrolls sideways at 390: the
-  // fingerprint wraps and Copy key sits on its own row (live check F4).
+  // fingerprint wraps and Copy key sits on its own row (live check F4). The
+  // shell switches to its phone layout on a media-query event after the
+  // resize, so the width is polled until that render has landed.
   await page.getByText("SFTP", { exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByText("This instance's public key")).toBeVisible();
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth),
-  ).toBeLessThanOrEqual(390);
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(390);
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByText("Local folder", { exact: true }).click();
 
