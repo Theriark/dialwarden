@@ -48,10 +48,12 @@ function keyOf(locator) {
       return `struct:${locator.key}:${locator.field}`;
     case "cfg":
       return `cfg:${locator.command.toLowerCase()}`;
-    case "launch":
-      return `launch:${locator.flag.toLowerCase()}${
-        locator.key ? ` ${locator.key.toLowerCase()}` : ""
-      }`;
+    case "launch": {
+      const flag = locator.flag.toLowerCase();
+      return locator.key
+        ? `launch:${flag} ${locator.key.toLowerCase()}`
+        : `launch:${flag}`;
+    }
     case "xml":
       return `xml:${locator.property}`;
     case "lua":
@@ -111,6 +113,12 @@ function show(value) {
 
 const byKey = (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
 
+/** True when the path is a plain file. */
+function isFile(path) {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- entries of the defaults folder
+  return statSync(path).isFile();
+}
+
 /**
  * The drift of one pack against one folder of default files. Every file of
  * the pack is compared with the defaults file of the same name (the last
@@ -130,13 +138,23 @@ export function packDrift(packDir, defaultsDir) {
   for (const file of pack.files) {
     const name = fixtureName(file);
     const defaultsPath = join(defaultsDir, name);
-    const settings = pack.settings.filter((setting) => setting.file === file.id);
+    const settings = pack.settings.filter(
+      (setting) => setting.file === file.id,
+    );
     const adapter = getAdapter(file.adapter);
     if (adapter === undefined) {
       throw new Error(`no adapter ${file.adapter}`);
     }
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- the defaults folder given on the command line
     if (!existsSync(defaultsPath)) {
-      files.push({ fileId: file.id, name, added: [], removed: [], changed: [], missing: true });
+      files.push({
+        fileId: file.id,
+        name,
+        added: [],
+        removed: [],
+        changed: [],
+        missing: true,
+      });
       continue;
     }
     compared += 1;
@@ -166,13 +184,15 @@ export function packDrift(packDir, defaultsDir) {
         removed.push({
           key: setting.key,
           packDefault:
-            setting.default === undefined ? "not declared" : show(setting.default),
+            setting.default === undefined
+              ? "not declared"
+              : show(setting.default),
         });
         continue;
       }
       if (
-        setting.default !== undefined
-        && !sameAsDefault(setting, raw, setting.default)
+        setting.default !== undefined &&
+        !sameAsDefault(setting, raw, setting.default)
       ) {
         changed.push({
           key: setting.key,
@@ -183,16 +203,23 @@ export function packDrift(packDir, defaultsDir) {
     }
     removed.sort(byKey);
     changed.sort(byKey);
-    files.push({ fileId: file.id, name, added, removed, changed, missing: false });
+    files.push({
+      fileId: file.id,
+      name,
+      added,
+      removed,
+      changed,
+      missing: false,
+    });
   }
 
   // A defaults file nothing compares against is named, so an engineer
   // cannot mistake a naming miss for an empty report.
   const known = new Set(pack.files.map((file) => fixtureName(file)));
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- the defaults folder given on the command line
-  const extra = readdirSync(defaultsDir)
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- entries of the same folder
-    .filter((name) => statSync(join(defaultsDir, name)).isFile())
+  const names = readdirSync(defaultsDir);
+  const extra = names
+    .filter((name) => isFile(join(defaultsDir, name)))
     .filter((name) => !known.has(name))
     .sort();
 
@@ -206,13 +233,23 @@ export function packDrift(packDir, defaultsDir) {
   );
   lines.push("");
   const addedCount = files.reduce((sum, file) => sum + file.added.length, 0);
-  const removedCount = files.reduce((sum, file) => sum + file.removed.length, 0);
-  const changedCount = files.reduce((sum, file) => sum + file.changed.length, 0);
+  const removedCount = files.reduce(
+    (sum, file) => sum + file.removed.length,
+    0,
+  );
+  const changedCount = files.reduce(
+    (sum, file) => sum + file.changed.length,
+    0,
+  );
   lines.push("## Summary");
   lines.push("");
   lines.push(`- Files compared: ${compared}`);
-  lines.push(`- New keys (in the default files, not in the pack): ${addedCount}`);
-  lines.push(`- Removed keys (in the pack, not in the default files): ${removedCount}`);
+  lines.push(
+    `- New keys (in the default files, not in the pack): ${addedCount}`,
+  );
+  lines.push(
+    `- Removed keys (in the pack, not in the default files): ${removedCount}`,
+  );
   lines.push(`- Changed defaults: ${changedCount}`);
   for (const file of files.filter((file) => file.missing)) {
     lines.push(
@@ -224,8 +261,10 @@ export function packDrift(packDir, defaultsDir) {
   }
   for (const file of files) {
     if (
-      file.missing
-      || (file.added.length === 0 && file.removed.length === 0 && file.changed.length === 0)
+      file.missing ||
+      (file.added.length === 0 &&
+        file.removed.length === 0 &&
+        file.changed.length === 0)
     ) {
       continue;
     }
