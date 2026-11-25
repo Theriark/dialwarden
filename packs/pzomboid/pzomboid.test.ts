@@ -7,12 +7,7 @@ import { lintFile, validate, writeFileValues } from "@dialwarden/packs-schema";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import {
-  fixtureOf,
-  fixtureValues,
-  loadPack,
-  settingOf,
-} from "../kit.js";
+import { fixtureOf, fixtureValues, loadPack, settingOf } from "../kit.js";
 
 /* eslint-disable security/detect-non-literal-fs-filename -- the fixtures folder of this pack */
 
@@ -63,12 +58,13 @@ const B41 = [
 
 describe("Project Zomboid pack", () => {
   it("declares its files, probes and the reloadoptions hook", () => {
-    expect(pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]))
-      .toEqual([
-        ["serverini", "ini", "anytime"],
-        ["sandbox", "lua", "stopped-only"],
-        ["launch", "launch", "stopped-only"],
-      ]);
+    expect(
+      pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]),
+    ).toEqual([
+      ["serverini", "ini", "anytime"],
+      ["sandbox", "lua", "stopped-only"],
+      ["launch", "launch", "stopped-only"],
+    ]);
     // The live-reload action of the plan: the save hook runs reloadoptions,
     // so liveReloadable ini keys apply without a restart.
     expect(pack.probes).toEqual([
@@ -103,12 +99,12 @@ describe("Project Zomboid pack", () => {
     expect(
       adapter.get(doc, { kind: "ini", section: null, key: "RCONPassword" }),
     ).toBe("");
-    expect(
-      adapter.get(doc, { kind: "ini", section: null, key: "Mods" }),
-    ).toBe("");
-    expect(
-      adapter.get(doc, { kind: "ini", section: null, key: "Map" }),
-    ).toBe("Muldraugh, KY");
+    expect(adapter.get(doc, { kind: "ini", section: null, key: "Mods" })).toBe(
+      "",
+    );
+    expect(adapter.get(doc, { kind: "ini", section: null, key: "Map" })).toBe(
+      "Muldraugh, KY",
+    );
     // A semicolon list value is part of the value, not a comment.
     expect(
       adapter.get(doc, {
@@ -163,12 +159,11 @@ describe("Project Zomboid pack", () => {
     expect(
       adapter.get(doc, { kind: "lua", path: ["SandboxVars", "VERSION"] }),
     ).toBe(6);
-    expect(
-      pack.settings.find(
-        (setting) => setting.locator.kind === "lua"
-          && setting.locator.path.join(".") === "SandboxVars.VERSION",
-      ),
-    ).toBeUndefined();
+    const luaPaths: string[] = [];
+    for (const { locator } of pack.settings) {
+      if (locator.kind === "lua") luaPaths.push(locator.path.join("."));
+    }
+    expect(luaPaths).not.toContain("SandboxVars.VERSION");
   });
 
   it("edits a deep table entry and keeps the mod table untouched", () => {

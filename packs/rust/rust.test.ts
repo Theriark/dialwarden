@@ -16,19 +16,18 @@ const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const bytesOf = (line: string) => new TextEncoder().encode(line);
 
-const serverCfg = () =>
-  new Uint8Array(readFileSync(`${FIXTURES}/server.cfg`));
-const usersCfg = () =>
-  new Uint8Array(readFileSync(`${FIXTURES}/users.cfg`));
+const serverCfg = () => new Uint8Array(readFileSync(`${FIXTURES}/server.cfg`));
+const usersCfg = () => new Uint8Array(readFileSync(`${FIXTURES}/users.cfg`));
 
 describe("Rust pack", () => {
   it("declares its files, probes and hooks", () => {
-    expect(pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]))
-      .toEqual([
-        ["servercfg", "cfg", "anytime"],
-        ["userscfg", "cfg", "anytime"],
-        ["launch", "launch", "anytime"],
-      ]);
+    expect(
+      pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]),
+    ).toEqual([
+      ["servercfg", "cfg", "anytime"],
+      ["userscfg", "cfg", "anytime"],
+      ["launch", "launch", "anytime"],
+    ]);
     // The whole instance lives under the identity folder of the default
     // LinuxGSM instance name.
     expect(pack.files[0]?.paths).toEqual({
@@ -79,9 +78,9 @@ describe("Rust pack", () => {
     ]);
     expect(text(written)).toContain('server.motd "Welcome to the quarry lane"');
     const reread = adapter.parse(written);
-    expect(
-      adapter.get(reread, { kind: "cfg", command: "server.motd" }),
-    ).toBe("Welcome to the quarry lane");
+    expect(adapter.get(reread, { kind: "cfg", command: "server.motd" })).toBe(
+      "Welcome to the quarry lane",
+    );
     expect(written.byteLength).toBeGreaterThan(0);
   });
 
@@ -109,27 +108,27 @@ describe("Rust pack", () => {
     expect(text(usersCfg())).toContain(
       'ownerid 76561198000000001 "Quarry Keeper"',
     );
-    expect(adapter.get(adapter.parse(written), {
-      kind: "cfg",
-      command: "server.idlekick",
-    })).toBe("15");
+    expect(
+      adapter.get(adapter.parse(written), {
+        kind: "cfg",
+        command: "server.idlekick",
+      }),
+    ).toBe("15");
   });
 
   it("reads the launch convars of the args line", () => {
     const { adapter, doc } = fixtureOf(pack, "launch");
-    expect(
-      adapter.get(doc, { kind: "launch", flag: "+server.hostname" }),
-    ).toBe("Quarry Lane");
-    expect(
-      adapter.get(doc, { kind: "launch", flag: "+server.level" }),
-    ).toBe("Procedural Map");
-    expect(
-      adapter.get(doc, { kind: "launch", flag: "-batchmode" }),
-    ).toBe(true);
+    expect(adapter.get(doc, { kind: "launch", flag: "+server.hostname" })).toBe(
+      "Quarry Lane",
+    );
+    expect(adapter.get(doc, { kind: "launch", flag: "+server.level" })).toBe(
+      "Procedural Map",
+    );
+    expect(adapter.get(doc, { kind: "launch", flag: "-batchmode" })).toBe(true);
     // The identity convar is not a pack setting; the line keeps it.
-    expect(
-      adapter.get(doc, { kind: "launch", flag: "+server.identity" }),
-    ).toBe("rustserver");
+    expect(adapter.get(doc, { kind: "launch", flag: "+server.identity" })).toBe(
+      "rustserver",
+    );
   });
 
   it("adds a missing launch convar at the end of the line", () => {
@@ -145,9 +144,9 @@ describe("Rust pack", () => {
     ]);
     expect(text(written)).toContain("+rcon.web");
     const reread = launch.parse(written);
-    expect(
-      launch.get(reread, { kind: "launch", flag: "+rcon.web" }),
-    ).toBe(true);
+    expect(launch.get(reread, { kind: "launch", flag: "+rcon.web" })).toBe(
+      true,
+    );
   });
 
   it("shows no issue in its synthetic fixture", () => {
@@ -164,9 +163,9 @@ describe("Rust pack", () => {
       severity: "error",
       message: expect.stringContaining("shorter than 12 characters"),
     });
-    expect(
-      validate(pack, values, { includeServerEvaluated: false }),
-    ).toEqual([]);
+    expect(validate(pack, values, { includeServerEvaluated: false })).toEqual(
+      [],
+    );
   });
 
   it("flags colliding ports and the legacy console protocol", () => {

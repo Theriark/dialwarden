@@ -19,7 +19,9 @@
     {
       "id": "gus",
       "paths": {
-        "linux": ["ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini"],
+        "linux": [
+          "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini"
+        ],
         "windows": [
           "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini"
         ]

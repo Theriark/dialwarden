@@ -69,12 +69,13 @@ const PRE_V3 = [
 
 describe("7 Days to Die pack", () => {
   it("declares its files, probes and hooks", () => {
-    expect(pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]))
-      .toEqual([
-        ["serverconfig", "xml", "anytime"],
-        ["serveradmin", "xml", "stopped-only"],
-        ["launch", "launch", "anytime"],
-      ]);
+    expect(
+      pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]),
+    ).toEqual([
+      ["serverconfig", "xml", "anytime"],
+      ["serveradmin", "xml", "stopped-only"],
+      ["launch", "launch", "anytime"],
+    ]);
     // The admin file resolves inside the Saves folder of the data
     // directory; the demo keeps both inside the server root.
     expect(pack.files[1]?.paths.linux).toEqual([
@@ -103,22 +104,22 @@ describe("7 Days to Die pack", () => {
     const { adapter, doc, bytes } = fixtureOf(pack, "serverconfig");
     expect(doc.newline).toBe("\r\n");
     expect(text(bytes)).toContain('<?xml version="1.0"?>');
-    expect(
-      adapter.get(doc, { kind: "xml", property: "ServerPort" }),
-    ).toBe("26900");
-    expect(
-      adapter.get(doc, { kind: "xml", property: "SandboxCode" }),
-    ).toBe("AAAJABJACJADJARFBNC");
-    expect(
-      adapter.get(doc, { kind: "xml", property: "UserDataFolder" }),
-    ).toBe("UserData");
+    expect(adapter.get(doc, { kind: "xml", property: "ServerPort" })).toBe(
+      "26900",
+    );
+    expect(adapter.get(doc, { kind: "xml", property: "SandboxCode" })).toBe(
+      "AAAJABJACJADJARFBNC",
+    );
+    expect(adapter.get(doc, { kind: "xml", property: "UserDataFolder" })).toBe(
+      "UserData",
+    );
   });
 
   it("keeps the admin file raw: it parses, and no setting addresses it", () => {
     const { doc } = fixtureOf(pack, "serveradmin");
-    expect(
-      doc.issues.filter((issue) => issue.severity === "error"),
-    ).toEqual([]);
+    expect(doc.issues.filter((issue) => issue.severity === "error")).toEqual(
+      [],
+    );
     expect(
       pack.settings.filter((setting) => setting.file === "serveradmin"),
     ).toEqual([]);
@@ -235,9 +236,9 @@ describe("7 Days to Die pack", () => {
     expect(
       adapter.get(doc, { kind: "xml", property: "UserDataFolder" }),
     ).toBeUndefined();
-    expect(
-      adapter.get(doc, { kind: "xml", property: "ServerName" }),
-    ).toBe("Kept");
+    expect(adapter.get(doc, { kind: "xml", property: "ServerName" })).toBe(
+      "Kept",
+    );
   });
 
   it("explains SandboxCode: present, missing and malformed", () => {
@@ -280,9 +281,7 @@ describe("7 Days to Die pack", () => {
   it("shows only the intended lint in its fixture", () => {
     const issues = lintFile(pack, "serverconfig", serverconfig());
     // The fixture is well-formed; unknown mod properties carry no error.
-    expect(
-      issues.filter((issue) => issue.severity === "error"),
-    ).toEqual([]);
+    expect(issues.filter((issue) => issue.severity === "error")).toEqual([]);
   });
 });
 

@@ -123,7 +123,9 @@ describe("launch arguments: ARK question-mark chain", () => {
     );
     // The chain is one word, so the option joins it raw: a quote here
     // would end the word and leave the game with two travel arguments.
-    expect(valued).toBe(source.replace("27015 -server", "27015?NewOpt=v -server"));
+    expect(valued).toBe(
+      source.replace("27015 -server", "27015?NewOpt=v -server"),
+    );
     const after = launch.parse(bytes(valued));
     expect(launch.get(after, flag("?NewOpt"))).toBe("v");
     expect(launch.get(after, flag("?QueryPort"))).toBe("27015");
@@ -137,10 +139,7 @@ describe("launch arguments: ARK question-mark chain", () => {
       launch.insert(d, { ...flag("?RCONEnabled"), before }, true),
     );
     expect(placed).toBe(
-      source.replace(
-        "MaxPlayers=20",
-        "MaxPlayers=20?RCONEnabled",
-      ),
+      source.replace("MaxPlayers=20", "MaxPlayers=20?RCONEnabled"),
     );
     const after = launch.parse(bytes(placed));
     expect(launch.get(after, flag("?RCONEnabled"))).toBe(true);
@@ -149,9 +148,9 @@ describe("launch arguments: ARK question-mark chain", () => {
 
   it("refuses option text an unquoted chain cannot hold", () => {
     const doc2 = launch.parse(data);
-    expect(
-      errorCode(() => launch.insert(doc2, flag("?NewOpt"), "a b")),
-    ).toBe("invalid-value");
+    expect(errorCode(() => launch.insert(doc2, flag("?NewOpt"), "a b"))).toBe(
+      "invalid-value",
+    );
   });
 });
 

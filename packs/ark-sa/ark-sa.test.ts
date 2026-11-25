@@ -26,19 +26,19 @@ const bytesOf = (line: string) => new TextEncoder().encode(line);
 
 const gusBytes = () =>
   new Uint8Array(readFileSync(`${FIXTURES}/GameUserSettings.ini`));
-const gameBytes = () =>
-  new Uint8Array(readFileSync(`${FIXTURES}/Game.ini`));
+const gameBytes = () => new Uint8Array(readFileSync(`${FIXTURES}/Game.ini`));
 const argsBytes = () =>
   new Uint8Array(readFileSync(`${FIXTURES}/dialwarden-args.txt`));
 
 describe("ARK: Survival Ascended pack", () => {
   it("declares both INI files stopped-only and the launch file anytime", () => {
-    expect(pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]))
-      .toEqual([
-        ["gus", "ueini", "stopped-only"],
-        ["game", "ueini", "stopped-only"],
-        ["launch", "launch", "anytime"],
-      ]);
+    expect(
+      pack.files.map((file) => [file.id, file.adapter, file.applyPolicy]),
+    ).toEqual([
+      ["gus", "ueini", "stopped-only"],
+      ["game", "ueini", "stopped-only"],
+      ["launch", "launch", "anytime"],
+    ]);
     expect(pack.probes).toEqual([
       {
         kind: "sourceRcon",
@@ -171,9 +171,9 @@ describe("ARK: Survival Ascended pack", () => {
 
   it("keeps the whole chain quoted when the session name has a space", () => {
     const { adapter, doc } = fixtureOf(pack, "launch");
-    expect(
-      adapter.get(doc, { kind: "launch", flag: "?SessionName" }),
-    ).toBe("Dialwarden demo");
+    expect(adapter.get(doc, { kind: "launch", flag: "?SessionName" })).toBe(
+      "Dialwarden demo",
+    );
     expect(
       adapter.get(doc, { kind: "launch", flag: "?ServerAdminPassword" }),
     ).toBe("mid-chain-demo");
@@ -205,9 +205,7 @@ describe("ARK: Survival Ascended pack", () => {
       severity: "error",
       message: expect.stringContaining("no admin password"),
     });
-    expect(
-      validate(pack, values, { includeServerEvaluated: false }),
-    ).toEqual([
+    expect(validate(pack, values, { includeServerEvaluated: false })).toEqual([
       {
         key: "cli.Port",
         severity: "warning",
