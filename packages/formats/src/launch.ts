@@ -535,6 +535,32 @@ function insertArg(
       throw new FormatError("invalid-value", "a ? chain value cannot hold ?");
     }
     const option = text === undefined ? flag : `${flag}=${text}`;
+    // A chain option that must stay in front of named others goes in
+    // front of the first of them, not to the chain end: a game may read
+    // everything after an option as part of it, as ARK does with
+    // ?ServerAdminPassword, so an option added behind it would be lost.
+    if (before !== undefined && before.length > 0) {
+      const wanted = new Set(before.map((name) => name.toLowerCase()));
+      const chainArgs = doc.args.filter(
+        (arg) => arg.word === chain && arg.option !== undefined,
+      );
+      const ahead = chainArgs.find((arg) => wanted.has(arg.name.toLowerCase()));
+      const char =
+        ahead === undefined ? undefined : chain.chars[ahead.option!.start];
+      if (ahead !== undefined && char !== undefined) {
+        // Same rule as the chain end below: inside the word the option is
+        // written raw when the chain is unquoted, escaped inside quotes.
+        if (char.context === 0 && !/^[^\s"'\\]*$/.test(option)) {
+          throw new FormatError(
+            "invalid-value",
+            "the chain is not quoted, so it cannot hold this option text",
+          );
+        }
+        const raw =
+          char.context === 0 ? option : encodeIn(char.context, option);
+        return [{ start: char.from, end: char.from, text: raw }];
+      }
+    }
     const last = chain.chars.at(-1);
     if (last !== undefined && isLoneBackslash(last)) {
       const raw = `\\\\${encodeIn(0, option)}`;
@@ -543,6 +569,18 @@ function insertArg(
     const context = last?.context ?? 0;
     const inside = context !== 0 && last !== undefined;
     const at = inside ? last.to : chain.end;
+    // An unquoted chain is one word: the option is appended raw, because a
+    // quote would end the word and split the chain. Only text that cannot
+    // live inside one word (a space, a quote, a backslash) is refused.
+    if (!inside) {
+      if (!/^[^\s"'\\]*$/.test(option)) {
+        throw new FormatError(
+          "invalid-value",
+          "the chain is not quoted, so it cannot hold this option text",
+        );
+      }
+      return [{ start: at, end: at, text: option }];
+    }
     return [{ start: at, end: at, text: encodeIn(context, option) }];
   }
   const equals = doc.args.some((a) => a.inline !== undefined && !a.option);
