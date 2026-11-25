@@ -18,6 +18,8 @@ import {
   type TeamFixture,
 } from "../../test/team.js";
 
+/* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
+
 const DAY_MS = 86_400_000;
 
 let current: TestApp | undefined;

@@ -237,6 +237,7 @@ export class RetentionService {
     let removed = 0;
     for (const sha256 of names) {
       try {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- a blob path the snapshot store builds from a SHA-256
         await unlink(this.#blobs.pathOf(sha256));
         removed += 1;
       } catch {
