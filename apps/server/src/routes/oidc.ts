@@ -121,7 +121,8 @@ export function oidcRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const raw = request.cookies[OIDC_COOKIE];
+      // The literal name of OIDC_COOKIE (a literal key for the lint).
+      const raw = request.cookies.dw_oidc;
       const unsigned =
         raw === undefined ? null : request.unsignCookie(raw).value;
       clearTransactionCookie(app, reply);
