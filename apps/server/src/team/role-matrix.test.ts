@@ -385,7 +385,7 @@ describe("privilege escalation (A-03 to A-18)", () => {
 
   it("A-05 answers objects of another server as missing", async () => {
     const t = fixture;
-    const { editor, servers } = t;
+    const { servers } = t;
     const changeSet = ids.changeSet.b;
     const snapshot = ids.snapshot.b;
     const reads: ["GET" | "POST", string, object?][] = [
