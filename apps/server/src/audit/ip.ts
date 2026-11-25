@@ -31,18 +31,14 @@ function groupsOf(address: string): number[] {
 function textOf(groups: readonly number[]): string {
   let start = -1;
   let length = 0;
-  for (let i = 0; i < groups.length; ) {
-    if (groups.at(i) !== 0) {
-      i += 1;
-      continue;
+  let run = 0;
+  for (const [index, group] of groups.entries()) {
+    run = group === 0 ? run + 1 : 0;
+    // The first of the longest runs wins; a single zero group stays.
+    if (run > length && run > 1) {
+      start = index - run + 1;
+      length = run;
     }
-    let j = i;
-    while (j < groups.length && groups.at(j) === 0) j += 1;
-    if (j - i > length && j - i > 1) {
-      start = i;
-      length = j - i;
-    }
-    i = j;
   }
   const hex = groups.map((group) => group.toString(16));
   if (start < 0) return hex.join(":");

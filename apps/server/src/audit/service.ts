@@ -244,7 +244,9 @@ export class AuditService {
         prevHash: prev.hash,
       };
       const hash = this.hashOf(unhashed);
-      db.insert(auditEvents).values({ ...unhashed, ip, hash }).run();
+      db.insert(auditEvents)
+        .values({ ...unhashed, ip, hash })
+        .run();
       this.#setLink(HEAD_KEY, unhashed.id, hash);
       if (input.actorLabel !== undefined) {
         this.#actor(input.actorId, input.actorLabel);
