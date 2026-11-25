@@ -453,6 +453,120 @@ test("each role sees its own view: admin, editor and viewer", async ({
   await expect(page.getByText("Managed by the owner and admins")).toBeVisible();
 });
 
+/** The words of the history page when a version needs an admin (P8-F2). */
+const ADMIN_ONLY_REASON =
+  "This version holds a launch or shell file: restoring it needs the owner or an admin.";
+
+/** The adapters of the files a shell reads (packs-schema SHELL_ADAPTERS). */
+const SHELL_ADAPTERS = new Set(["launch", "shellvar", "shellvar-systemd"]);
+
+test("the history restore follows the role and an ungranted server is not in the fleet (P8-F2)", async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  mkdirSync(SHOTS, { recursive: true });
+
+  // The viewer reads the timeline: the read-only sentence, no restore
+  // control, and nothing is sent (live check F1).
+  await signIn(page, VIEWER);
+  const viewerReady = async (p: Page) => {
+    await expect(
+      p.getByRole("heading", { name: "Palworld Home history" }),
+    ).toBeVisible();
+    await expect(
+      p.getByText(/You are signed in as viewer: you read this history/),
+    ).toBeVisible();
+    await expect(p.getByText("First import")).toBeVisible();
+  };
+  await page.goto("/servers/palworld-home/history");
+  await viewerReady(page);
+  await expect(
+    page.getByRole("button", { name: "Restore this version" }),
+  ).toHaveCount(0);
+  await shoot(
+    page,
+    "f2-history-viewer",
+    viewerReady,
+    "/servers/palworld-home/history",
+  );
+  await signOut(page);
+
+  // The editor restores plain files; a version that holds the launch file
+  // keeps its control off with the reason, and the server refuses that
+  // restore with the shell-file code the toast maps (F1, F2).
+  await signIn(page, EDITOR);
+  const editorReady = async (p: Page) => {
+    await expect(
+      p.getByRole("heading", { name: "Palworld Home history" }),
+    ).toBeVisible();
+    await expect(p.getByText("First import")).toBeVisible();
+    await expect(
+      p.getByRole("button", { name: "Restore this version" }).first(),
+    ).toBeVisible();
+  };
+  await page.goto("/servers/palworld-home/history");
+  await editorReady(page);
+  await expect(page.getByText(/You are signed in as/)).toHaveCount(0);
+  const restores = page.getByRole("button", { name: "Restore this version" });
+  await expect(restores.first()).toBeEnabled();
+  const meta = (await (
+    await page.request.get("/api/v1/games/palworld/settings-meta")
+  ).json()) as { files: { id: string; adapter: string }[] };
+  const shellIds = new Set(
+    meta.files.filter((f) => SHELL_ADAPTERS.has(f.adapter)).map((f) => f.id),
+  );
+  const history = (await (
+    await page.request.get("/api/v1/servers/palworld-home/history")
+  ).json()) as { entries: { snapshots: { id: string; fileId: string }[] }[] };
+  const shellSnapshot = history.entries
+    .flatMap((entry) => entry.snapshots)
+    .find((snapshot) => shellIds.has(snapshot.fileId));
+  const offCount = await page
+    .locator("button[disabled]", { hasText: "Restore this version" })
+    .count();
+  expect(offCount).toBe(await page.getByText(ADMIN_ONLY_REASON).count());
+  if (shellSnapshot !== undefined) {
+    expect(offCount).toBeGreaterThan(0);
+    const refused = await page.request.post(
+      `/api/v1/snapshots/${shellSnapshot.id}/restore`,
+      { headers: { "x-csrf-token": await csrfOf(page) } },
+    );
+    expect(refused.status()).toBe(403);
+    expect(((await refused.json()) as { error: string }).error).toBe(
+      "shell_file_requires_admin",
+    );
+  }
+  await shoot(
+    page,
+    "f2-history-editor",
+    editorReady,
+    "/servers/palworld-home/history",
+  );
+
+  // An address the editor holds no grant on: the not-in-your-fleet state,
+  // no Retry, the way back to the fleet (F3).
+  const missingReady = async (p: Page) => {
+    await expect(p.getByText("This server is not in your fleet")).toBeVisible();
+    await expect(p.getByRole("button", { name: "Retry" })).toHaveCount(0);
+    await expect(
+      p.getByRole("link", { name: "Go to the fleet" }),
+    ).toBeVisible();
+  };
+  await page.goto("/servers/nobody-home/settings");
+  await missingReady(page);
+  await expect(page.getByText("Something went wrong")).toHaveCount(0);
+  await shoot(
+    page,
+    "f2-server-missing",
+    missingReady,
+    "/servers/nobody-home/settings",
+    false,
+  );
+  await page.getByRole("link", { name: "Go to the fleet" }).click();
+  await expect(page).toHaveURL("/");
+  await signOut(page);
+});
+
 async function shoot(
   page: Page,
   name: string,
