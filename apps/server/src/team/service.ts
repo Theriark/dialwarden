@@ -113,6 +113,26 @@ export function validationError(path: string, message: string): ApiError {
 export const erasedLabel = (id: string): string =>
   `Erased user ${id.slice(0, 4)}`;
 
+/**
+ * Removes the open reset links a user made and the open links for that
+ * user: a role change, a refused OIDC sign-in, a deletion or an
+ * anonymisation ends them (M1, appsec round 2 N1).
+ */
+export function dropOpenResets(store: Store, userId: string): void {
+  store.db
+    .delete(passwordResets)
+    .where(
+      and(
+        isNull(passwordResets.usedAt),
+        or(
+          eq(passwordResets.createdBy, userId),
+          eq(passwordResets.userId, userId),
+        ),
+      ),
+    )
+    .run();
+}
+
 /** A stored grant level; anything but write reads only. */
 const levelOf = (level: string): GrantLevel =>
   level === "write" ? "write" : "read";
@@ -599,23 +619,8 @@ export class TeamService {
     return { token, link: this.#link("reset", token), expiresAt };
   }
 
-  /**
-   * Removes the open reset links a user made and the open links for that
-   * user: a role change, a deletion or an anonymisation ends them (M1).
-   */
   #dropResets(userId: string): void {
-    this.#store.db
-      .delete(passwordResets)
-      .where(
-        and(
-          isNull(passwordResets.usedAt),
-          or(
-            eq(passwordResets.createdBy, userId),
-            eq(passwordResets.userId, userId),
-          ),
-        ),
-      )
-      .run();
+    dropOpenResets(this.#store, userId);
   }
 
   /**
