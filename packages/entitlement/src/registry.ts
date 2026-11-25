@@ -53,21 +53,34 @@ export const FEATURES: readonly FeatureDefinition[] = [
     key: "presets.bulk",
     label: "Apply presets to many servers at once",
     available: true,
-    routes: [],
+    routes: [
+      "POST /api/v1/presets/:id/bulk-drafts",
+      "POST /api/v1/presets/bulk-apply",
+    ],
   },
   {
     key: "schedules",
     label: "Scheduled changes",
     available: true,
-    routes: [],
+    routes: [
+      "GET /api/v1/schedules",
+      "POST /api/v1/schedules",
+      "GET /api/v1/schedules/:id",
+      "DELETE /api/v1/schedules/:id",
+    ],
   },
   {
     key: "drift.background",
     label: "Background drift checks",
     available: true,
-    routes: [],
+    routes: [
+      "GET /api/v1/drift",
+      "PUT /api/v1/servers/:slug/drift",
+      "POST /api/v1/servers/:slug/drift/check",
+    ],
   },
   {
+    // P9-A ships the dispatch seam only; the channel routes come with P9-B.
     key: "notifications",
     label: "Notification channels",
     available: true,
@@ -107,9 +120,17 @@ export const FEATURES: readonly FeatureDefinition[] = [
     key: "fleet.matrix",
     label: "Fleet settings matrix",
     available: true,
-    routes: [],
+    routes: ["GET /api/v1/fleet/matrix"],
   },
-  { key: "reports", label: "Reports", available: true, routes: [] },
+  {
+    key: "reports",
+    label: "Reports",
+    available: true,
+    routes: [
+      "GET /api/v1/reports/changes",
+      "GET /api/v1/reports/changes/print",
+    ],
+  },
   {
     key: "assistant",
     label: "Settings assistant (not in this version)",
@@ -195,6 +216,9 @@ export const ALWAYS_FREE_ROUTES: readonly string[] = [
   "POST /api/v1/system/backups/:id/drill",
   "POST /api/v1/system/backup-export",
   "GET /api/v1/system/snapshots",
+  // The demo drift job of DEMO_SEED (P10 correction, Risks 20): demo only,
+  // owner only, and 404 without DEMO_SEED.
+  "POST /api/v1/system/demo-drift/run",
   // Game packs, connectors, servers, editors, diffs and history.
   "GET /api/v1/games",
   "GET /api/v1/games/:id/settings-meta",
