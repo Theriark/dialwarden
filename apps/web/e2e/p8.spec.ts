@@ -503,7 +503,8 @@ test("the Free fallback and the switch back, without a reload", async ({
   const nav = page.getByRole("navigation", { name: "Main" });
   await nav.getByRole("link", { name: "Users" }).click();
   await expect(page).toHaveURL("/users");
-  await expect(page.getByText("Acts as viewer on Free")).toHaveCount(3);
+  // The admin and the editor act as viewers; the viewer already is one.
+  await expect(page.getByText("Acts as viewer on Free")).toHaveCount(2);
   await expect(
     page.getByText("Roles paused on the Free plan", { exact: true }),
   ).toBeVisible();
