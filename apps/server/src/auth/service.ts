@@ -140,6 +140,8 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
       recoveryKeyEnc: null,
+      oidcIssuer: null,
+      oidcSubject: null,
     };
     // The check and the insert run in one transaction: two concurrent setup
     // requests cannot both create an owner.
@@ -154,7 +156,7 @@ export class AuthService {
       throw new ApiError(409, "setup_done");
     }
     this.#activity.record("user.changed", {
-      actor: row.email,
+      actor: row.id,
       data: { action: "created", userId: row.id, role: row.role, cause },
     });
     return publicUser(row);
@@ -316,7 +318,7 @@ export class AuthService {
       }
     }
     this.#activity.record("user.changed", {
-      actor: row.email,
+      actor: row.id,
       data: { action: "password_changed", userId },
     });
   }
@@ -400,7 +402,7 @@ export class AuthService {
       }
     })();
     this.#activity.record("user.changed", {
-      actor: row.email,
+      actor: row.id,
       data: { action: "totp_enabled", userId },
     });
     return codes;
@@ -441,7 +443,7 @@ export class AuthService {
         .run();
     })();
     this.#activity.record("user.changed", {
-      actor: row.email,
+      actor: row.id,
       data: { action: "totp_disabled", userId },
     });
   }

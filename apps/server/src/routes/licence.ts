@@ -6,15 +6,16 @@ import {
   LIMITS,
   MAX_TOKEN_LENGTH,
 } from "@dialwarden/entitlement";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../http/errors.js";
 import { entitlementSchema } from "../http/schemas.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 
-const actorOf = (session: { user: { email: string } } | null) =>
-  session?.user.email ?? "system";
+/** Who acts: the internal user id (D7); the row keeps it, views show the label. */
+const actorOf = (request: FastifyRequest) =>
+  request.principal?.userId ?? "system";
 
 const editableSchema = z.object({
   /** The servers editable on Free right now. */
@@ -49,7 +50,7 @@ export function licenceRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      const actor = actorOf(request.session);
+      const actor = actorOf(request);
       const result = app.ctx.licences.setUiLicence(request.body.token, actor);
       if (
         result.state === "malformed" ||
@@ -73,7 +74,7 @@ export function licenceRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      app.ctx.licences.removeUiLicence(actorOf(request.session));
+      app.ctx.licences.removeUiLicence(actorOf(request));
       return app.ctx.entitlement.getEntitlement();
     },
   );
@@ -89,7 +90,7 @@ export function licenceRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      const actor = actorOf(request.session);
+      const actor = actorOf(request);
       app.ctx.licences.setEnvIgnored(request.body.ignored, actor);
       return app.ctx.entitlement.getEntitlement();
     },
@@ -141,11 +142,16 @@ export function licenceRoutes(app: FastifyInstance): void {
         response: { 200: editableSchema },
       },
     },
-    async () => ({
-      servers: app.ctx.editable.effective(),
-      chosen: app.ctx.editable.chosen(),
-      max: app.ctx.editable.max,
-    }),
+    async (request) => {
+      // Only the servers this user may see (D25).
+      const visible = app.ctx.team.visibleServers(request.principal);
+      const mine = (ids: string[]) => ids.filter((id) => visible(id));
+      return {
+        servers: mine(app.ctx.editable.effective()),
+        chosen: mine(app.ctx.editable.chosen()),
+        max: app.ctx.editable.max,
+      };
+    },
   );
 
   api.put(

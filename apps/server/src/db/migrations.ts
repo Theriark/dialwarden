@@ -208,6 +208,129 @@ CREATE TABLE server_hooks (
 ALTER TABLE change_sets ADD COLUMN run_hooks TEXT;
 `;
 
+// The team layer (P8-A): per-server grants, invitations, owner-made password
+// reset links, API tokens, the hash-chained audit log with its actors table,
+// and the OIDC identity of a user (issuer plus subject). Invitation, reset and
+// token values are stored only as their SHA-256. The audit chain hashes ids,
+// never names or e-mail addresses: names live in audit_actors and the client
+// address sits outside the hash, so erasure and the IP setting never break
+// the chain. The other tables still named the acting user by e-mail address
+// here; migration 0008 moves them to user ids (D7).
+const team = `
+ALTER TABLE users ADD COLUMN oidc_issuer TEXT;
+ALTER TABLE users ADD COLUMN oidc_subject TEXT;
+CREATE UNIQUE INDEX users_oidc_identity ON users (oidc_issuer, oidc_subject);
+
+CREATE TABLE user_grants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  level TEXT NOT NULL CHECK (level IN ('read', 'write'))
+);
+CREATE UNIQUE INDEX user_grants_user_server ON user_grants (user_id, server_id);
+CREATE INDEX user_grants_server ON user_grants (server_id);
+
+CREATE TABLE invitations (
+  id TEXT PRIMARY KEY NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  email TEXT NOT NULL,
+  role TEXT NOT NULL,
+  grants TEXT NOT NULL,
+  invited_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  revoked_at TEXT
+);
+
+CREATE TABLE password_resets (
+  id TEXT PRIMARY KEY NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT
+);
+
+CREATE TABLE api_tokens (
+  id TEXT PRIMARY KEY NOT NULL,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  prefix TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  last_used_at TEXT
+);
+CREATE INDEX api_tokens_user ON api_tokens (user_id);
+
+CREATE TABLE audit_actors (
+  id TEXT PRIMARY KEY NOT NULL,
+  label TEXT NOT NULL,
+  erased INTEGER NOT NULL
+);
+
+CREATE TABLE audit_events (
+  id INTEGER PRIMARY KEY NOT NULL,
+  at TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  server_id TEXT,
+  data TEXT NOT NULL,
+  ip TEXT,
+  prev_hash TEXT NOT NULL,
+  hash TEXT NOT NULL
+);
+CREATE INDEX audit_events_at ON audit_events (at);
+CREATE INDEX audit_events_actor ON audit_events (actor_id, id);
+CREATE INDEX audit_events_server ON audit_events (server_id, id);
+`;
+
+// The actor columns hold user ids, not e-mail addresses (R&D decision Q4,
+// D7). Old rows that name the acting user by e-mail are rewritten once, here:
+// a value that matches a user becomes that user's id, every other e-mail
+// becomes the one "unknown" actor, and values that are no e-mail ("system",
+// the outside-edit author) stay as they are. Nothing is deleted, so the
+// audit chain and the history keep verifying.
+const actorIds = `
+INSERT INTO audit_actors (id, label, erased)
+  VALUES ('unknown', 'Unknown user', 0)
+  ON CONFLICT (id) DO UPDATE SET label = 'Unknown user';
+
+UPDATE activity_events
+  SET actor = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = activity_events.actor),
+    'unknown')
+  WHERE actor LIKE '%@%';
+
+UPDATE change_sets
+  SET author = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = change_sets.author),
+    'unknown')
+  WHERE author LIKE '%@%';
+
+UPDATE licence
+  SET updated_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = licence.updated_by),
+    'unknown')
+  WHERE updated_by LIKE '%@%';
+
+UPDATE known_hosts
+  SET confirmed_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = known_hosts.confirmed_by),
+    'unknown')
+  WHERE confirmed_by LIKE '%@%';
+
+UPDATE server_hooks
+  SET updated_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = server_hooks.updated_by),
+    'unknown')
+  WHERE updated_by LIKE '%@%';
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
@@ -215,6 +338,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: "0004_servers", sql: servers },
   { id: "0005_presets", sql: presets },
   { id: "0006_server_hooks", sql: serverHooks },
+  { id: "0007_team", sql: team },
+  { id: "0008_actor_ids", sql: actorIds },
 ];
 
 /** The id of the newest migration this build knows. */

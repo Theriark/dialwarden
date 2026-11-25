@@ -22,8 +22,16 @@ const PUBLIC_ROUTES = new Set([
   "POST /api/v1/auth/login",
   "POST /api/v1/auth/login/totp",
   "POST /api/v1/auth/logout",
+  "POST /api/v1/auth/password-reset",
+  "POST /api/v1/invitations/accept",
+  "GET /api/v1/auth/oidc",
+  "GET /api/v1/auth/oidc/start",
+  "GET /api/v1/auth/oidc/callback",
   "GET /api/v1/openapi.json",
   "HEAD /api/v1/setup",
+  "HEAD /api/v1/auth/oidc",
+  "HEAD /api/v1/auth/oidc/start",
+  "HEAD /api/v1/auth/oidc/callback",
   "HEAD /api/v1/openapi.json",
 ]);
 

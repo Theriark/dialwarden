@@ -1,8 +1,10 @@
 // Runtime configuration from the environment (dev-work-plan Runtime). Secrets
 // are kept in this object only; nothing here is logged.
 import { createRequire } from "node:module";
+import { isIP } from "node:net";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import ipaddr from "ipaddr.js";
 import { z } from "zod";
 
 export interface AppConfig {
@@ -22,6 +24,9 @@ export interface AppConfig {
   envLicence: string | null;
   backupSchedule: string;
   backupTimezone: string;
+  /** The privacy retention job (P8-A): RETENTION_SCHEDULE and RETENTION_TZ. */
+  retentionSchedule: string;
+  retentionTimezone: string;
   demoSeed: boolean;
   /** DEMO_SERVERS_DIR: where the demo seed makes its game folders. */
   demoServersDir: string;
@@ -40,7 +45,6 @@ export interface AppConfig {
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
 const HEX64 = /^[0-9a-fA-F]{64}$/;
 const PROXY_ENTRY = /^[0-9a-fA-F.:]+(?:\/\d|\/\d\d|\/\d\d\d)?$/;
-const ZERO_PREFIX = /\/0+$/;
 
 // The folder public next to the server build (dist/config.js), which is
 // /app/public in the image. From the sources it is apps/server/public, which
@@ -73,9 +77,35 @@ const hex64 = (name: string, value: string | undefined): string | null => {
   return found === null ? null : found.toLowerCase();
 };
 
-/** An IP address or CIDR range; a /0 range trusts everyone, like a wildcard. */
+/**
+ * An IPv6 range that lies inside ::/80 (the IPv4-mapped ::ffff:0:0/96 and
+ * the old IPv4-compatible ::/96 included). The proxy check compares an IPv4
+ * peer with an IPv6 range in its mapped form, so such a range is an IPv4
+ * range in disguise. Only the prefix counts, as in the proxy check, so host
+ * bits never hide a wide range (0:0:1::/32 is ::/32).
+ */
+function insideLow80(address: string, bits: number): boolean {
+  const range = ipaddr.IPv6.parse(address);
+  return range.match(ipaddr.IPv6.parse("::"), Math.min(bits, 80));
+}
+
+/**
+ * An IP address or CIDR range. A wide range trusts nearly everyone, like a
+ * wildcard: IPv4 ranges need at least /8 and IPv6 ranges at least /32 (D22),
+ * so 0.0.0.0/0 and pairs such as 0.0.0.0/1 plus 128.0.0.0/1 are refused. An
+ * IPv6 range inside ::/80 holds IPv4 peers, so it needs at least /104 (an
+ * IPv4 /8): ::ffff:0:0/96 or ::/32 would trust every IPv4 client.
+ */
 function proxyEntry(entry: string): boolean {
-  return PROXY_ENTRY.test(entry) && !ZERO_PREFIX.test(entry);
+  if (!PROXY_ENTRY.test(entry)) return false;
+  const [address = "", prefix] = entry.split("/");
+  const kind = isIP(address);
+  if (kind === 0) return false;
+  if (prefix === undefined) return true;
+  const bits = Number(prefix);
+  if (kind === 4) return bits >= 8 && bits <= 32;
+  const least = insideLow80(address, bits) ? 104 : 32;
+  return bits >= least && bits <= 128;
 }
 
 /** IP addresses and CIDR ranges only; a wildcard is refused. */
@@ -112,6 +142,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     envLicence: nonEmpty(env["DIALWARDEN_LICENCE"]),
     backupSchedule: nonEmpty(env["BACKUP_SCHEDULE"]) ?? "30 3 * * *",
     backupTimezone: nonEmpty(env["BACKUP_TZ"]) ?? "Europe/Lisbon",
+    retentionSchedule: nonEmpty(env["RETENTION_SCHEDULE"]) ?? "50 3 * * *",
+    retentionTimezone: nonEmpty(env["RETENTION_TZ"]) ?? "Europe/Lisbon",
     demoSeed: env["DEMO_SEED"] === "true",
     demoServersDir: nonEmpty(env["DEMO_SERVERS_DIR"]) ?? "/demo-servers",
     webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,

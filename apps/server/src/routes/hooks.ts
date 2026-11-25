@@ -1,20 +1,25 @@
 // The hooks and status API (dev-work-plan P6-B, contracts C5 and C7). Hooks
 // and server status are Always Free in contract C1, so no route declares
-// config.entitlement. Any signed-in user reads the state and the
-// configuration; editors can trigger hook actions, and only the owner or an
-// admin sets or changes the hook configuration (the roles arrive with P8;
-// today the owner is the only account the app can make). Commands come only
-// from the pack allow-list or the fixed per-server string, never free text.
+// config.entitlement. Every user with a grant on the server reads its state
+// and the hook kinds; editors with a write grant trigger hook actions, and
+// only the owner or an admin sets or changes the hook configuration and sees
+// the command string and the proxy URL (P8-A, D20: they can carry
+// credentials). Commands come only from the pack allow-list or the fixed
+// per-server string, never free text. Reading the status writes pending
+// change sets only for a caller who could write them (D19).
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { ControlError } from "../control/types.js";
 import type { HookService, ProbeInput } from "../control/hooks.js";
 import { controlFailure } from "../control/hooks.js";
 import { ConnectorError } from "../connectors/types.js";
-import { ApiError } from "../http/errors.js";
+import type { ApiError } from "../http/errors.js";
+import { onSlug } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
+import { actorLabel } from "../team/labels.js";
+import { atLeast } from "../team/roles.js";
 import { actorOf } from "./changes.js";
 import { connectorFailure } from "./connectors.js";
 
@@ -28,17 +33,12 @@ export function hookFailure(error: unknown): ApiError {
   return connectorFailure(error);
 }
 
-/** The roles that may set the hook configuration. */
-const CONFIG_ROLES = new Set(["owner", "admin"]);
+/** What editors and viewers see instead of a command string or a URL. */
+const HIDDEN = "********";
 
-/** The roles that may trigger a hook action. */
-const RUN_ROLES = new Set(["owner", "admin", "editor"]);
-
-function requireRole(request: FastifyRequest, roles: Set<string>): void {
-  const role = request.session?.user.role ?? "";
-  if (!roles.has(role)) {
-    throw new ApiError(403, "forbidden");
-  }
+/** True when the caller may see the hook configuration in full. */
+function seesConfig(request: FastifyRequest): boolean {
+  return atLeast(request.principal?.role ?? "", "admin");
 }
 
 const slugParams = z.object({
@@ -112,6 +112,8 @@ const statusSchema = z.object({
 interface HooksDeps {
   readonly servers: ServerService;
   readonly hooks: HookService;
+  /** Resolves the updatedBy actor id to its display label (D7). */
+  readonly labelOf: (id: string | null) => string | null;
 }
 
 const EMPTY_ACTIONS = {
@@ -130,8 +132,16 @@ const EMPTY_ACTIONS = {
 async function hooksView(
   deps: HooksDeps,
   server: ServerRecord,
+  full: boolean,
 ): Promise<z.infer<typeof hooksViewSchema>> {
   const { servers, hooks } = deps;
+  const hook = hooks.hookConfig(server.id);
+  let shown = hook;
+  if (!full && hook?.kind === "sshCommand") {
+    shown = { ...hook, command: HIDDEN };
+  } else if (!full && hook?.kind === "dockerProxy") {
+    shown = { ...hook, url: HIDDEN };
+  }
   const pack = servers.pack(server);
   const overrides = hooks.overrides(server.id);
   const updated = hooks.updated(server.id);
@@ -157,26 +167,26 @@ async function hooksView(
   return {
     packId: pack.id,
     hooksSupported: [...pack.hooksSupported],
-    hook: hooks.hookConfig(server.id),
+    hook: shown,
     probes,
     available,
     updatedAt: updated?.updatedAt ?? null,
-    updatedBy: updated?.updatedBy ?? null,
+    updatedBy: deps.labelOf(updated?.updatedBy ?? null),
   };
 }
 
 export function hookRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
-  const user = { auth: "user" as const };
   const deps = (): HooksDeps => ({
     servers: app.ctx.servers,
     hooks: app.ctx.hooks,
+    labelOf: (id) => (id === null ? null : actorLabel(app.ctx.store, id)),
   });
 
   api.get(
     "/api/v1/servers/:slug/hooks",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["hooks"],
         params: slugParams,
@@ -185,14 +195,14 @@ export function hookRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const server = deps().servers.require(request.params.slug);
-      return hooksView(deps(), server);
+      return hooksView(deps(), server, seesConfig(request));
     },
   );
 
   api.put(
     "/api/v1/servers/:slug/hooks",
     {
-      config: user,
+      config: onSlug("admin"),
       schema: {
         tags: ["hooks"],
         params: slugParams,
@@ -201,7 +211,6 @@ export function hookRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      requireRole(request, CONFIG_ROLES);
       const { servers, hooks } = deps();
       const server = servers.require(request.params.slug);
       const body = request.body;
@@ -212,14 +221,14 @@ export function hookRoutes(app: FastifyInstance): void {
       if (body.hook !== undefined) input.hook = body.hook;
       if (body.probes !== undefined) input.probes = body.probes;
       hooks.setConfig(server, input, actorOf(request));
-      return hooksView(deps(), server);
+      return hooksView(deps(), server, true);
     },
   );
 
   api.post(
     "/api/v1/servers/:slug/hooks/run",
     {
-      config: user,
+      config: onSlug("write"),
       schema: {
         tags: ["hooks"],
         params: slugParams,
@@ -228,7 +237,6 @@ export function hookRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
-      requireRole(request, RUN_ROLES);
       const { servers, hooks } = deps();
       const server = servers.require(request.params.slug);
       try {
@@ -242,7 +250,7 @@ export function hookRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug/status",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["hooks"],
         params: slugParams,
@@ -252,14 +260,16 @@ export function hookRoutes(app: FastifyInstance): void {
     async (request) => {
       const { servers, hooks } = deps();
       const server = servers.require(request.params.slug);
+      const writer = request.serverLevel === "write";
       let answer;
       let pending = 0;
       try {
         answer = await hooks.status(server);
         pending = app.ctx.changes.pending(server).length;
-        if (answer.state === "stopped" && pending > 0) {
+        if (writer && answer.state === "stopped" && pending > 0) {
           // The server was seen stopped: the pending change sets are written
-          // and the start hook runs once after them (contract C5).
+          // and the start hook runs once after them (contract C5). Only a
+          // caller with a write grant triggers the write (D19).
           await app.ctx.changes.flushPending(server, "system");
           pending = app.ctx.changes.pending(server).length;
         }

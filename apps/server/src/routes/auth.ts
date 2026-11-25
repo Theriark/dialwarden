@@ -30,7 +30,17 @@ const secondFactor = z.object({
   recoveryCode: z.string().max(32).optional(),
 });
 
-function startSession(
+/**
+ * The signed-in user as the API shows it, with the role the user acts with
+ * now: viewer for every user but the owner on the Free fallback (P8-A step
+ * 8); the stored role stays on the users row.
+ */
+export function userView(app: FastifyInstance, user: PublicUser) {
+  const principal = app.ctx.team.principalOf(user);
+  return { ...user, role: principal.role };
+}
+
+export function startSession(
   app: FastifyInstance,
   request: FastifyRequest,
   reply: FastifyReply,
@@ -40,12 +50,19 @@ function startSession(
   if (request.session !== null) {
     app.ctx.sessions.destroy(request.session.id);
   }
+  // The session keeps the address as the audit IP setting says (D18).
   const session = app.ctx.sessions.create(user.id, {
-    ip: request.ip,
+    ip: app.ctx.audit.address(request.ip),
     userAgent: request.headers["user-agent"] ?? null,
   });
   setSessionCookie(app, reply, session);
-  return { status: "ok" as const, user, csrfToken: session.csrfToken };
+  // From here the request acts as the new user (the audit log names them).
+  request.principal = app.ctx.team.principalOf(user);
+  return {
+    status: "ok" as const,
+    user: userView(app, user),
+    csrfToken: session.csrfToken,
+  };
 }
 
 /** The session of a signed-in route (the guard already refused anonymous). */
@@ -202,7 +219,7 @@ export function authRoutes(app: FastifyInstance): void {
       }
       return {
         status: "ok" as const,
-        user: session.user,
+        user: userView(app, session.user),
         csrfToken: session.csrfToken,
       };
     },
@@ -231,6 +248,9 @@ export function authRoutes(app: FastifyInstance): void {
     },
     async (request, reply) => {
       const { email, password } = request.body;
+      // While OIDC is on only the owner signs in with a password (O-28),
+      // refused before any hash check.
+      app.ctx.oidc.assertLocalLogin(email);
       const result = await app.ctx.auth.login(email, password, request.ip);
       if (result.status === "totp_required") {
         return result;
@@ -268,7 +288,7 @@ export function authRoutes(app: FastifyInstance): void {
       if (request.session !== null) {
         app.ctx.sessions.destroy(request.session.id);
       }
-      clearSessionCookie(reply);
+      clearSessionCookie(app, reply);
       return reply.code(204).send();
     },
   );
@@ -284,7 +304,8 @@ export function authRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const userId = request.session?.user.id ?? "";
-      return { user: app.ctx.auth.updateProfile(userId, request.body.name) };
+      const user = app.ctx.auth.updateProfile(userId, request.body.name);
+      return { user: userView(app, user) };
     },
   );
 

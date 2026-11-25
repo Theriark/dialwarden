@@ -6,7 +6,11 @@
 // services: limit(servers) when a server is added, the editable three on
 // Free for every change, and 5 visible history entries on Free (402).
 // Adding, changing and removing servers, the connection test and detection
-// reach out to hosts the owner names, so they are owner only.
+// reach out to hosts the owner names, so they are owner only. Every route on
+// one server declares config.server (P8-A): a user without a grant on it
+// gets the answer of a missing server, and the list shows only the servers
+// the user may see. The raw file read is owner and admin only (D14): the raw
+// text shows the values of secret settings that the typed view masks.
 import { isPackId, type Detection, type Os } from "@dialwarden/packs-schema";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -14,6 +18,7 @@ import { detectServer, serverOs } from "../connectors/detect.js";
 import type { ConnectionSpec } from "../connectors/service.js";
 import type { Connector } from "../connectors/types.js";
 import { ApiError } from "../http/errors.js";
+import { onSlug } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
@@ -216,7 +221,11 @@ export function serverRoutes(app: FastifyInstance): void {
         response: { 200: z.object({ items: z.array(serverSchema) }) },
       },
     },
-    async () => ({ items: servers().list().map(view) }),
+    async (request) => {
+      const visible = app.ctx.team.visibleServers(request.principal);
+      const all = servers().list();
+      return { items: all.filter((server) => visible(server.id)).map(view) };
+    },
   );
 
   api.post(
@@ -259,7 +268,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -272,7 +281,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.patch(
     "/api/v1/servers/:slug",
     {
-      config: owner,
+      config: onSlug("owner"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -305,7 +314,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.delete(
     "/api/v1/servers/:slug",
     {
-      config: owner,
+      config: onSlug("owner"),
       schema: { tags: ["servers"], params: slugParams },
     },
     async (request, reply) => {
@@ -318,7 +327,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.post(
     "/api/v1/servers/:slug/test",
     {
-      config: owner,
+      config: onSlug("owner"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -335,7 +344,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.post(
     "/api/v1/servers/:slug/detect",
     {
-      config: owner,
+      config: onSlug("owner"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -361,7 +370,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug/settings",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -383,7 +392,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug/files/:fileId",
     {
-      config: owner,
+      config: onSlug("admin"),
       schema: {
         tags: ["servers"],
         params: slugParams.extend({ fileId: z.string().min(1).max(100) }),
@@ -403,7 +412,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug/history",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["servers"],
         params: slugParams,
@@ -419,7 +428,7 @@ export function serverRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/servers/:slug/pending",
     {
-      config: user,
+      config: onSlug("read"),
       schema: {
         tags: ["servers"],
         params: slugParams,

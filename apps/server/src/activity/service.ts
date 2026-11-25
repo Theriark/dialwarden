@@ -1,7 +1,7 @@
 // Activity events (contract C6). A row has type, serverId (optional), at, actor
 // and data. Every module writes through record(); GET /api/v1/activity pages
 // through them newest first, and the P9 notification channels subscribe by type.
-import { and, desc, eq, lt, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, type SQL } from "drizzle-orm";
 import { activityEvents } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 
@@ -21,7 +21,7 @@ export const ACTIVITY_TYPES = [
 
 export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
-/** "system", or the e-mail address of the signed-in user who acted. */
+/** "system", or the internal user id of the signed-in user who acted (D7). */
 export type Actor = string;
 
 export interface ActivityEvent {
@@ -110,8 +110,16 @@ export class ActivityService {
     limit: number;
     type?: ActivityType;
     serverId?: string;
+    /** Only events of these servers (an editor's or viewer's grants). */
+    onlyServers?: readonly string[];
   }): ActivityPage {
     const conditions: SQL[] = [];
+    if (query.onlyServers !== undefined) {
+      if (query.onlyServers.length === 0) {
+        return { items: [], nextBefore: null };
+      }
+      conditions.push(inArray(activityEvents.serverId, [...query.onlyServers]));
+    }
     if (query.before !== undefined) {
       conditions.push(lt(activityEvents.id, query.before));
     }

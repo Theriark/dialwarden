@@ -3,9 +3,11 @@
 //
 // Every later phase registers its Paid features and limits here before it
 // writes them. A Paid route declares config.entitlement with its FeatureKey and
-// is listed under routes below; the registry test in apps/server fails when a
-// listed route lacks the declaration, and checks that every declared route
-// answers 402 on the Free plan.
+// is listed under routes below; every other API route is listed in
+// ALWAYS_FREE_ROUTES. The registry test in apps/server fails when a listed
+// route lacks the declaration, when an API route is in neither list (so a
+// Paid route cannot be forgotten silently), and checks that every declared
+// route answers 402 on the Free plan.
 
 export const FEATURE_KEYS = [
   "presets.bulk",
@@ -75,17 +77,32 @@ export const FEATURES: readonly FeatureDefinition[] = [
     key: "team.users",
     label: "More than one user",
     available: true,
-    routes: [],
+    routes: ["POST /api/v1/invitations", "GET /api/v1/invitations"],
   },
   {
     key: "team.roles",
     label: "User roles and per-server grants",
     available: true,
-    routes: [],
+    routes: ["PUT /api/v1/users/:id/role", "PUT /api/v1/users/:id/grants"],
   },
-  { key: "audit", label: "Audit log", available: true, routes: [] },
-  { key: "oidc", label: "Single sign-on (OIDC)", available: true, routes: [] },
-  { key: "apiTokens", label: "API tokens", available: true, routes: [] },
+  {
+    key: "audit",
+    label: "Audit log CSV export",
+    available: true,
+    routes: ["GET /api/v1/audit/export.csv"],
+  },
+  {
+    key: "oidc",
+    label: "Single sign-on (OIDC)",
+    available: true,
+    routes: ["GET /api/v1/settings/oidc", "PUT /api/v1/settings/oidc"],
+  },
+  {
+    key: "apiTokens",
+    label: "API tokens",
+    available: true,
+    routes: ["POST /api/v1/tokens"],
+  },
   {
     key: "fleet.matrix",
     label: "Fleet settings matrix",
@@ -131,6 +148,107 @@ export const ALWAYS_FREE: readonly string[] = [
   "Two-factor sign-in",
   "App backup",
   "Privacy controls",
+  "Audit log viewing and chain check",
+];
+
+/**
+ * Every API route that is not Paid, as "METHOD /path" (GET covers HEAD).
+ * Each belongs to an Always-Free area of contract C1, or is a route every
+ * plan needs (setup, sign-in, the licence page, the plan, users and the
+ * privacy controls).
+ */
+export const ALWAYS_FREE_ROUTES: readonly string[] = [
+  // Setup, sign-in and the account (two-factor sign-in is Always Free).
+  "GET /api/v1/setup",
+  "POST /api/v1/setup",
+  "POST /api/v1/setup/import",
+  "GET /api/v1/auth/session",
+  "POST /api/v1/auth/login",
+  "POST /api/v1/auth/login/totp",
+  "POST /api/v1/auth/logout",
+  "PATCH /api/v1/auth/profile",
+  "POST /api/v1/auth/password",
+  "POST /api/v1/auth/totp/enrol",
+  "POST /api/v1/auth/totp/enable",
+  "POST /api/v1/auth/totp/disable",
+  "POST /api/v1/auth/password-reset",
+  // OIDC sign-in is Paid, but a visitor has no session yet: these routes are
+  // public and answer the C1 402 body from the service (O-30).
+  "GET /api/v1/auth/oidc",
+  "GET /api/v1/auth/oidc/start",
+  "GET /api/v1/auth/oidc/callback",
+  "GET /api/v1/openapi.json",
+  // Licence, plan and the Free fallback choice.
+  "GET /api/v1/entitlement",
+  "PUT /api/v1/licence",
+  "DELETE /api/v1/licence",
+  "PUT /api/v1/licence/environment",
+  "GET /api/v1/plan/registry",
+  "GET /api/v1/plan/editable-servers",
+  "PUT /api/v1/plan/editable-servers",
+  // Activity, app backup and the system page.
+  "GET /api/v1/activity",
+  "GET /api/v1/system/status",
+  "POST /api/v1/system/app-secret/acknowledge",
+  "GET /api/v1/system/backups",
+  "POST /api/v1/system/backups",
+  "POST /api/v1/system/backups/:id/drill",
+  "POST /api/v1/system/backup-export",
+  "GET /api/v1/system/snapshots",
+  // Game packs, connectors, servers, editors, diffs and history.
+  "GET /api/v1/games",
+  "GET /api/v1/games/:id/settings-meta",
+  "GET /api/v1/connectors/ssh-key",
+  "POST /api/v1/connectors/test",
+  "POST /api/v1/connectors/host-keys",
+  "POST /api/v1/connectors/detect",
+  "GET /api/v1/servers",
+  "POST /api/v1/servers",
+  "GET /api/v1/servers/:slug",
+  "PATCH /api/v1/servers/:slug",
+  "DELETE /api/v1/servers/:slug",
+  "POST /api/v1/servers/:slug/test",
+  "POST /api/v1/servers/:slug/detect",
+  "GET /api/v1/servers/:slug/settings",
+  "GET /api/v1/servers/:slug/files/:fileId",
+  "GET /api/v1/servers/:slug/history",
+  "GET /api/v1/servers/:slug/pending",
+  "POST /api/v1/servers/:slug/change-sets",
+  "GET /api/v1/change-sets/:id",
+  "POST /api/v1/change-sets/:id/apply",
+  "POST /api/v1/snapshots/:id/restore",
+  // Presets up to limit(presets); apply hooks and server status.
+  "GET /api/v1/presets",
+  "POST /api/v1/presets",
+  "DELETE /api/v1/presets/:id",
+  "POST /api/v1/presets/:id/apply",
+  "GET /api/v1/servers/:slug/hooks",
+  "PUT /api/v1/servers/:slug/hooks",
+  "POST /api/v1/servers/:slug/hooks/run",
+  "GET /api/v1/servers/:slug/status",
+  // Users: the owner keeps managing accounts on Free; invitations are Paid,
+  // an accept is checked against limit(users), and a revoke is cleanup.
+  "GET /api/v1/users",
+  "GET /api/v1/users/:id",
+  "POST /api/v1/users/:id/password-reset",
+  "DELETE /api/v1/invitations/:id",
+  "POST /api/v1/invitations/accept",
+  // Privacy controls (every plan).
+  "DELETE /api/v1/users/:id",
+  "POST /api/v1/users/:id/anonymise",
+  "GET /api/v1/users/:id/export",
+  "GET /api/v1/me/export",
+  "GET /api/v1/settings/audit",
+  "PUT /api/v1/settings/audit",
+  "GET /api/v1/settings/snapshots",
+  "PUT /api/v1/settings/snapshots",
+  // The audit log is recorded on every plan, and the owner can always read
+  // and verify it; its CSV export is the Paid part (R&D default D5).
+  "GET /api/v1/audit",
+  "GET /api/v1/audit/verify",
+  // API tokens: making one is Paid; listing and revoking are cleanup.
+  "GET /api/v1/tokens",
+  "DELETE /api/v1/tokens/:id",
 ];
 
 export const FREE_LIMITS: Limits = {

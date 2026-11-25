@@ -135,7 +135,7 @@ describe("backup", () => {
         users: 1,
         servers: 0,
         change_sets: 0,
-        audit_events: null,
+        audit_events: expect.any(Number),
         snapshots: 0,
       },
     });

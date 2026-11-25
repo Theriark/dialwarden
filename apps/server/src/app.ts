@@ -18,8 +18,11 @@ import {
 import { loadPacks } from "@dialwarden/packs-schema/node";
 import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
+import { registerAuditRecording } from "./audit/record.js";
+import { AuditService } from "./audit/service.js";
 import { bootstrapOwner, openFirstRunSetup } from "./auth/bootstrap.js";
 import { SetupToken } from "./auth/first-run.js";
+import { LoginLimiter } from "./auth/limiter.js";
 import { AuthService } from "./auth/service.js";
 import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
@@ -44,22 +47,34 @@ import {
 } from "./http/zod.js";
 import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
+import { OidcAccounts } from "./oidc/accounts.js";
+import type { OidcNetworkOptions } from "./oidc/network.js";
+import { OidcService } from "./oidc/service.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
+import { RetentionService } from "./privacy/retention.js";
 import { activityRoutes } from "./routes/activity.js";
+import { apiAccessRoutes } from "./routes/api-access.js";
+import { auditRoutes } from "./routes/audit.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
 import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { hookRoutes } from "./routes/hooks.js";
+import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
+import { oidcRoutes } from "./routes/oidc.js";
 import { presetRoutes } from "./routes/presets.js";
+import { retentionRoutes } from "./routes/retention.js";
 import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
+import { userRoutes } from "./routes/users.js";
 import { seedDemoServers } from "./servers/demo.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
+import { TokenService } from "./team/api-access.js";
+import { TeamService } from "./team/service.js";
 import { VERSION } from "./version.js";
 
 export { VERSION };
@@ -82,6 +97,16 @@ export interface BuildOptions {
   buildInfoFile?: string;
   /** Where the first-run setup line goes (default standard output). */
   out?: NodeJS.WritableStream;
+  /**
+   * Tests only, never read from the environment: requests that carry the
+   * role-matrix header answer 299 once every access check passed.
+   */
+  authProbe?: boolean;
+  /**
+   * Tests only, never read from the environment: lets the OIDC client reach
+   * an identity provider on 127.0.0.1 over http, or swaps its resolver.
+   */
+  oidcNetwork?: OidcNetworkOptions;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -237,6 +262,28 @@ export async function buildApp(
     entitlement,
     now,
   });
+  // One login limiter for sign-in, invitation accepts and reset links, so
+  // failed attempts of every kind count against the same client address.
+  const limiter = new LoginLimiter(() => now().getTime());
+  const sessions = new SessionService(store, now);
+  const team = new TeamService({
+    store,
+    activity,
+    entitlement,
+    sessions,
+    limiter,
+    baseUrl: config.baseUrl,
+    now,
+  });
+  const audit = new AuditService({ store, settings, appKey: appKey.key, now });
+  const retention = new RetentionService({
+    store,
+    settings,
+    snapshots,
+    audit,
+    log: app.log,
+    now,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -249,8 +296,8 @@ export async function buildApp(
     licences,
     entitlement,
     editable,
-    sessions: new SessionService(store, now),
-    auth: new AuthService({ store, aead, activity, now }),
+    sessions,
+    auth: new AuthService({ store, aead, activity, now, limiter }),
     setupToken: new SetupToken(config.dataDir),
     backups: new BackupService({
       store,
@@ -269,6 +316,25 @@ export async function buildApp(
     changes,
     presets,
     snapshots,
+    team,
+    tokens: new TokenService({ store, entitlement, now }),
+    audit,
+    retention,
+    oidc: new OidcService({
+      settings,
+      aead,
+      entitlement,
+      accounts: new OidcAccounts({
+        store,
+        sessions,
+        activity,
+        entitlement,
+        now,
+      }),
+      baseUrl: config.baseUrl,
+      network: options.oidcNetwork,
+      now,
+    }),
     maintenance: false,
     importing: false,
     routes: [],
@@ -287,11 +353,14 @@ export async function buildApp(
         url: route.url,
         auth: route.config?.auth ?? null,
         entitlement: route.config?.entitlement ?? null,
+        server: route.config?.server ?? null,
+        tokens: route.config?.tokens ?? true,
       });
     }
   });
   app.addHook("onClose", async () => {
     await ctx.backups.stop();
+    ctx.retention.stop();
     ctx.store.close();
   });
 
@@ -317,7 +386,8 @@ export async function buildApp(
     },
     transform: openApiTransform,
   });
-  registerGuard(app);
+  registerGuard(app, { authProbe: options.authProbe === true });
+  registerAuditRecording(app);
   // Contract C8: the built web app (none in tests and API-only runs) and the
   // security headers of every response.
   const web = loadWebDist(config.webDist, app.log);
@@ -334,6 +404,12 @@ export async function buildApp(
   changeRoutes(app);
   presetRoutes(app);
   hookRoutes(app);
+  userRoutes(app);
+  oidcRoutes(app);
+  apiAccessRoutes(app);
+  invitationRoutes(app);
+  auditRoutes(app);
+  retentionRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
