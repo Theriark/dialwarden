@@ -81,11 +81,12 @@ const hex64 = (name: string, value: string | undefined): string | null => {
  * An IPv6 range that lies inside ::/80 (the IPv4-mapped ::ffff:0:0/96 and
  * the old IPv4-compatible ::/96 included). The proxy check compares an IPv4
  * peer with an IPv6 range in its mapped form, so such a range is an IPv4
- * range in disguise.
+ * range in disguise. Only the prefix counts, as in the proxy check, so host
+ * bits never hide a wide range (0:0:1::/32 is ::/32).
  */
-function insideLow80(address: string): boolean {
-  const bytes = ipaddr.IPv6.parse(address).toByteArray();
-  return bytes.slice(0, 10).every((byte) => byte === 0);
+function insideLow80(address: string, bits: number): boolean {
+  const range = ipaddr.IPv6.parse(address);
+  return range.match(ipaddr.IPv6.parse("::"), Math.min(bits, 80));
 }
 
 /**
@@ -103,7 +104,7 @@ function proxyEntry(entry: string): boolean {
   if (prefix === undefined) return true;
   const bits = Number(prefix);
   if (kind === 4) return bits >= 8 && bits <= 32;
-  const least = insideLow80(address) ? 104 : 32;
+  const least = insideLow80(address, bits) ? 104 : 32;
   return bits >= least && bits <= 128;
 }
 

@@ -248,6 +248,9 @@ describe("rate limit key and TRUSTED_PROXIES (N-13, N-14)", () => {
       "::ffff:0.0.0.0/100",
       "::/32",
       "::/80",
+      "::ffff:0:0/103",
+      // Host bits do not narrow a range: this is ::/32.
+      "0:0:1::/32",
     ]) {
       expect(() => loadConfig({ TRUSTED_PROXIES: value }), value).toThrow(
         /TRUSTED_PROXIES/,
@@ -262,6 +265,7 @@ describe("rate limit key and TRUSTED_PROXIES (N-13, N-14)", () => {
       TRUSTED_V6,
       "2001:db8::/32",
       "::ffff:172.17.0.0/112",
+      "::ffff:10.0.0.0/104",
       "::1",
     ]) {
       expect(loadConfig({ TRUSTED_PROXIES: value }).trustProxy).toBe(value);
