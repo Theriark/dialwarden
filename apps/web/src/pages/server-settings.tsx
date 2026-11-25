@@ -10,6 +10,7 @@ import { useParams } from "@tanstack/react-router";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   ChevronDown,
+  Eye,
   EyeOff,
   FileWarning,
   Search,
@@ -51,7 +52,20 @@ import { languageOf } from "../lib/file-language";
 import { issuesOf, packOf, settingsByKey } from "../lib/pack";
 import { cn } from "../lib/cn";
 import type { ChangeSet } from "../api/schema";
+import { useSessionUser } from "../api/session";
+import { roleWord } from "../components/role-badge";
 import { useMediaQuery } from "../lib/use-media-query";
+
+/**
+ * The roles that may change a server's settings: a viewer only reads. An
+ * editor also needs a write grant on the server, which the session does not
+ * carry; the server refuses a write on a read grant.
+ */
+export const SETTINGS_WRITE_ROLES: readonly string[] = [
+  "owner",
+  "admin",
+  "editor",
+];
 
 interface Group {
   readonly name: string;
@@ -164,6 +178,8 @@ export function ServerSettingsPage() {
   });
   const phone = !useMediaQuery("(min-width: 640px)");
   const toast = useToast();
+  const user = useSessionUser();
+  const canWrite = user !== null && SETTINGS_WRITE_ROLES.includes(user.role);
 
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [search, setSearch] = useState("");
@@ -239,9 +255,14 @@ export function ServerSettingsPage() {
   );
   // Stable handlers: SettingField is memoised, so a keystroke re-renders the
   // one field it touches, not the whole 400-setting file.
-  const onFieldChange = useCallback((key: string, value: unknown) => {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }, []);
+  const onFieldChange = useCallback(
+    (key: string, value: unknown) => {
+      // A reader's fields are disabled; no edit reaches the draft either.
+      if (!canWrite) return;
+      setDraft((current) => ({ ...current, [key]: value }));
+    },
+    [canWrite],
+  );
   const onFieldReset = useCallback((key: string) => {
     // Reset discards the edit: the key leaves the draft and the field
     // falls back to the server answer. It never writes the pack default -
@@ -317,7 +338,10 @@ export function ServerSettingsPage() {
     );
   }
 
-  const editable = settings.data.editable;
+  // The plan decides whether the server takes edits at all; the role
+  // decides whether this user may make them. The server stays the authority.
+  const planEditable = settings.data.editable;
+  const editable = planEditable && canWrite;
   const needle = search.trim().toLowerCase();
   const groups = groupsOf(
     (meta.data.settings as Setting[]).filter((setting) => {
@@ -356,7 +380,18 @@ export function ServerSettingsPage() {
         description={`${meta.data.displayName} ${meta.data.version} · ${packLine}`}
       />
       <ServerTabs slug={slug} current="settings" />
-      {editable ? null : (
+      {canWrite ? null : (
+        <Alert kind="info" className="mb-4">
+          <span className="flex items-center gap-2">
+            <Eye className="size-4 shrink-0" aria-hidden="true" />
+            You are signed in as{" "}
+            {roleWord(user?.role ?? "viewer").toLowerCase()}: you read these
+            settings. The owner, an admin or an editor with write access changes
+            them.
+          </span>
+        </Alert>
+      )}
+      {planEditable ? null : (
         <div className="mb-4 flex flex-col gap-2">
           <Alert kind="warning">
             This server is read-only on the Free plan: the three editable

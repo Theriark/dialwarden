@@ -126,6 +126,52 @@ function stubWorld(extra?: Handler) {
 }
 
 describe("ServerSettingsPage", () => {
+  it("lets a viewer read but not edit, even where the plan allows edits", async () => {
+    stubViewport(1280);
+    // The settings answer says editable (the plan's flag, the same for every
+    // role); the session says viewer.
+    stubWorld(([method, path]) =>
+      method === "GET" && path === "/api/v1/auth/session"
+        ? {
+            status: 200,
+            body: { ...OWNER, user: { ...OWNER.user, role: "viewer" } },
+          }
+        : undefined,
+    );
+    startRouter("/servers/home/settings");
+    const field = (await screen.findByLabelText(
+      "Exp rate",
+    )) as HTMLInputElement;
+    expect(field.value).toBe("1");
+    expect(field.disabled).toBe(true);
+    expect(
+      screen.getByText(/You are signed in as viewer: you read these settings/),
+    ).toBeTruthy();
+    fireEvent.change(field, { target: { value: "2" } });
+    expect(screen.queryByText("Edited")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Review and save" }),
+    ).toBeNull();
+  });
+
+  it("lets an editor edit where the plan allows edits", async () => {
+    stubViewport(1280);
+    stubWorld(([method, path]) =>
+      method === "GET" && path === "/api/v1/auth/session"
+        ? {
+            status: 200,
+            body: { ...OWNER, user: { ...OWNER.user, role: "editor" } },
+          }
+        : undefined,
+    );
+    startRouter("/servers/home/settings");
+    const field = (await screen.findByLabelText(
+      "Exp rate",
+    )) as HTMLInputElement;
+    expect(field.disabled).toBe(false);
+    expect(screen.queryByText(/You are signed in as/)).toBeNull();
+  });
+
   it("Reset discards the edit and the field falls back to the server answer", async () => {
     stubViewport(1280);
     stubWorld();
