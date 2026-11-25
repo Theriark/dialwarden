@@ -192,7 +192,7 @@ describe("privacy retention (P-07 to P-11)", () => {
     expect(await listing(backups)).toEqual(backupsBefore);
   });
 
-  it("P-09 keeps the base blob an open draft merges against", async () => {
+  it("P-09b keeps the base blob an open draft merges against", async () => {
     let clock = Date.parse("2026-11-25T10:00:00Z");
     const t = await fixture({ now: () => new Date(clock) });
     const { app, owner } = t;
