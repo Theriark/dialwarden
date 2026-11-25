@@ -730,7 +730,7 @@
       "default": "0.0.0.0",
       "group": "Network",
       "restartRequired": true,
-      "description": "Local address the game socket binds to. 0.0.0.0 listens on every interface of the host."
+      "description": "Address of the host interface the game listens on. Keep 0.0.0.0 unless the host has several addresses and only one should serve players."
     },
     {
       "key": "app.port",
