@@ -47,6 +47,9 @@ import {
 } from "./http/zod.js";
 import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
+import { OidcAccounts } from "./oidc/accounts.js";
+import type { OidcNetworkOptions } from "./oidc/network.js";
+import { OidcService } from "./oidc/service.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
 import { RetentionService } from "./privacy/retention.js";
@@ -61,6 +64,7 @@ import { healthRoutes } from "./routes/health.js";
 import { hookRoutes } from "./routes/hooks.js";
 import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
+import { oidcRoutes } from "./routes/oidc.js";
 import { presetRoutes } from "./routes/presets.js";
 import { retentionRoutes } from "./routes/retention.js";
 import { serverRoutes } from "./routes/servers.js";
@@ -98,6 +102,11 @@ export interface BuildOptions {
    * role-matrix header answer 299 once every access check passed.
    */
   authProbe?: boolean;
+  /**
+   * Tests only, never read from the environment: lets the OIDC client reach
+   * an identity provider on 127.0.0.1 over http, or swaps its resolver.
+   */
+  oidcNetwork?: OidcNetworkOptions;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -311,6 +320,21 @@ export async function buildApp(
     tokens: new TokenService({ store, entitlement, now }),
     audit,
     retention,
+    oidc: new OidcService({
+      settings,
+      aead,
+      entitlement,
+      accounts: new OidcAccounts({
+        store,
+        sessions,
+        activity,
+        entitlement,
+        now,
+      }),
+      baseUrl: config.baseUrl,
+      network: options.oidcNetwork,
+      now,
+    }),
     maintenance: false,
     importing: false,
     routes: [],
@@ -381,6 +405,7 @@ export async function buildApp(
   presetRoutes(app);
   hookRoutes(app);
   userRoutes(app);
+  oidcRoutes(app);
   apiAccessRoutes(app);
   invitationRoutes(app);
   auditRoutes(app);

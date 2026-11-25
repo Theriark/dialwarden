@@ -248,6 +248,9 @@ export function authRoutes(app: FastifyInstance): void {
     },
     async (request, reply) => {
       const { email, password } = request.body;
+      // While OIDC is on only the owner signs in with a password (O-28),
+      // refused before any hash check.
+      app.ctx.oidc.assertLocalLogin(email);
       const result = await app.ctx.auth.login(email, password, request.ip);
       if (result.status === "totp_required") {
         return result;
