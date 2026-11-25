@@ -1,10 +1,12 @@
-// The demo seed (dev-work-plan P4-B step 5). When DEMO_SEED is true and the
-// servers table is empty at start, every pack present gets a folder
-// DEMO_SERVERS_DIR/GAME made from its synthetic fixtures, registered as a
-// Local server with the slug demo-GAME. Each demo server gets 3 history
-// entries: the import of its files, one change made by the app, and one edit
-// made outside the app, found by the same outside-edit detection a real
-// server gets, so it can be seen on Development and Stage.
+// The demo seed (dev-work-plan P4-B step 5, the P7 rule). When DEMO_SEED is
+// true, every start adds any demo-GAME server that is still missing: a pack
+// present gets a folder DEMO_SERVERS_DIR/GAME made from its synthetic
+// fixtures, registered as a Local server with the slug demo-GAME. Each new
+// demo server gets 3 history entries: the import of its files, one change
+// made by the app, and one edit made outside the app, found by the same
+// outside-edit detection a real server gets, so it can be seen on Development
+// and Stage. A server that already exists is left untouched, so an upgrade
+// that ships new packs adds their demo servers without a reset.
 //
 // The fixtures are written through the Local connector (contract C4); only
 // the folders are made here, because a connector writes into folders that
@@ -156,15 +158,17 @@ async function seedPack(pack: Pack, options: DemoSeedOptions) {
 }
 
 /**
- * Seeds the demo servers when DEMO_SEED is true and no server exists yet.
- * Returns the ids it created (none when it did nothing).
+ * Seeds the demo servers when DEMO_SEED is true: every pack whose demo-GAME
+ * server is still missing gets one. Returns the ids it created (none when it
+ * did nothing).
  */
 export async function seedDemoServers(
   options: DemoSeedOptions,
 ): Promise<string[]> {
-  if (!options.demoSeed || options.servers.count() > 0) return [];
+  if (!options.demoSeed) return [];
   const created: string[] = [];
   for (const pack of options.packs.values()) {
+    if (options.servers.get(`demo-${pack.id}`) !== null) continue;
     created.push(await seedPack(pack, options));
   }
   return created;

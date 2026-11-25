@@ -26,6 +26,7 @@
 import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import {
+  checkValue,
   FormatError,
   SECRET_MASK,
   readFileValues,
@@ -291,6 +292,24 @@ function payloadOf(pack: Pack, input: ChangeInput): Payload {
     const secret = settings.get(edit.key)?.secret === true;
     return !(secret && edit.value === SECRET_MASK);
   });
+  // A value the setting cannot hold is refused here (F2, THE-2585): an edit
+  // that does not coerce to an enum option used to be dropped silently, with
+  // no 422, no chip and no write. checkValue is the same test the editor and
+  // validate() apply, so every caller is refused the same way; false stays a
+  // value of a bool setting and null still means removal.
+  let invalid: { key: string; message: string } | undefined;
+  for (const edit of kept) {
+    const setting = settings.get(edit.key);
+    if (setting === undefined) continue;
+    const problem = checkValue(setting, edit.value);
+    if (problem !== undefined) {
+      invalid = { key: edit.key, message: problem };
+      break;
+    }
+  }
+  if (invalid !== undefined) {
+    throw new ApiError(422, "invalid_value", invalid);
+  }
   const files = new Set(pack.files.map((file) => file.id));
   const seen = new Set<string>();
   const encoded: Patch[] = [];
