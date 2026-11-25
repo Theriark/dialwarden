@@ -18,6 +18,9 @@ const SIGN_IN_ROUTES = new Set([
 
 const REFUSED_SIGN_IN = new Set([401, 403, 410, 429]);
 
+/** The OIDC callback is a GET: its sign-ins and refusals are recorded too. */
+const OIDC_CALLBACK = "/api/v1/auth/oidc/callback";
+
 /** The path parameters as plain strings (ids and slugs only). */
 function paramsOf(request: FastifyRequest): Record<string, string> {
   const out = new Map<string, string>();
@@ -39,8 +42,11 @@ function targetTypeOf(url: string): string | null {
 function shouldRecord(request: FastifyRequest, reply: FastifyReply): boolean {
   const url = request.routeOptions.url;
   if (url === undefined || !url.startsWith("/api/")) return false;
-  if (SAFE_METHODS.has(request.method)) return false;
   const status = reply.statusCode;
+  if (url === OIDC_CALLBACK) {
+    return status === 302 || status === 409 || REFUSED_SIGN_IN.has(status);
+  }
+  if (SAFE_METHODS.has(request.method)) return false;
   if (status >= 200 && status < 300) return true;
   return SIGN_IN_ROUTES.has(url) && REFUSED_SIGN_IN.has(status);
 }
