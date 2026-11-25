@@ -30,6 +30,7 @@ import {
   FormatError,
   SECRET_MASK,
   readFileValues,
+  SHELL_ADAPTERS,
   writeFileValues,
   type JsonValue,
   type Os,
@@ -201,6 +202,23 @@ export interface ChangeSetServiceOptions {
   /** The hooks of P6-B; without it the apply step writes as P4 did. */
   readonly hooks?: HookService;
   readonly now?: () => Date;
+}
+
+/**
+ * What the raw rule of rnd-decision-p8a (Q2) needs to know of a change set:
+ * whether it holds raw patches, whether it is a restore, and whether it
+ * writes a file the game host reads with a shell.
+ */
+export interface RawScope {
+  readonly patches: boolean;
+  readonly restore: boolean;
+  readonly shellFile: boolean;
+}
+
+/** A file the game host reads with a shell (launch, shellvar, P3 X1). */
+function isShellFile(pack: Pack, fileId: string): boolean {
+  const file = pack.files.find((item) => item.id === fileId);
+  return file !== undefined && SHELL_ADAPTERS.has(file.adapter);
 }
 
 /** The paths of a pack file on an operating system. */
@@ -877,6 +895,27 @@ export class ChangeSetService {
 
   get(id: string): ChangeSetView {
     return viewOf(this.#require(id));
+  }
+
+  /** The raw scope of a change set (rnd-decision-p8a Q2). */
+  rawScope(id: string): RawScope {
+    const row = this.#require(id);
+    const server = this.#servers.require(row.serverId);
+    const pack = this.#servers.pack(server);
+    const files = this.#payloadOf(row).patches.map((patch) => patch.fileId);
+    return {
+      patches: files.length > 0,
+      restore: row.restoreOf !== null,
+      shellFile: files.some((fileId) => isShellFile(pack, fileId)),
+    };
+  }
+
+  /** True when a snapshot holds a shell-read file (rnd-decision-p8a Q2). */
+  snapshotIsShellFile(snapshotId: string): boolean {
+    const snapshot = this.#snapshots.find(snapshotId);
+    if (snapshot === null) return false;
+    const server = this.#servers.require(snapshot.serverId);
+    return isShellFile(this.#servers.pack(server), snapshot.fileId);
   }
 
   /**
