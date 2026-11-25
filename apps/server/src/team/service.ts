@@ -20,11 +20,8 @@ import {
   auditActors,
   changeSets,
   invitations,
-  knownHosts,
-  licence,
   passwordResets,
   recoveryCodes,
-  serverHooks,
   servers,
   sessions,
   userGrants,
@@ -350,7 +347,7 @@ export class TeamService {
       }
     })();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "role_changed", userId, role },
     });
     return this.get(userId);
@@ -364,7 +361,7 @@ export class TeamService {
       this.#writeGrants(userId, checked);
     })();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "grants_changed", userId, servers: checked.length },
     });
     return this.get(userId);
@@ -434,7 +431,7 @@ export class TeamService {
     };
     this.#store.db.insert(invitations).values(row).run();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "invited", invitationId: row.id, role: input.role },
     });
     return {
@@ -560,7 +557,7 @@ export class TeamService {
     })();
     this.#limiter.release(address, account);
     this.#activity.record("user.changed", {
-      actor: created.email,
+      actor: created.id,
       data: { action: "created", userId: created.id, role: created.role },
     });
     return created;
@@ -591,17 +588,21 @@ export class TeamService {
       })
       .run();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "reset_link_created", userId },
     });
     return { token, link: this.#link("reset", token), expiresAt };
   }
 
-  /** Sets a new password with a reset link; every session of the user ends. */
+  /**
+   * Sets a new password with a reset link; every session of the user ends.
+   * Returns the user, so the route can sign them in (S-05: the reset use
+   * sets the session cookie like a login does).
+   */
   async useReset(
     input: { token: string; password: string },
     address: string,
-  ): Promise<void> {
+  ): Promise<UserRow> {
     const tokenHash = hashValue(input.token);
     const account = `reset:${randomUUID()}`;
     const wait = this.#limiter.reserve(address, account);
@@ -646,6 +647,7 @@ export class TeamService {
       actor: "system",
       data: { action: "password_reset", userId },
     });
+    return this.require(userId);
   }
 
   // Privacy: delete, anonymise, export ---------------------------------------
@@ -664,35 +666,15 @@ export class TeamService {
   }
 
   /**
-   * Replaces the person in every table that names an actor by e-mail
-   * address, records the erased label for the audit log, and removes open
-   * invitations to that address.
+   * Records the erased label of the person (the audit-actors row every view
+   * resolves its labels through) and removes open invitations to that
+   * address. Since D7 the history tables name the user by id, so nothing
+   * else has to be rewritten: the id stays and the label shows the erasure.
    */
   #scrub(target: UserRow): void {
     const label = erasedLabel(target.id);
     const db = this.#store.db;
-    const email = target.email;
-    db.update(changeSets)
-      .set({ author: label })
-      .where(eq(changeSets.author, email))
-      .run();
-    db.update(activityEvents)
-      .set({ actor: label })
-      .where(eq(activityEvents.actor, email))
-      .run();
-    db.update(licence)
-      .set({ updatedBy: label })
-      .where(eq(licence.updatedBy, email))
-      .run();
-    db.update(knownHosts)
-      .set({ confirmedBy: label })
-      .where(eq(knownHosts.confirmedBy, email))
-      .run();
-    db.update(serverHooks)
-      .set({ updatedBy: label })
-      .where(eq(serverHooks.updatedBy, email))
-      .run();
-    db.delete(invitations).where(eq(invitations.email, email)).run();
+    db.delete(invitations).where(eq(invitations.email, target.email)).run();
     db.insert(auditActors)
       .values({ id: target.id, label, erased: 1 })
       .onConflictDoUpdate({
@@ -710,7 +692,7 @@ export class TeamService {
       this.#store.db.delete(users).where(eq(users.id, userId)).run();
     })();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "deleted", userId },
     });
   }
@@ -745,7 +727,7 @@ export class TeamService {
       db.delete(userGrants).where(eq(userGrants.userId, userId)).run();
     })();
     this.#activity.record("user.changed", {
-      actor: actor.email,
+      actor: actor.userId,
       data: { action: "anonymised", userId },
     });
     return this.get(userId);
@@ -792,7 +774,7 @@ export class TeamService {
         diff: changeSets.diff,
       })
       .from(changeSets)
-      .where(eq(changeSets.author, row.email))
+      .where(eq(changeSets.author, row.id))
       .all()
       .map(({ diff, ...rest }) => ({
         ...rest,
@@ -806,7 +788,7 @@ export class TeamService {
         at: activityEvents.at,
       })
       .from(activityEvents)
-      .where(eq(activityEvents.actor, row.email))
+      .where(eq(activityEvents.actor, row.id))
       .all();
     return {
       format: 1,
