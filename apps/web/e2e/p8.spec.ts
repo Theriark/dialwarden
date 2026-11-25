@@ -391,7 +391,8 @@ test("each role sees its own view: admin, editor and viewer", async ({
   await grants
     .getByRole("radiogroup", { name: "Palworld Home" })
     .getByRole("radio", { name: "Read" })
-    .check();
+    // The segmented label covers its radio: the click lands on the label.
+    .check({ force: true });
   await grants.getByRole("button", { name: "Save grants" }).click();
   await expect(page.getByText("Grants saved").first()).toBeVisible();
   await expect(page.getByText("1 server, read only").first()).toBeVisible();
@@ -403,7 +404,8 @@ test("each role sees its own view: admin, editor and viewer", async ({
   await grants
     .getByRole("radiogroup", { name: "Palworld Home" })
     .getByRole("radio", { name: "Write" })
-    .check();
+    // The segmented label covers its radio: the click lands on the label.
+    .check({ force: true });
   await grants.getByRole("button", { name: "Save grants" }).click();
   await expect(page.getByText("Grants saved").first()).toBeVisible();
   // The admin reads the audit log but cannot set up single sign-on.
