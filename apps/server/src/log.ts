@@ -100,25 +100,15 @@ export function loggedUrl(url: string): string {
   return QUERY_HIDDEN.includes(path) ? `${path}?[redacted]` : url;
 }
 
-interface RequestLine {
-  method: string;
-  url: string;
-  host: string;
-  remoteAddress: string;
-  remotePort?: number;
-}
-
 /** Fastify's default req serializer, with the URL of loggedUrl. */
-export function serializeRequest(request: FastifyRequest): RequestLine {
-  const line: RequestLine = {
+export function serializeRequest(request: FastifyRequest) {
+  return {
     method: request.method,
     url: loggedUrl(request.url),
     host: request.host,
     remoteAddress: request.ip,
+    remotePort: request.socket.remotePort ?? 0,
   };
-  const port = request.socket.remotePort;
-  if (port !== undefined) line.remotePort = port;
-  return line;
 }
 
 /** Logger options; stream is for tests that read the log lines. */
