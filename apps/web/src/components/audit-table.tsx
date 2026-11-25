@@ -4,7 +4,7 @@
 // server, and the client address when the IP setting keeps one. Below
 // 1024 px every row is a stacked card so nothing scrolls sideways.
 import { Link } from "@tanstack/react-router";
-import { UserRoundX } from "lucide-react";
+import { ShieldAlert, UserRoundX } from "lucide-react";
 import type { AuditEntry } from "../api/schema";
 import { cn } from "../lib/cn";
 import { formatDateTime } from "../lib/format";
@@ -247,6 +247,22 @@ export interface AuditTableProps {
   brokenAt?: number | null | undefined;
 }
 
+/**
+ * The marker of a row the chain check could not vouch for. The check walks
+ * the rows oldest first and stops at the first failing one, so that row and
+ * every later row are unverified; the rows before it are proven intact.
+ */
+function UnverifiedBadge() {
+  return (
+    <Badge
+      kind="error"
+      icon={<ShieldAlert className="size-3.5" aria-hidden="true" />}
+    >
+      Unverified
+    </Badge>
+  );
+}
+
 const TH =
   "sticky top-0 z-10 border-b border-border-strong bg-surface text-left text-xs font-medium tracking-wide text-fg-muted uppercase";
 
@@ -260,8 +276,10 @@ export function AuditTable({
   const pad = density === "compact" ? "px-3 py-1.5" : "px-4 py-3";
   const nameOf = (entry: AuditEntry) =>
     entry.serverId === null ? null : (serverNames.get(entry.serverId) ?? null);
+  const unverified = (entry: AuditEntry) =>
+    brokenAt !== null && entry.id >= brokenAt;
   const rowClass = (entry: AuditEntry) =>
-    brokenAt !== null && entry.id <= brokenAt ? "bg-error-soft/40" : "";
+    unverified(entry) ? "bg-error-soft/40" : "";
 
   if (!wide) {
     return (
@@ -274,6 +292,11 @@ export function AuditTable({
             key={entry.id}
             className={cn("flex flex-col gap-2", pad, rowClass(entry))}
           >
+            {unverified(entry) ? (
+              <div>
+                <UnverifiedBadge />
+              </div>
+            ) : null}
             <div className="flex items-start justify-between gap-3">
               <ActionCell entry={entry} />
               <time
@@ -351,7 +374,10 @@ export function AuditTable({
             return (
               <tr key={entry.id} className={rowClass(entry)}>
                 <td className={cn(cell, "font-mono text-fg-muted tabular")}>
-                  {entry.id}
+                  <div className="flex flex-col items-start gap-1">
+                    {entry.id}
+                    {unverified(entry) ? <UnverifiedBadge /> : null}
+                  </div>
                 </td>
                 <td className={cn(cell, "font-mono whitespace-nowrap tabular")}>
                   <time dateTime={entry.at}>{formatDateTime(entry.at)}</time>

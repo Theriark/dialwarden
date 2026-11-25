@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The audit table: every row's action in words with the route kept, the
 // refused sign-ins marked, the erased actor, the two densities, the stacked
-// rows below 1024 px and the rows up to a broken chain marked.
+// rows below 1024 px and the rows from a broken chain on marked.
 import {
   createMemoryHistory,
   createRootRoute,
@@ -112,9 +112,28 @@ describe("AuditTable", () => {
     expect(within(table).getByRole("link", { name: "Home" })).toBeDefined();
     // Two rows carry an address; the third stored none (a dash).
     expect(within(table).getAllByText("203.0.113.0").length).toBe(2);
+    // An intact chain marks no row.
+    expect(within(table).queryByText("Unverified")).toBeNull();
   });
 
-  it("stacks the rows below 1024 px and marks the rows up to a break", async () => {
+  it("marks the broken row and every later row in the wide table", async () => {
+    renderTable({
+      items: ROWS,
+      density: "comfortable",
+      serverNames: NAMES,
+      wide: true,
+      brokenAt: 3,
+    });
+    const table = await screen.findByRole("table", { name: "Audit log" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(
+      within(rows[0] as HTMLElement).getByText("Unverified"),
+    ).toBeDefined();
+    expect(within(rows[1] as HTMLElement).queryByText("Unverified")).toBeNull();
+    expect(within(rows[2] as HTMLElement).queryByText("Unverified")).toBeNull();
+  });
+
+  it("stacks the rows below 1024 px and marks the rows from a break on", async () => {
     renderTable({
       items: ROWS,
       density: "compact",
@@ -126,10 +145,18 @@ describe("AuditTable", () => {
     expect(screen.queryByRole("table")).toBeNull();
     const rows = within(list).getAllByRole("listitem");
     expect(rows.length).toBe(3);
-    // Rows 2 and 1 sit at or before the first broken row; row 3 is after it.
-    expect(rows[0]?.className).not.toContain("bg-error-soft");
+    // The check stops at row 2: rows 2 and 3 are unverified, row 1 before
+    // the break is proven intact. The mark is a word, not only a tint.
+    expect(rows[0]?.className).toContain("bg-error-soft");
     expect(rows[1]?.className).toContain("bg-error-soft");
-    expect(rows[2]?.className).toContain("bg-error-soft");
+    expect(rows[2]?.className).not.toContain("bg-error-soft");
+    expect(
+      within(rows[0] as HTMLElement).getByText("Unverified"),
+    ).toBeDefined();
+    expect(
+      within(rows[1] as HTMLElement).getByText("Unverified"),
+    ).toBeDefined();
+    expect(within(rows[2] as HTMLElement).queryByText("Unverified")).toBeNull();
     // Compact density pads less than comfortable.
     expect(rows[0]?.className).toContain("py-1.5");
   });

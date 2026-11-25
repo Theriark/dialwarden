@@ -91,17 +91,44 @@ function readDensity(): Density {
   return readStored(DENSITY_KEY) === "compact" ? "compact" : "comfortable";
 }
 
-/** The date inputs as the ISO bounds the server filters on (UTC days). */
+/** A yyyy-mm-dd date input at the given local time, as an ISO instant. */
+function localInstant(day: string, end: boolean): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (match === null) {
+    return null;
+  }
+  const date = new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+  );
+  if (end) {
+    date.setHours(23, 59, 59, 999);
+  }
+  return date.toISOString();
+}
+
+/**
+ * The date inputs as the ISO bounds the server filters on. The inputs show
+ * the browser's local days, so a day runs from local midnight to the last
+ * millisecond before the next one.
+ */
 export function dateBounds(from: string, to: string): AuditFilters {
   const out: { from?: string; to?: string } = {};
-  if (/^\d{4}-\d{2}-\d{2}$/.test(from)) {
-    out.from = `${from}T00:00:00.000Z`;
+  const start = localInstant(from, false);
+  if (start !== null) {
+    out.from = start;
   }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-    out.to = `${to}T23:59:59.999Z`;
+  const last = localInstant(to, true);
+  if (last !== null) {
+    out.to = last;
   }
   return out;
 }
+
+/** Under the Free hint of this page: only the export is Paid. */
+export const EXPORT_PAID_SENTENCE =
+  "Only the CSV export needs Paid: reading, filtering and checking the log stay on every plan.";
 
 /** The rows whose actor, action, target or address contain the words. */
 export function matchesSearch(entry: AuditEntry, search: string): boolean {
@@ -422,7 +449,12 @@ function AuditAdmin() {
         }
       />
       <div className="flex flex-col gap-4">
-        {hint !== null ? <UpgradeHint body={hint} /> : null}
+        {hint !== null ? (
+          <div className="flex flex-col gap-1.5">
+            <UpgradeHint body={hint} />
+            <p className="text-sm text-fg-muted">{EXPORT_PAID_SENTENCE}</p>
+          </div>
+        ) : null}
         <section
           aria-label="Audit filters"
           className="flex flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card"

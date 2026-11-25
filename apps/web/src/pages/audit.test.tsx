@@ -9,7 +9,12 @@ import type { AuditEntry, AuditVerify } from "../api/schema";
 import { entitlement, OWNER, paidFromUi } from "../test/fixtures";
 import { resetAfterEach, stubFetch, stubViewport } from "../test/render";
 import { startRouter } from "../test/start";
-import { chainWords, dateBounds, matchesSearch } from "./audit";
+import {
+  chainWords,
+  dateBounds,
+  EXPORT_PAID_SENTENCE,
+  matchesSearch,
+} from "./audit";
 
 afterEach(resetAfterEach);
 
@@ -80,11 +85,12 @@ describe("AuditPage", () => {
     expect(chainWords(BROKEN)).toBe(
       "Chain broken at row 2: a row was changed after it was written",
     );
+    // The inputs are local days: local midnight to the last millisecond.
     expect(dateBounds("2026-11-01", "")).toEqual({
-      from: "2026-11-01T00:00:00.000Z",
+      from: new Date(2026, 10, 1).toISOString(),
     });
     expect(dateBounds("nope", "2026-11-30")).toEqual({
-      to: "2026-11-30T23:59:59.999Z",
+      to: new Date(2026, 10, 30, 23, 59, 59, 999).toISOString(),
     });
     expect(matchesSearch(ROWS[0] as AuditEntry, "role changed")).toBe(true);
     expect(matchesSearch(ROWS[0] as AuditEntry, "token")).toBe(false);
@@ -109,9 +115,7 @@ describe("AuditPage", () => {
       "disabled",
       false,
     );
-    expect(
-      screen.queryByText("The audit log is part of the Paid plan."),
-    ).toBeNull();
+    expect(screen.queryByText(EXPORT_PAID_SENTENCE)).toBeNull();
 
     fireEvent.change(screen.getByLabelText("Search the loaded rows"), {
       target: { value: "invitation" },
@@ -130,14 +134,13 @@ describe("AuditPage", () => {
     expect(compact.getAttribute("aria-pressed")).toBe("true");
     expect(window.localStorage.getItem("dw.audit.density")).toBe("compact");
 
-    // A date filter goes to the server.
+    // A date filter goes to the server, from local midnight of that day.
     fireEvent.change(screen.getByLabelText("From"), {
       target: { value: "2026-11-01" },
     });
+    const from = encodeURIComponent(new Date(2026, 10, 1).toISOString());
     await waitFor(() => {
-      expect(seen).toContain(
-        "/api/v1/audit?from=2026-11-01T00%3A00%3A00.000Z&limit=50",
-      );
+      expect(seen).toContain(`/api/v1/audit?from=${from}&limit=50`);
     });
   });
 
@@ -149,9 +152,7 @@ describe("AuditPage", () => {
     await screen.findAllByText(
       "Chain broken at row 2: a row was changed after it was written",
     );
-    expect(
-      screen.getByText("The audit log is part of the Paid plan."),
-    ).toBeDefined();
+    expect(screen.getByText(EXPORT_PAID_SENTENCE)).toBeDefined();
     expect(screen.getByRole("button", { name: "Export CSV" })).toHaveProperty(
       "disabled",
       true,
