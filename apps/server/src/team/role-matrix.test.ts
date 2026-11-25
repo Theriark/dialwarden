@@ -12,8 +12,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { snapshots } from "../db/schema.js";
 import { AUTH_PROBE_HEADER } from "../http/guard.js";
 import { headersOf, type SignedIn } from "../../test/helpers.js";
-import { apiOf, draft } from "../../test/servers.js";
-import { INT_SETTING, teamFixture, type TeamFixture } from "../../test/team.js";
+import {
+  apiOf,
+  draft,
+  fileText,
+  PALWORLD_SETTINGS,
+} from "../../test/servers.js";
+import {
+  call,
+  INT_SETTING,
+  invite,
+  inviteAndAccept,
+  teamFixture,
+  testEmail,
+  type TeamFixture,
+} from "../../test/team.js";
 
 /** Who may call a route. Server policies depend on the grant there. */
 type Policy =
@@ -104,6 +117,8 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "GET /api/v1/audit/export.csv": "admin",
   "GET /api/v1/settings/audit": "admin",
   "PUT /api/v1/settings/audit": "admin",
+  "GET /api/v1/settings/snapshots": "admin",
+  "PUT /api/v1/settings/snapshots": "admin",
   "GET /api/v1/tokens": "user",
   "POST /api/v1/tokens": "user",
   "DELETE /api/v1/tokens/:id": "user",
@@ -277,6 +292,503 @@ describe("role matrix (A-01, A-02)", () => {
         (r) => `${r.method} ${r.url}` === key,
       );
       expect(route?.server, key).not.toBeNull();
+    }
+  });
+});
+
+describe("privilege escalation (A-03 to A-18)", () => {
+  const unknown = (slug: string) => `/api/v1/servers/${slug}`;
+
+  /** The answer for an unknown object of the same kind, to compare with. */
+  async function answerOf(
+    method: "GET" | "POST" | "PUT" | "DELETE",
+    url: string,
+    payload?: object,
+  ): Promise<{ status: number; body: string }> {
+    const response = await fixture.app.inject({
+      method,
+      url,
+      headers: headersOf(fixture.editor),
+      ...(payload === undefined || method === "GET" || method === "DELETE"
+        ? {}
+        : { payload }),
+    });
+    return { status: response.statusCode, body: response.body };
+  }
+
+  it("A-03 refuses an editor's writes on an ungranted server", async () => {
+    const t = fixture;
+    const { editor, servers } = t;
+    const b = unknown(servers.b);
+    const before = await fileText(servers.rootB, PALWORLD_SETTINGS);
+    const writes: [string, "POST" | "PUT", object][] = [
+      [
+        `${b}/change-sets`,
+        "POST",
+        { edits: [{ settingKey: INT_SETTING, value: 2 }] },
+      ],
+      [`${b}/hooks/run`, "POST", { action: "restart" }],
+      [`${b}/hooks`, "PUT", { hook: null }],
+    ];
+    for (const [url, method, payload] of writes) {
+      const response = await call(t.app, editor, method, url, payload);
+      expect(response.statusCode, url).toBe(404);
+      expect(response.json(), url).toEqual({ error: "server_not_found" });
+    }
+    expect(await fileText(servers.rootB, PALWORLD_SETTINGS)).toBe(before);
+    const rows = t.app.ctx.store.sqlite
+      .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
+      .get(servers.b) as { n: number };
+    expect(rows.n).toBe(1);
+  });
+
+  it("A-04 hides an ungranted server from an editor's reads", async () => {
+    const t = fixture;
+    const { editor, servers } = t;
+    const b = unknown(servers.b);
+    const paths = [
+      "",
+      "/settings",
+      "/history",
+      "/pending",
+      "/status",
+      "/hooks",
+    ];
+    for (const path of paths) {
+      const response = await call(t.app, editor, "GET", `${b}${path}`);
+      expect(response.statusCode, path).toBe(404);
+      expect(response.json(), path).toEqual({ error: "server_not_found" });
+    }
+    const list = await call(t.app, editor, "GET", "/api/v1/servers");
+    expect(
+      list.json<{ items: { id: string }[] }>().items.map((item) => item.id),
+    ).toEqual([servers.a]);
+    const activity = await call(
+      t.app,
+      editor,
+      "GET",
+      `/api/v1/activity?serverId=${servers.b}`,
+    );
+    expect(activity.json<{ items: unknown[] }>().items).toEqual([]);
+    const editable = await call(
+      t.app,
+      editor,
+      "GET",
+      "/api/v1/plan/editable-servers",
+    );
+    expect(editable.json<{ servers: string[] }>().servers).not.toContain(
+      servers.b,
+    );
+  });
+
+  it("A-05 answers objects of another server as missing", async () => {
+    const t = fixture;
+    const { editor, servers } = t;
+    const changeSet = ids.changeSet.b;
+    const snapshot = ids.snapshot.b;
+    const reads: ["GET" | "POST", string, object?][] = [
+      ["GET", `/api/v1/change-sets/${changeSet}`],
+      ["POST", `/api/v1/change-sets/${changeSet}/apply`, { runHooks: "none" }],
+      ["POST", `/api/v1/snapshots/${snapshot}/restore`],
+    ];
+    for (const [method, url, payload] of reads) {
+      const mine = await answerOf(method, url, payload);
+      const random = await answerOf(
+        method,
+        url.replace(changeSet, randomUUID()).replace(snapshot, randomUUID()),
+        payload,
+      );
+      expect(mine.status, url).toBe(404);
+      expect(mine, url).toEqual(random);
+    }
+    const rows = t.app.ctx.store.sqlite
+      .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
+      .get(servers.b) as { n: number };
+    expect(rows.n).toBe(1);
+  });
+
+  it("A-06 refuses a preset apply onto an ungranted server", async () => {
+    const t = fixture;
+    const { editor, servers } = t;
+    const response = await call(
+      t.app,
+      editor,
+      "POST",
+      `/api/v1/presets/${ids.preset}/apply`,
+      { server: servers.b },
+    );
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "server_not_found" });
+    const rows = t.app.ctx.store.sqlite
+      .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
+      .get(servers.b) as { n: number };
+    expect(rows.n).toBe(1);
+  });
+
+  it("A-07 refuses an apply after the grant went away", async () => {
+    const t = fixture;
+    const { app, owner, servers } = t;
+    const member = await inviteAndAccept(app, owner, "editor", [
+      { server: servers.a, level: "write" },
+    ]);
+    const made = await call(
+      app,
+      member,
+      "POST",
+      `/api/v1/servers/${servers.a}/change-sets`,
+      { edits: [{ settingKey: INT_SETTING, value: 7 }] },
+    );
+    expect(made.statusCode).toBe(201);
+    const grants = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${member.userId}/grants`,
+      { servers: [] },
+    );
+    expect(grants.statusCode).toBe(200);
+    const apply = await call(
+      app,
+      member,
+      "POST",
+      `/api/v1/change-sets/${made.json<{ id: string }>().id}/apply`,
+      {},
+    );
+    expect(apply.statusCode).toBe(404);
+    const settings = await fileText(servers.rootA, PALWORLD_SETTINGS);
+    expect(settings).not.toContain("ServerPlayerMaxNum=7");
+  });
+
+  it("A-08 lets a viewer change nothing", async () => {
+    const t = fixture;
+    const { app, viewer } = t;
+    const counted = [
+      "change_sets",
+      "presets",
+      "server_hooks",
+      "users",
+      "invitations",
+      "api_tokens",
+    ];
+    const counts = (): Record<string, number> =>
+      Object.fromEntries(
+        counted.map((table) => [
+          table,
+          (
+            t.app.ctx.store.sqlite
+              .prepare(`SELECT count(*) AS n FROM "${table}"`)
+              .all() as { n: number }[]
+          )[0]?.n ?? 0,
+        ]),
+      );
+    const before = counts();
+    // Routes a user only ever calls for themselves, whatever their role.
+    const self = [
+      "POST /api/v1/auth/logout",
+      "PATCH /api/v1/auth/profile",
+      "POST /api/v1/auth/password",
+      "POST /api/v1/auth/totp/enrol",
+      "POST /api/v1/auth/totp/enable",
+      "POST /api/v1/auth/totp/disable",
+      "POST /api/v1/tokens",
+      "DELETE /api/v1/tokens/:id",
+    ];
+    const publicRoutes = [
+      "/api/v1/setup",
+      "/api/v1/auth/login",
+      "/api/v1/auth/login/totp",
+      "/api/v1/invitations/accept",
+      "/api/v1/auth/password-reset",
+    ];
+    for (const route of app.ctx.routes) {
+      const key = `${route.method} ${route.url}`;
+      if (route.method === "GET" || route.method === "HEAD") continue;
+      if (self.includes(key)) continue;
+      if (publicRoutes.some((prefix) => route.url.startsWith(prefix))) {
+        continue;
+      }
+      const { path, body } = concrete(route.url, "b");
+      const response = await call(
+        app,
+        viewer,
+        route.method as "GET",
+        path,
+        body,
+      );
+      expect([403, 404], key).toContain(response.statusCode);
+    }
+    expect(counts()).toEqual(before);
+  });
+
+  it("A-09 protects the owner from every admin action", async () => {
+    const t = fixture;
+    const { app, admin, owner } = t;
+    const self = `/api/v1/users/${owner.userId}`;
+    const before = t.app.ctx.store.sqlite
+      .prepare('SELECT * FROM "users" WHERE id = ?')
+      .get(owner.userId);
+    const calls: ["PUT" | "DELETE" | "POST", string, object?][] = [
+      ["PUT", `${self}/role`, { role: "viewer" }],
+      ["DELETE", self],
+      ["PUT", `${self}/grants`, { servers: [] }],
+      ["POST", `${self}/anonymise`],
+      ["POST", `${self}/password-reset`],
+    ];
+    for (const [method, url, payload] of calls) {
+      const response = await call(app, admin, method, url, payload);
+      expect(response.statusCode, url).toBe(403);
+      expect(response.json(), url).toEqual({ error: "cannot_change_owner" });
+    }
+    const after = t.app.ctx.store.sqlite
+      .prepare('SELECT * FROM "users" WHERE id = ?')
+      .get(owner.userId);
+    expect(after).toEqual(before);
+  });
+
+  it("A-10 refuses a role change of yourself", async () => {
+    const t = fixture;
+    const { app, admin, owner } = t;
+    const mine = `/api/v1/users/${admin.userId}/role`;
+    const byAdmin = await call(app, admin, "PUT", mine, { role: "owner" });
+    expect(byAdmin.statusCode).toBe(403);
+    expect(byAdmin.json()).toEqual({ error: "cannot_change_own_role" });
+    const back = await call(app, admin, "PUT", mine, { role: "editor" });
+    expect(back.statusCode).toBe(403);
+    const byOwner = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${owner.userId}/role`,
+      { role: "admin" },
+    );
+    expect(byOwner.statusCode).toBe(403);
+    expect(byOwner.json()).toEqual({ error: "cannot_change_own_role" });
+    const owners = t.app.ctx.store.sqlite
+      .prepare("SELECT count(*) AS n FROM users WHERE role = 'owner'")
+      .all() as { n: number }[];
+    expect(owners[0]?.n).toBe(1);
+  });
+
+  it("A-11 keeps the admin ceiling and lets the owner raise it", async () => {
+    const t = fixture;
+    const { app, owner, admin } = t;
+    const second = await inviteAndAccept(app, owner, "admin");
+    const target = await inviteAndAccept(app, owner, "editor");
+    const up = await call(
+      app,
+      admin,
+      "PUT",
+      `/api/v1/users/${target.userId}/role`,
+      { role: "admin" },
+    );
+    expect(up.statusCode).toBe(403);
+    expect(up.json()).toEqual({ error: "role_too_high" });
+    const down = await call(
+      app,
+      admin,
+      "PUT",
+      `/api/v1/users/${second.userId}/role`,
+      { role: "viewer" },
+    );
+    expect(down.statusCode).toBe(403);
+    expect(down.json()).toEqual({ error: "role_too_high" });
+    const asOwner = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${target.userId}/role`,
+      { role: "admin" },
+    );
+    expect(asOwner.statusCode).toBe(200);
+  });
+
+  it("A-12 never assigns the owner role", async () => {
+    const t = fixture;
+    const { app, owner, admin } = t;
+    const response = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${admin.userId}/role`,
+      { role: "owner" },
+    );
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: "validation" });
+    const owners = t.app.ctx.store.sqlite
+      .prepare("SELECT count(*) AS n FROM users WHERE role = 'owner'")
+      .all() as { n: number }[];
+    expect(owners[0]?.n).toBe(1);
+  });
+
+  it("A-13 keeps grant changes to the owner and admins", async () => {
+    const t = fixture;
+    const { app, editor, viewer, loner } = t;
+    const before = t.app.ctx.store.sqlite
+      .prepare("SELECT * FROM user_grants ORDER BY id")
+      .all();
+    const byEditor = await call(
+      app,
+      editor,
+      "PUT",
+      `/api/v1/users/${editor.userId}/grants`,
+      { servers: [{ server: t.servers.b, level: "write" }] },
+    );
+    expect(byEditor.statusCode).toBe(403);
+    const onLoner = await call(
+      app,
+      editor,
+      "PUT",
+      `/api/v1/users/${loner.userId}/grants`,
+      { servers: [{ server: t.servers.b, level: "write" }] },
+    );
+    expect(onLoner.statusCode).toBe(403);
+    const byViewer = await call(
+      app,
+      viewer,
+      "PUT",
+      `/api/v1/users/${viewer.userId}/grants`,
+      { servers: [{ server: t.servers.b, level: "write" }] },
+    );
+    expect(byViewer.statusCode).toBe(403);
+    const after = t.app.ctx.store.sqlite
+      .prepare("SELECT * FROM user_grants ORDER BY id")
+      .all();
+    expect(after).toEqual(before);
+  });
+
+  it("A-14 refuses grants on unknown servers and viewers writing", async () => {
+    const t = fixture;
+    const { app, owner, editor, viewer } = t;
+    const unknownServer = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${editor.userId}/grants`,
+      { servers: [{ server: "demo-zz", level: "write" }] },
+    );
+    expect(unknownServer.statusCode).toBe(422);
+    expect(unknownServer.json()).toEqual({
+      error: "unknown_server",
+      server: "demo-zz",
+    });
+    const writeGrant = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${viewer.userId}/grants`,
+      { servers: [{ server: t.servers.a, level: "write" }] },
+    );
+    expect(writeGrant.statusCode).toBe(422);
+    expect(writeGrant.json()).toMatchObject({ error: "validation" });
+  });
+
+  it("A-15 strips mass-assignment fields from the profile", async () => {
+    const t = fixture;
+    const { app, editor, owner } = t;
+    const before = t.app.ctx.store.sqlite
+      .prepare('SELECT role, email FROM "users" WHERE id = ?')
+      .get(editor.userId);
+    const response = await call(app, editor, "PATCH", "/api/v1/auth/profile", {
+      name: "E",
+      role: "owner",
+      id: owner.userId,
+      email: "x@dialwarden.test",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json<{ user: { name: string } }>().user.name).toBe("E");
+    const after = t.app.ctx.store.sqlite
+      .prepare('SELECT role, email FROM "users" WHERE id = ?')
+      .get(editor.userId);
+    expect(after).toEqual(before);
+    const ownerRow = t.app.ctx.store.sqlite
+      .prepare('SELECT * FROM "users" WHERE id = ?')
+      .get(owner.userId);
+    expect(JSON.stringify(ownerRow)).not.toContain("x@dialwarden.test");
+  });
+
+  it("A-16 follows a role down in one session and ends with the user", async () => {
+    const t = fixture;
+    const { app, owner, servers } = t;
+    const member = await inviteAndAccept(app, owner, "editor", [
+      { server: servers.a, level: "write" },
+    ]);
+    const lowered = await call(
+      app,
+      owner,
+      "PUT",
+      `/api/v1/users/${member.userId}/role`,
+      { role: "viewer" },
+    );
+    expect(lowered.statusCode).toBe(200);
+    const write = await call(
+      app,
+      member,
+      "POST",
+      `/api/v1/servers/${servers.a}/change-sets`,
+      { edits: [{ settingKey: INT_SETTING, value: 16 }] },
+    );
+    expect(write.statusCode).toBe(403);
+    expect(write.json()).toEqual({ error: "forbidden" });
+    const removed = await call(
+      app,
+      owner,
+      "DELETE",
+      `/api/v1/users/${member.userId}`,
+    );
+    expect(removed.statusCode).toBe(204);
+    const session = await call(app, member, "GET", "/api/v1/auth/session");
+    expect(session.statusCode).toBe(401);
+  });
+
+  it("A-17 answers unknown user ids with user_not_found", async () => {
+    const t = fixture;
+    const { app, owner } = t;
+    const id = randomUUID();
+    const role = await call(app, owner, "PUT", `/api/v1/users/${id}/role`, {
+      role: "viewer",
+    });
+    expect(role.statusCode).toBe(404);
+    expect(role.json()).toEqual({ error: "user_not_found" });
+    const removed = await call(app, owner, "DELETE", `/api/v1/users/${id}`);
+    expect(removed.statusCode).toBe(404);
+    expect(removed.json()).toEqual({ error: "user_not_found" });
+  });
+
+  it("A-18 scopes the activity feed by grant and by event kind", async () => {
+    const t = fixture;
+    const { app, owner, editor, viewer, admin, servers } = t;
+    // Three events: a licence change, an invitation, a change on demo-b.
+    await call(app, owner, "PUT", "/api/v1/licence/environment", {
+      ignored: false,
+    });
+    const invited = await invite(app, owner, {
+      email: testEmail("a18"),
+      role: "viewer",
+    });
+    expect(invited.statusCode).toBe(201);
+    const applied = await call(
+      app,
+      owner,
+      "POST",
+      `/api/v1/change-sets/${ids.changeSet.b}/apply`,
+      { runHooks: "none" },
+    );
+    expect(applied.statusCode).toBe(200);
+    const scoped = async (user: SignedIn) =>
+      (await call(app, user, "GET", "/api/v1/activity")).json<{
+        items: { type: string; serverId: string | null }[];
+      }>().items;
+    for (const user of [editor, viewer]) {
+      const items = await scoped(user);
+      expect(items.some((row) => row.serverId === servers.b)).toBe(false);
+      expect(items.some((row) => row.type === "licence.changed")).toBe(false);
+      expect(items.some((row) => row.type === "user.changed")).toBe(false);
+    }
+    for (const user of [admin, owner]) {
+      const items = await scoped(user);
+      expect(items.some((row) => row.serverId === servers.b)).toBe(true);
+      expect(items.some((row) => row.type === "licence.changed")).toBe(true);
+      expect(items.some((row) => row.type === "user.changed")).toBe(true);
     }
   });
 });
