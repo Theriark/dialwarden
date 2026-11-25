@@ -1,6 +1,7 @@
-// Drizzle schema of the P1, P4 and P6 tables. The SQL that creates them is in
-// migrations.ts; schema.test.ts fails when the two disagree. Later phases add
-// their tables here and a new migration (never an edit of an applied one).
+// Drizzle schema of the P1, P4, P6 and P8 tables. The SQL that creates them
+// is in migrations.ts; schema.test.ts fails when the two disagree. Later
+// phases add their tables here and a new migration (never an edit of an
+// applied one).
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -11,20 +12,30 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  name: text("name").notNull(),
-  role: text("role").notNull(),
-  passwordHash: text("password_hash").notNull(),
-  totpSecretEnc: text("totp_secret_enc"),
-  totpPendingEnc: text("totp_pending_enc"),
-  totpLastStep: integer("totp_last_step"),
-  createdAt: text("created_at").notNull(),
-  updatedAt: text("updated_at").notNull(),
-  /** HMAC key of the recovery codes, encrypted (migration 0002). */
-  recoveryKeyEnc: text("recovery_key_enc"),
-});
+export const users = sqliteTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    name: text("name").notNull(),
+    role: text("role").notNull(),
+    /** An argon2id hash, or the unusable marker of an OIDC-only user. */
+    passwordHash: text("password_hash").notNull(),
+    totpSecretEnc: text("totp_secret_enc"),
+    totpPendingEnc: text("totp_pending_enc"),
+    totpLastStep: integer("totp_last_step"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    /** HMAC key of the recovery codes, encrypted (migration 0002). */
+    recoveryKeyEnc: text("recovery_key_enc"),
+    /** The OIDC identity (P8-A): issuer plus subject, never the e-mail. */
+    oidcIssuer: text("oidc_issuer"),
+    oidcSubject: text("oidc_subject"),
+  },
+  (table) => [
+    uniqueIndex("users_oidc_identity").on(table.oidcIssuer, table.oidcSubject),
+  ],
+);
 
 export const recoveryCodes = sqliteTable(
   "recovery_codes",
@@ -272,6 +283,108 @@ export const serverHooks = sqliteTable("server_hooks", {
   updatedBy: text("updated_by"),
 });
 
+/** Per-server grants of editors and viewers (P8-A): read or write. */
+export const userGrants = sqliteTable(
+  "user_grants",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => servers.id, { onDelete: "cascade" }),
+    level: text("level").notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_grants_user_server").on(table.userId, table.serverId),
+    index("user_grants_server").on(table.serverId),
+    check("user_grants_level", sql`${table.level} IN ('read', 'write')`),
+  ],
+);
+
+/** Invitation links (P8-A): single use, 72 hours, only the hash stored. */
+export const invitations = sqliteTable("invitations", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  email: text("email").notNull(),
+  role: text("role").notNull(),
+  /** JSON: the grants the new user gets, [{ server, level }]. */
+  grants: text("grants").notNull(),
+  invitedBy: text("invited_by").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+  revokedAt: text("revoked_at"),
+});
+
+/** Owner-made password reset links (P8-A): single use, 24 hours. */
+export const passwordResets = sqliteTable("password_resets", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdBy: text("created_by").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+});
+
+/** API tokens (P8-A, Paid): only the SHA-256 of the value is stored. */
+export const apiTokens = sqliteTable(
+  "api_tokens",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    role: text("role").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** The first characters of the value, shown in lists. */
+    prefix: text("prefix").notNull(),
+    createdAt: text("created_at").notNull(),
+    lastUsedAt: text("last_used_at"),
+  },
+  (table) => [index("api_tokens_user").on(table.userId)],
+);
+
+/** Who an audit actor id is; erasing a person changes only this row. */
+export const auditActors = sqliteTable("audit_actors", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  erased: integer("erased").notNull(),
+});
+
+/**
+ * The audit log (P8-A): each row stores the hash of the row before it. The
+ * hash covers id, at, actor_id, action, target_type, target_id, server_id,
+ * data and prev_hash; ip is outside it.
+ */
+export const auditEvents = sqliteTable(
+  "audit_events",
+  {
+    id: integer("id").primaryKey(),
+    at: text("at").notNull(),
+    actorId: text("actor_id").notNull(),
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    serverId: text("server_id"),
+    /** JSON with ids only, never names, e-mail addresses or secrets. */
+    data: text("data").notNull(),
+    ip: text("ip"),
+    prevHash: text("prev_hash").notNull(),
+    hash: text("hash").notNull(),
+  },
+  (table) => [
+    index("audit_events_at").on(table.at),
+    index("audit_events_actor").on(table.actorId, table.id),
+    index("audit_events_server").on(table.serverId, table.id),
+  ],
+);
+
 export const schema = {
   users,
   recoveryCodes,
@@ -288,4 +401,10 @@ export const schema = {
   snapshots,
   snapshotBlobs,
   presets,
+  userGrants,
+  invitations,
+  passwordResets,
+  apiTokens,
+  auditActors,
+  auditEvents,
 };
