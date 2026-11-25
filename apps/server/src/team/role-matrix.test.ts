@@ -297,6 +297,8 @@ describe("role matrix (A-01, A-02)", () => {
 });
 
 describe("privilege escalation (A-03 to A-18)", () => {
+  /** The change sets on demo-b: its import and the matrix draft. */
+  const ON_B = 2;
   const unknown = (slug: string) => `/api/v1/servers/${slug}`;
 
   /** The answer for an unknown object of the same kind, to compare with. */
@@ -339,7 +341,7 @@ describe("privilege escalation (A-03 to A-18)", () => {
     const rows = t.app.ctx.store.sqlite
       .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
       .get(servers.b) as { n: number };
-    expect(rows.n).toBe(1);
+    expect(rows.n).toBe(ON_B);
   });
 
   it("A-04 hides an ungranted server from an editor's reads", async () => {
@@ -404,7 +406,7 @@ describe("privilege escalation (A-03 to A-18)", () => {
     const rows = t.app.ctx.store.sqlite
       .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
       .get(servers.b) as { n: number };
-    expect(rows.n).toBe(1);
+    expect(rows.n).toBe(ON_B);
   });
 
   it("A-06 refuses a preset apply onto an ungranted server", async () => {
@@ -422,7 +424,7 @@ describe("privilege escalation (A-03 to A-18)", () => {
     const rows = t.app.ctx.store.sqlite
       .prepare('SELECT count(*) AS n FROM "change_sets" WHERE server_id = ?')
       .get(servers.b) as { n: number };
-    expect(rows.n).toBe(1);
+    expect(rows.n).toBe(ON_B);
   });
 
   it("A-07 refuses an apply after the grant went away", async () => {
