@@ -1,8 +1,11 @@
-// What every route can reach (app.ctx), the request session, and the route
-// config keys: auth (public, user or owner; every matched route defaults to
-// user, so a route that should be open says auth "public"),
-// entitlement (a FeatureKey; the route answers 402 on Free, contract C1) and
-// web (the route of the built web app, contract C8).
+// What every route can reach (app.ctx), the request session and principal,
+// and the route config keys: auth (public, user, viewer, editor, admin or
+// owner; every matched route defaults to user, any signed-in user, so a route
+// that should be open says auth "public"), server (where the route finds its
+// game server and the access it needs there, P8-A), tokens (false for the
+// identity routes an API token may never reach), entitlement (a FeatureKey;
+// the route answers 402 on Free, contract C1) and web (the route of the
+// built web app, contract C8).
 import type {
   BuildInfo,
   EntitlementGate,
@@ -27,8 +30,28 @@ import type { EditableServers } from "../plan/editable.js";
 import type { PresetService } from "../presets/service.js";
 import type { ServerService } from "../servers/service.js";
 import type { SnapshotStore } from "../snapshots/store.js";
+import type { GrantLevel, Principal } from "../team/roles.js";
+import type { TeamService } from "../team/service.js";
 
-export type AuthLevel = "public" | "user" | "owner";
+export type AuthLevel =
+  "public" | "user" | "viewer" | "editor" | "admin" | "owner";
+
+/**
+ * Where a route finds its game server: the slug path parameter, the change
+ * set or snapshot of the id path parameter, or the server field of the body.
+ */
+export type ServerSource = "slug" | "changeSet" | "snapshot" | "bodyServer";
+
+/**
+ * The access a server-scoped route needs: read (any grant), write (an
+ * editor or more with a write grant), admin or owner.
+ */
+export type ServerAccess = "read" | "write" | "admin" | "owner";
+
+export interface ServerScope {
+  from: ServerSource;
+  access: ServerAccess;
+}
 
 export interface AppContext {
   config: AppConfig;
@@ -61,6 +84,8 @@ export interface AppContext {
   presets: PresetService;
   /** Content-addressed snapshot blobs under DATA_DIR/snapshots. */
   snapshots: SnapshotStore;
+  /** Users, roles, grants, invitations and the privacy controls (P8-A). */
+  team: TeamService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */
@@ -74,6 +99,8 @@ export interface RouteInfo {
   url: string;
   auth: AuthLevel | null;
   entitlement: FeatureKey | null;
+  server: ServerScope | null;
+  tokens: boolean;
 }
 
 declare module "fastify" {
@@ -82,10 +109,17 @@ declare module "fastify" {
   }
   interface FastifyRequest {
     session: ActiveSession | null;
+    /** Who acts: the signed-in user or an API token (null: anonymous). */
+    principal: Principal | null;
+    /** The access the principal holds on the route's server, if scoped. */
+    serverLevel: GrantLevel | null;
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;
     entitlement?: FeatureKey;
+    server?: ServerScope;
+    /** False: an API token may not use this route (identity routes). */
+    tokens?: boolean;
     /** The web app route: static files only, so no session is read. */
     web?: boolean;
   }
