@@ -290,7 +290,9 @@ test("privacy: snapshot retention, the audit address setting and the own export"
   await page
     .getByRole("radio", { name: /Keep the newest versions of every file/ })
     .check();
-  await page.getByLabel("Versions to keep").fill("25");
+  // The number fields sit inside their radio labels: ask for the field.
+  const versions = page.getByRole("spinbutton", { name: "Versions to keep" });
+  await versions.fill("25");
   await page.getByRole("button", { name: "Save retention" }).click();
   await expect(
     page.getByText("Snapshot retention saved").first(),
@@ -298,15 +300,18 @@ test("privacy: snapshot retention, the audit address setting and the own export"
 
   await page.getByRole("radio", { name: /^None/ }).check();
   await page.getByRole("radio", { name: /Remove rows older than/ }).check();
-  await page.getByLabel("Days to keep").last().fill("400");
+  const auditDays = page
+    .getByRole("spinbutton", { name: "Days to keep" })
+    .last();
+  await auditDays.fill("400");
   await page.getByRole("button", { name: "Save audit settings" }).click();
   await expect(page.getByText("Audit settings saved").first()).toBeVisible();
 
   // The settings came back from the server: a reload shows them.
   await page.reload();
-  await expect(page.getByLabel("Versions to keep")).toHaveValue("25");
+  await expect(versions).toHaveValue("25");
   await expect(page.getByRole("radio", { name: /^None/ })).toBeChecked();
-  await expect(page.getByLabel("Days to keep").last()).toHaveValue("400");
+  await expect(auditDays).toHaveValue("400");
 
   // Back to the defaults for the walks after this one, then the own export.
   await page.getByRole("radio", { name: /Keep every snapshot/ }).check();
