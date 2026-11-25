@@ -59,7 +59,7 @@ async function signedIn(options: { logStream?: Writable } = {}) {
       : { logStream: options.logStream, extraEnv: { LOG_LEVEL: "debug" } }),
   });
   const owner = await setupOwner(current.app);
-  return { app: current.app, headers: headersOf(owner), email: owner.email };
+  return { app: current.app, headers: headersOf(owner), userId: owner.userId };
 }
 
 /** An SSH server in the test process, closed after the test. */
@@ -392,7 +392,7 @@ describe("connector endpoints: threat tests of the security review", () => {
   );
 
   it("pins only the key the server presents now (T6)", async () => {
-    const { app, headers, email } = await signedIn();
+    const { app, headers, userId } = await signedIn();
     const { knownHosts } = app.ctx.connectors;
     const keyA = hostKeyPair();
     const keyB = hostKeyPair();
@@ -432,7 +432,8 @@ describe("connector endpoints: threat tests of the security review", () => {
     expect(replaced.statusCode).toBe(200);
     expect(knownHosts.get("127.0.0.1", port)).toMatchObject({
       fingerprint: keyB.fingerprint,
-      confirmedBy: email,
+      // The pin names the confirming user by id (D7).
+      confirmedBy: userId,
     });
 
     // (c) The old key is now a changed key.
