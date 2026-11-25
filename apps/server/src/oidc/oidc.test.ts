@@ -15,7 +15,16 @@ import {
   type TestApp,
 } from "../../test/helpers.js";
 import { FakeIdp, type IssueOptions } from "../../test/oidc-idp.js";
-import { inviteAndAccept, paidApp, toFree } from "../../test/team.js";
+import { MAX_PER_ADDRESS } from "./service.js";
+import {
+  invite,
+  inviteAndAccept,
+  paidApp,
+  testEmail,
+  toFree,
+  toPaid,
+  type Member,
+} from "../../test/team.js";
 
 const BASE_URL = "http://dw.test";
 const MAPPING = {
@@ -107,6 +116,15 @@ function userCount(): number {
 
 function sessionOf(response: LightMyRequestResponse): string {
   return sessionCookie(response);
+}
+
+/** A local member: invitations work only while OIDC is off (L1). */
+async function member(role: string): Promise<Member> {
+  expect((await configure({ enabled: false })).statusCode).toBe(200);
+  const made = await inviteAndAccept(app, owner, role);
+  const again = await configure();
+  expect(again.statusCode, again.body).toBe(200);
+  return made;
 }
 
 beforeEach(async () => {
@@ -353,7 +371,7 @@ describe("OIDC roles and accounts (O-16 to O-21)", () => {
   });
 
   it("O-20 never links a new identity to a local account by e-mail", async () => {
-    const admin = await inviteAndAccept(app, owner, "admin");
+    const admin = await member("admin");
     for (const email of [owner.email, admin.email]) {
       const response = await signIn({
         claims: { sub: `new-${email}`, email, email_verified: true },
@@ -416,9 +434,9 @@ describe("OIDC redirects, settings and plans", () => {
   });
 
   it("O-27 only the owner configures OIDC; the secret is never shown", async () => {
-    const admin = await inviteAndAccept(app, owner, "admin");
-    const editor = await inviteAndAccept(app, owner, "editor");
-    const viewer = await inviteAndAccept(app, owner, "viewer");
+    const admin = await member("admin");
+    const editor = await member("editor");
+    const viewer = await member("viewer");
     for (const who of [admin, editor, viewer]) {
       const response = await configure({}, who);
       expect(response.statusCode).toBe(403);
@@ -437,7 +455,7 @@ describe("OIDC redirects, settings and plans", () => {
   });
 
   it("O-28 keeps the owner's local login; others need SSO", async () => {
-    const admin = await inviteAndAccept(app, owner, "admin");
+    const admin = await member("admin");
     const login = (email: string, password: string) =>
       app.inject({
         method: "POST",
@@ -504,6 +522,144 @@ describe("OIDC redirects, settings and plans", () => {
       headers: { cookie: owner.cookie },
     });
     expect(old.statusCode).toBe(401);
+  });
+});
+
+describe("OIDC plans, local paths and limits (review of PR 29)", () => {
+  const loginOf = (who: Member) =>
+    app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email: who.email, password: who.password },
+    });
+  const loginFlag = async () => {
+    const answer = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/oidc",
+    });
+    return answer.json<{ enabled: boolean }>().enabled;
+  };
+  const noSession = (response: LightMyRequestResponse) =>
+    response.cookies.find((c) => c.name === "dw_session");
+
+  it("F-04 lifts sso_required for a non-owner on Free and restores it on Paid", async () => {
+    const admin = await member("admin");
+    expect((await loginOf(admin)).statusCode).toBe(403);
+    expect(await loginFlag()).toBe(true);
+    await toFree(app, owner);
+    const free = await loginOf(admin);
+    expect(free.statusCode, free.body).toBe(200);
+    expect(await loginFlag()).toBe(false);
+    await toPaid(app, owner);
+    const paid = await loginOf(admin);
+    expect(paid.statusCode).toBe(403);
+    expect(paid.json()).toMatchObject({ error: "sso_required" });
+    expect(await loginFlag()).toBe(true);
+  });
+
+  it("L1 makes and accepts no invitation while OIDC is on", async () => {
+    const email = testEmail("late");
+    const made = await invite(app, owner, { email, role: "viewer" });
+    expect(made.statusCode).toBe(409);
+    expect(made.json()).toMatchObject({ error: "oidc_active" });
+    expect((await configure({ enabled: false })).statusCode).toBe(200);
+    const open = await invite(app, owner, { email, role: "viewer" });
+    expect(open.statusCode).toBe(201);
+    const token = open.json<{ token: string }>().token;
+    expect((await configure()).statusCode).toBe(200);
+    const accepted = await app.inject({
+      method: "POST",
+      url: "/api/v1/invitations/accept",
+      payload: { token, name: "Late", password: randomPassword() },
+    });
+    expect(accepted.statusCode).toBe(403);
+    expect(accepted.json()).toMatchObject({ error: "sso_required" });
+    expect(noSession(accepted)).toBe(undefined);
+  });
+
+  it("L1 a reset use while OIDC is on sets the password without a session", async () => {
+    const admin = await member("admin");
+    const made = await app.inject({
+      method: "POST",
+      url: `/api/v1/users/${admin.userId}/password-reset`,
+      headers: headersOf(owner),
+    });
+    expect(made.statusCode, made.body).toBe(201);
+    const token = made.json<{ token: string }>().token;
+    const password = randomPassword();
+    const used = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/password-reset",
+      payload: { token, password },
+    });
+    expect(used.statusCode, used.body).toBe(204);
+    expect(noSession(used)).toBe(undefined);
+    const login = await loginOf({ ...admin, password });
+    expect(login.statusCode).toBe(403);
+    expect(login.json()).toMatchObject({ error: "sso_required" });
+  });
+
+  it("F7 lets the owner switch OIDC off while the provider is down", async () => {
+    idp.discoveryOverride = { issuer: "https://other.example" };
+    expect((await configure()).statusCode).toBe(422);
+    const off = await configure({ enabled: false });
+    expect(off.statusCode, off.body).toBe(200);
+    expect(off.json()).toMatchObject({ enabled: false, configured: true });
+    expect(await loginFlag()).toBe(false);
+  });
+
+  it("L8 an empty client secret clears the stored one", async () => {
+    const cleared = await configure({ clientSecret: "" });
+    expect(cleared.statusCode, cleared.body).toBe(200);
+    expect(cleared.json()).toMatchObject({ hasClientSecret: false });
+    const kept = await configure({ clientSecret: undefined });
+    expect(kept.json()).toMatchObject({ hasClientSecret: false });
+  });
+
+  it("L5 a flood of start requests ends no other address's sign-in", async () => {
+    const started = await start();
+    const flood: LightMyRequestResponse[] = [];
+    for (let n = 0; n < MAX_PER_ADDRESS + 5; n += 1) {
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/v1/auth/oidc/start",
+        remoteAddress: "203.0.113.9",
+      });
+      expect(response.statusCode).toBe(302);
+      flood.push(response);
+    }
+    const code = idp.code(started.location);
+    const done = await callback({ code, state: started.state }, started.cookie);
+    expect(done.statusCode, done.body).toBe(302);
+    // The flooding address lost its own oldest sign-ins.
+    const first = flood[0];
+    if (first === undefined) throw new Error("no flood response");
+    const location = new URL(String(first.headers.location));
+    const cookie = first.cookies.find((item) => item.name === "dw_oidc");
+    const state = location.searchParams.get("state") ?? "";
+    const stale = await callback(
+      { code: idp.code(location), state },
+      `dw_oidc=${cookie?.value ?? ""}`,
+    );
+    expect(stale.statusCode).toBe(401);
+    expect(stale.json()).toMatchObject({ error: "oidc_state_invalid" });
+  });
+
+  it("L6 keeps an unverified e-mail claim out of the account", async () => {
+    const response = await signIn({
+      claims: {
+        sub: "unverified-1",
+        email: "colleague@dialwarden.test",
+        email_verified: false,
+      },
+    });
+    expect(response.statusCode, response.body).toBe(302);
+    const row = app.ctx.store.db
+      .select()
+      .from(users)
+      .all()
+      .find((item) => item.oidcSubject === "unverified-1");
+    expect(row?.email).toMatch(/@sso\.invalid$/);
   });
 });
 
