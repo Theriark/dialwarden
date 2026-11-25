@@ -59,6 +59,7 @@ import { changeSets, serverFiles } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { ApiError, limitReached } from "../http/errors.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
+import { actorLabel, actorLabels } from "../team/labels.js";
 import {
   SnapshotBlobError,
   type SnapshotKind,
@@ -235,13 +236,17 @@ function parsed<T>(text: string | null): T | null {
   return JSON.parse(text) as T;
 }
 
-function viewOf(row: ChangeSetRow): ChangeSetView {
+/** The view of one change set; the author shows as its display label (D7). */
+function viewOf(
+  row: ChangeSetRow,
+  labelOf: (id: string) => string,
+): ChangeSetView {
   return {
     id: row.id,
     serverId: row.serverId,
     status: row.status as ChangeSetStatus,
     cause: row.cause as Cause,
-    author: row.author,
+    author: labelOf(row.author),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     appliedAt: row.appliedAt,
@@ -489,6 +494,11 @@ export class ChangeSetService {
     if (time <= this.#lastStamp) time = this.#lastStamp + 1;
     this.#lastStamp = time;
     return new Date(time).toISOString();
+  }
+
+  /** The view of one change set; the author id shows as its label (D7). */
+  #view(row: ChangeSetRow): ChangeSetView {
+    return viewOf(row, (id) => actorLabel(this.#store, id));
   }
 
   /** Runs task alone for its server: one read or write at a time. */
@@ -889,12 +899,12 @@ export class ChangeSetService {
         lint: described.lint,
         restoreOf: null,
       });
-      return viewOf(row);
+      return this.#view(row);
     });
   }
 
   get(id: string): ChangeSetView {
-    return viewOf(this.#require(id));
+    return this.#view(this.#require(id));
   }
 
   /** The raw scope of a change set (rnd-decision-p8a Q2). */
@@ -942,7 +952,7 @@ export class ChangeSetService {
         throw new ApiError(409, "invalid_state", { status });
       }
       await this.#apply(row, server, pack, actor, runHooks);
-      return viewOf(this.#require(id));
+      return this.#view(this.#require(id));
     });
   }
 
@@ -1130,7 +1140,7 @@ export class ChangeSetService {
     for (const row of this.#pendingRows(server.id)) {
       const mode = (row.runHooks ?? "none") as RunHooks;
       const result = await this.#run(row, server, pack, actor);
-      written?.push(viewOf(this.#require(row.id)));
+      written?.push(this.#view(this.#require(row.id)));
       // A change set parked as none keeps the server down.
       if (mode !== "none" && result === "applied") start = true;
     }
@@ -1192,7 +1202,7 @@ export class ChangeSetService {
 
   /** The pending change sets of a server, oldest first (contract C5). */
   pending(server: ServerRecord): ChangeSetView[] {
-    return this.#pendingRows(server.id).map(viewOf);
+    return this.#pendingRows(server.id).map((row) => this.#view(row));
   }
 
   #pendingRows(serverId: string): ChangeSetRow[] {
@@ -1486,7 +1496,7 @@ export class ChangeSetService {
       if (result.status === "applied" && snapshot.kind === "before") {
         if (undone !== null) this.#revert(undone, server.id);
       }
-      return viewOf(result);
+      return this.#view(result);
     });
   }
 
@@ -1555,10 +1565,12 @@ export class ChangeSetService {
     const limit = this.#entitlement.limit("historyVisible");
     const visible = limit === null ? rows : rows.slice(0, limit);
     const kept = this.#snapshots.ofChangeSets(visible.map((row) => row.id));
+    // The author ids of the visible entries as their display labels (D7).
+    const labels = actorLabels(this.#store, visible.map((row) => row.author));
     const entries = visible.map((row) => ({
       changeSetId: row.id,
       at: row.appliedAt ?? row.updatedAt,
-      author: row.author,
+      author: labels.get(row.author) ?? row.author,
       cause: row.cause as Cause,
       status: row.status as ChangeSetStatus,
       chips: (JSON.parse(row.diff) as Diff).semantic,
