@@ -41,6 +41,10 @@ import type {
 import { useCanConfigureHooks, useCanRunHooks } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { PendingBadge } from "../components/pending-badge";
+import {
+  isServerMissing,
+  ServerMissingState,
+} from "../components/server-missing";
 import { ServerTabs } from "../components/server-tabs";
 import { StatusChip } from "../components/status-chip";
 import { Alert } from "../components/ui/alert";
@@ -620,6 +624,10 @@ export function ServerHooksPage() {
         <RowsSkeleton rows={5} />
       </>
     );
+  }
+
+  if (isServerMissing(server.error) || isServerMissing(hooks.error)) {
+    return <ServerMissingState />;
   }
 
   if (server.isError || hooks.isError) {

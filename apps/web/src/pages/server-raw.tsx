@@ -23,6 +23,10 @@ import { draftLint, lintMarkers } from "../lib/raw-lint";
 import { PageHeader } from "../components/layout/page-header";
 import { LazyEditor } from "../components/code-editor";
 import { SaveDialog } from "../components/save-dialog";
+import {
+  isServerMissing,
+  ServerMissingState,
+} from "../components/server-missing";
 import { ServerTabs } from "../components/server-tabs";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
@@ -105,6 +109,10 @@ export function ServerRawPage() {
         <RowsSkeleton rows={4} />
       </>
     );
+  }
+
+  if (isServerMissing(server.error) || isServerMissing(settings.error)) {
+    return <ServerMissingState />;
   }
 
   if (server.isError || settings.isError) {
