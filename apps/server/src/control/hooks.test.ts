@@ -817,4 +817,22 @@ describe("the hook run API and its roles (contract C7)", () => {
       error: "Connection",
     });
   });
+
+  it("A-19 flushes pending changes for a writer only, never for a viewer", async () => {
+    const { app, api, root, slug } = await setup(PAID);
+    const viewer = apiOf(app, await roleUser(app, "viewer", slug));
+    const made = await draft(api, slug, { WorldSize: 5 });
+    await apply(api, made.id);
+    // Someone stops the game outside the app; the next status read sees it.
+    sim?.takeDown();
+    const before = await fileText(root, WORLD_PATH);
+    const status = await viewer.get(`/api/v1/servers/${slug}/status`);
+    expect(status.statusCode).toBe(200);
+    expect(status.json<{ pending: number }>().pending).toBe(1);
+    expect(await fileText(root, WORLD_PATH)).toBe(before);
+    // The owner holds a write grant everywhere: the read flushes.
+    const flushed = await statusOf(api, slug);
+    expect(flushed).toMatchObject({ state: "stopped", pending: 0 });
+    expect(await fileText(root, WORLD_PATH)).toContain("WorldSize=5");
+  });
 });
