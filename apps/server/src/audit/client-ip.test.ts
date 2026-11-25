@@ -18,6 +18,7 @@ import { call, teamFixture, testEmail } from "../../test/team.js";
 import { auditAddress, truncateAddress } from "./ip.js";
 
 const TRUSTED = "172.31.1.0/24,172.17.0.1";
+const TRUSTED_V6 = "fd00:1::/64,2001:db8:ffff::1";
 const HYPERLINK = '=HYPERLINK("http://evil.example","x")';
 
 let current: TestApp | undefined;
@@ -116,6 +117,47 @@ describe("client address (N-01 to N-08)", () => {
   });
 });
 
+describe("IPv6 proxies and clients (N-01 to N-04, N-10)", () => {
+  const CLIENT_V6 = "2001:db8:abcd:12::9";
+
+  it("takes the IPv6 client behind a trusted IPv6 proxy", async () => {
+    const { app } = await ipApp(TRUSTED_V6);
+    expect(await seen(app, "fd00:1::5", CLIENT_V6)).toBe(CLIENT_V6);
+    const chain = `198.51.100.9, ${CLIENT_V6}`;
+    expect(await seen(app, "2001:db8:ffff::1", chain)).toBe(CLIENT_V6);
+  });
+
+  it("takes the right-most untrusted address through IPv6 hops", async () => {
+    const { app } = await ipApp(TRUSTED_V6);
+    const chain = `2001:db8:1::1, ${CLIENT_V6}, fd00:1::7`;
+    expect(await seen(app, "fd00:1::5", chain)).toBe(CLIENT_V6);
+  });
+
+  it("ignores a spoofed header from an untrusted IPv6 peer", async () => {
+    const { app } = await ipApp(TRUSTED_V6);
+    const peer = "2001:db8:bad::7";
+    expect(await seen(app, peer, "fd00:1::5")).toBe(peer);
+    expect(await seen(app, peer, CLIENT_V6)).toBe(peer);
+  });
+
+  it("stores the /48 form of an IPv6 client behind the proxy", async () => {
+    const { app } = await ipApp(TRUSTED_V6);
+    const credentials = ownerCredentials();
+    await setupOwner(app, credentials);
+    const login = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      remoteAddress: "fd00:1::5",
+      headers: { "x-forwarded-for": CLIENT_V6 },
+      payload: credentials,
+    });
+    expect(login.statusCode).toBe(200);
+    const rows = app.ctx.store.db.select().from(auditEvents).all();
+    const row = rows.find((item) => item.action.endsWith("/auth/login"));
+    expect(row?.ip).toBe("2001:db8:abcd::");
+  });
+});
+
 describe("the audit IP setting (N-09 to N-12)", () => {
   it("N-09 truncates IPv4 to /24, the mapped form as IPv4", () => {
     expect(truncateAddress("198.51.100.9")).toBe("198.51.100.0");
@@ -201,6 +243,11 @@ describe("rate limit key and TRUSTED_PROXIES (N-13, N-14)", () => {
       "0.0.0.0/1,128.0.0.0/1",
       "10.0.0.0/7",
       "2001::/31",
+      // IPv6 ranges that hold every IPv4 peer in its mapped form.
+      "::ffff:0:0/96",
+      "::ffff:0.0.0.0/100",
+      "::/32",
+      "::/80",
     ]) {
       expect(() => loadConfig({ TRUSTED_PROXIES: value }), value).toThrow(
         /TRUSTED_PROXIES/,
@@ -208,6 +255,17 @@ describe("rate limit key and TRUSTED_PROXIES (N-13, N-14)", () => {
     }
     const ok = loadConfig({ TRUSTED_PROXIES: TRUSTED });
     expect(ok.trustProxy).toBe(TRUSTED);
+  });
+
+  it("N-14 accepts IPv6 entries of /32 or longer", () => {
+    for (const value of [
+      TRUSTED_V6,
+      "2001:db8::/32",
+      "::ffff:172.17.0.0/112",
+      "::1",
+    ]) {
+      expect(loadConfig({ TRUSTED_PROXIES: value }).trustProxy).toBe(value);
+    }
   });
 
   it("keeps sign-in working behind the proxy", async () => {

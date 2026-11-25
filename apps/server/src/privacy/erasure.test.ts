@@ -53,6 +53,17 @@ function everyRow(t: TeamFixture): string {
     .join("\n");
 }
 
+/** How many audit rows of a user still hold a client address. */
+function addressesOf(t: TeamFixture, userId: string): number {
+  const row = t.app.ctx.store.sqlite
+    .prepare(
+      "SELECT count(*) AS n FROM audit_events " +
+        "WHERE actor_id = ? AND ip IS NOT NULL",
+    )
+    .get(userId) as { n: number };
+  return row.n;
+}
+
 /** The audit chain still verifies after the erasure. */
 async function chainValid(t: TeamFixture): Promise<void> {
   const response = await call(t.app, t.owner, "GET", "/api/v1/audit/verify");
@@ -88,6 +99,7 @@ describe("erasing a person (P-04 to P-06)", () => {
       {},
     );
     expect(applied.statusCode).toBe(200);
+    expect(addressesOf(t, member.userId)).toBeGreaterThan(0);
     const erased = await call(
       app,
       owner,
@@ -98,6 +110,8 @@ describe("erasing a person (P-04 to P-06)", () => {
     const rows = everyRow(t);
     expect(rows).not.toContain(member.email);
     expect(rows).not.toContain(member.name);
+    // The audit rows keep no address of the person (F6).
+    expect(addressesOf(t, member.userId)).toBe(0);
     // Every session and token of the person ends.
     const old = await call(app, signed, "GET", "/api/v1/auth/session");
     expect(old.statusCode).toBe(401);
@@ -139,6 +153,7 @@ describe("erasing a person (P-04 to P-06)", () => {
       {},
     );
     expect(applied.statusCode).toBe(200);
+    expect(addressesOf(t, member.userId)).toBeGreaterThan(0);
     const removed = await call(
       app,
       owner,
@@ -149,6 +164,7 @@ describe("erasing a person (P-04 to P-06)", () => {
     const rows = everyRow(t);
     expect(rows).not.toContain(member.email);
     expect(rows).not.toContain(member.name);
+    expect(addressesOf(t, member.userId)).toBe(0);
     const history = await call(
       app,
       owner,
