@@ -39,6 +39,7 @@ const PROVIDER_CONFIG = {
           claims: {
             sub: "container-user",
             email: "container-user@dialwarden.test",
+            email_verified: true,
             name: "Container User",
             groups: ["dw-viewers", "dw-admins"],
           },
