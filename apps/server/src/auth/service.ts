@@ -140,6 +140,8 @@ export class AuthService {
       createdAt: now,
       updatedAt: now,
       recoveryKeyEnc: null,
+      oidcIssuer: null,
+      oidcSubject: null,
     };
     // The check and the insert run in one transaction: two concurrent setup
     // requests cannot both create an owner.
