@@ -9,6 +9,14 @@ import { sessions, users } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 
 export const SESSION_COOKIE = "dw_session";
+/** The cookie name behind https: the __Host- prefix pins it to this host. */
+export const SECURE_SESSION_COOKIE = "__Host-dw_session";
+
+/** The session cookie name for a BASE_URL (D17). */
+export function sessionCookieName(baseUrl: string | null): string {
+  const secure = baseUrl?.startsWith("https://") ?? false;
+  return secure ? SECURE_SESSION_COOKIE : SESSION_COOKIE;
+}
 export const CSRF_HEADER = "x-csrf-token";
 export const SESSION_IDLE_MS = 7 * 24 * 60 * 60 * 1000;
 export const SESSION_MAX_MS = 30 * 24 * 60 * 60 * 1000;

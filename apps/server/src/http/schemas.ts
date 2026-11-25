@@ -32,6 +32,11 @@ export const userSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string(),
+  /**
+   * The role the user acts with now: the stored role on Paid, viewer for
+   * every user but the owner on the Free fallback (P8-A step 8). The stored
+   * role is in GET /api/v1/users.
+   */
   role: z.string(),
   totpEnabled: z.boolean(),
 });
