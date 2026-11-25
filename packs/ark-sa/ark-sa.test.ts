@@ -146,6 +146,16 @@ describe("ARK: Survival Ascended pack", () => {
         code: "launch-order",
         severity: "warning",
         line: 1,
+        column: 116,
+        message: expect.stringContaining(
+          "?Port comes after ?ServerAdminPassword",
+        ),
+        locator: settingOf(pack, "cli.Port").locator,
+      },
+      {
+        code: "launch-order",
+        severity: "warning",
+        line: 1,
         column: 99,
         message: expect.stringContaining(
           "?RCONEnabled comes after ?ServerAdminPassword",
@@ -153,6 +163,18 @@ describe("ARK: Survival Ascended pack", () => {
         locator: settingOf(pack, "cli.RCONEnabled").locator,
       },
     ]);
+  });
+
+  it("places a new ?Port in front of the admin password", () => {
+    const line = bytesOf(
+      '"TheIsland_WP?listen?ServerAdminPassword=late-demo" -Port=7777',
+    );
+    const written = writeFileValues(pack, "launch", line, [
+      { key: "cli.Port", value: 7778 },
+    ]);
+    expect(text(written)).toContain(
+      '"TheIsland_WP?listen?Port=7778?ServerAdminPassword=late-demo"',
+    );
   });
 
   it("places a new chain option in front of the admin password", () => {

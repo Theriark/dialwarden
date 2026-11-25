@@ -649,7 +649,7 @@
       "max": 100,
       "unit": "multiplier",
       "group": "Creatures",
-      "description": "Scales damage dealt by every creature, wild or tamed, to any target.",
+      "description": "Scales damage dealt by wild creatures. Tamed creatures use their own multiplier, TamedDinoDamageMultiplier.",
       "restartRequired": true
     },
     {
@@ -666,7 +666,7 @@
       "max": 100,
       "unit": "multiplier",
       "group": "Creatures",
-      "description": "Scales damage creatures receive. Values below 1 make them tougher in fights.",
+      "description": "Scales damage wild creatures receive; values below 1 make them tougher. Tamed creatures use TamedDinoResistanceMultiplier.",
       "restartRequired": true
     },
     {
@@ -1042,7 +1042,7 @@
       "max": 1000,
       "unit": "count",
       "group": "Structures",
-      "description": "Hard cap on building pieces on a single platform saddle.",
+      "description": "Server-wide limit on how many platform saddles and rafts may exist at once. Pieces per saddle are set by PerPlatformMaxStructuresMultiplier.",
       "restartRequired": true
     },
     {
@@ -1943,7 +1943,8 @@
       "file": "launch",
       "locator": {
         "kind": "launch",
-        "flag": "?Port"
+        "flag": "?Port",
+        "before": ["?ServerAdminPassword"]
       },
       "type": "int",
       "min": 1024,
@@ -2363,7 +2364,7 @@
   "presets": [
     {
       "id": "official-default",
-      "label": "Official defaults",
+      "label": "Stock defaults",
       "description": "The shipped rates: normal taming and experience, standard harvest and the built-in creature anchors.",
       "values": {
         "XPMultiplier": 1,
@@ -2450,7 +2451,6 @@
     "https://github.com/cdp1337/ARKSurvivalAscended-Linux",
     "https://github.com/ChronosWS/asma",
     "https://github.com/ryoucerious/cerious-aasm",
-    "https://github.com/Kitsune-Den/KitsuneDen",
     "https://github.com/JensvandeWiel/ArkAscendedServerManager",
     "https://github.com/Olrik-WP/ASADedicatedManager_Releases"
   ]
