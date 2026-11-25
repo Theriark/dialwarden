@@ -2,32 +2,48 @@
 // format. Each adapter parses bytes, reads and edits values through locators,
 // and returns splices, so a write changes only the bytes it must change.
 
-import { cfgAdapter } from "./cfg.js";
-import { iniAdapter, ueIniAdapter } from "./ini.js";
-import { jsonAdapter, jsoncAdapter } from "./json.js";
-import { launchAdapter, launchShellIssues, launchWords } from "./launch.js";
+import { cfgAdapter, cfgLocators } from "./cfg.js";
+import { iniAdapter, iniLocators, ueIniAdapter } from "./ini.js";
+import { jsonAdapter, jsoncAdapter, jsonLocators } from "./json.js";
+import {
+  launchAdapter,
+  launchLocators,
+  launchShellIssues,
+  launchWords,
+} from "./launch.js";
 import { textListAdapter } from "./textlist.js";
-import { luaAdapter } from "./lua.js";
-import { shellVarAdapter, systemdEnvAdapter } from "./shellvar.js";
+import { luaAdapter, luaLocators } from "./lua.js";
+import {
+  shellVarAdapter,
+  shellVarLocators,
+  systemdEnvAdapter,
+} from "./shellvar.js";
 import type { FormatAdapter, Locator } from "./types.js";
-import { xmlAdapter } from "./xml.js";
+import { xmlAdapter, xmlLocators } from "./xml.js";
 
 export * from "./types.js";
 export { applySplices } from "./source.js";
 export {
   cfgAdapter,
+  cfgLocators,
   iniAdapter,
+  iniLocators,
   jsonAdapter,
+  jsonLocators,
   jsoncAdapter,
   launchAdapter,
+  launchLocators,
   launchShellIssues,
   launchWords,
   luaAdapter,
+  luaLocators,
   shellVarAdapter,
+  shellVarLocators,
   systemdEnvAdapter,
   textListAdapter,
   ueIniAdapter,
   xmlAdapter,
+  xmlLocators,
 };
 
 /** Locator kinds of contract C2 (codec is an interface only in 27.0.0). */

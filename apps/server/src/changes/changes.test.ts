@@ -298,6 +298,40 @@ describe("change sets (contract C5)", () => {
       expect(nothing.json()).toEqual({ error: "no_change" });
     }
   });
+
+  it("refuses an edit whose value the setting cannot hold (F2)", async () => {
+    const { api, slug } = await palworld();
+    const url = `/api/v1/servers/${slug}/change-sets`;
+    // A boolean is not one of the listed choices of an enum; such an edit
+    // used to be dropped from the change set with no 422, chip or write.
+    const wrongEnum = await api.post(url, {
+      edits: [{ settingKey: "Difficulty", value: false }],
+    });
+    expect(wrongEnum.statusCode).toBe(422);
+    expect(wrongEnum.json()).toEqual({
+      error: "invalid_value",
+      key: "Difficulty",
+      message: "Must be one of the listed choices.",
+    });
+    // Text for a number is refused the same way. A number out of range is
+    // not: it stays a validation error on the draft (the write path tests).
+    const kind = await api.post(url, {
+      edits: [{ settingKey: "ServerPlayerMaxNum", value: "many" }],
+    });
+    expect(kind.statusCode).toBe(422);
+    expect(kind.json()).toEqual({
+      error: "invalid_value",
+      key: "ServerPlayerMaxNum",
+      message: "Must be a number.",
+    });
+    // false is still a value of a bool setting: the edit is kept and works.
+    const kept = await change(api, slug, { bIsShowJoinLeftMessage: false });
+    expect(
+      kept.diff.semantic.some(
+        (chip) => chip.settingKey === "bIsShowJoinLeftMessage",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("the write path (rnd-report-1 2.7)", () => {

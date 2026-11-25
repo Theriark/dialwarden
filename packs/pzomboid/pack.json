@@ -1,0 +1,3604 @@
+{
+  "id": "pzomboid",
+  "version": "1.0.0",
+  "displayName": "Project Zomboid",
+  "steamAppId": 380870,
+  "builds": {
+    "from": 42,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "steamapps/appmanifest_380870.acf"
+      },
+      {
+        "path": "start-server.sh",
+        "os": ["linux"]
+      },
+      {
+        "path": "StartServer64.bat",
+        "os": ["windows"]
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "serverini",
+      "paths": {
+        "linux": ["Zomboid/Server/servertest.ini"],
+        "windows": ["Zomboid/Server/servertest.ini"]
+      },
+      "adapter": "ini",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime"
+    },
+    {
+      "id": "sandbox",
+      "paths": {
+        "linux": ["Zomboid/Server/servertest_SandboxVars.lua"],
+        "windows": ["Zomboid/Server/servertest_SandboxVars.lua"]
+      },
+      "adapter": "lua",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only",
+      "launchSources": [
+        {
+          "kind": "args"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "PublicName",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PublicName"
+      },
+      "type": "string",
+      "default": "My PZ Server",
+      "min": 1,
+      "max": 64,
+      "group": "Identity",
+      "liveReloadable": true,
+      "panelManaged": true,
+      "description": "Title of the server in the browser lists; a short, unique name helps players find it again."
+    },
+    {
+      "key": "PublicDescription",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PublicDescription"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Identity",
+      "liveReloadable": true,
+      "description": "Text shown beneath the title in the in-game server list; an escape sequence is needed for a line break."
+    },
+    {
+      "key": "Public",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Public"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Identity",
+      "liveReloadable": true,
+      "description": "Whether the in-game public list advertises this server; the Steam browser listing is handled separately."
+    },
+    {
+      "key": "DefaultPort",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DefaultPort"
+      },
+      "type": "int",
+      "default": 16261,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Primary UDP port players connect to. Needs a restart plus matching firewall and forwarding rules."
+    },
+    {
+      "key": "UDPPort",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "UDPPort"
+      },
+      "type": "int",
+      "default": 16262,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Second UDP port for direct client traffic. Must differ from the primary port; there is no launch flag for it."
+    },
+    {
+      "key": "MaxPlayers",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "MaxPlayers"
+      },
+      "type": "int",
+      "default": 32,
+      "min": 1,
+      "max": 254,
+      "unit": "players",
+      "group": "Network",
+      "liveReloadable": true,
+      "panelManaged": true,
+      "description": "Upper limit of connected non-admin players. Large counts strain map streaming; test before going past 32."
+    },
+    {
+      "key": "Password",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Password"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Network",
+      "secret": true,
+      "liveReloadable": true,
+      "panelManaged": true,
+      "description": "Join password every client must enter; blank means anyone can connect. Stored as plain text in the file."
+    },
+    {
+      "key": "PingLimit",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PingLimit"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 5000,
+      "unit": "ms",
+      "group": "Network",
+      "liveReloadable": true,
+      "description": "Latency above which a player is disconnected; zero turns the check off."
+    },
+    {
+      "key": "UPnP",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "UPnP"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Asks a UPnP-capable router to open the game ports by itself; turn off where forwarding is set up by hand."
+    },
+    {
+      "key": "SteamVAC",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SteamVAC"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Turns on Valve anti-cheat checks for joining Steam clients; a launch flag can override it."
+    },
+    {
+      "key": "DenyLoginOnOverloadedServer",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DenyLoginOnOverloadedServer"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "liveReloadable": true,
+      "description": "Refuses new logins while the server reports an overload, protecting sessions already in progress."
+    },
+    {
+      "key": "RCONPort",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "RCONPort"
+      },
+      "type": "int",
+      "default": 27015,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Remote console",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "TCP port of the remote console the Dialwarden hooks use. It only listens when the console password is set."
+    },
+    {
+      "key": "RCONPassword",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "RCONPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Remote console",
+      "secret": true,
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Shared secret for the remote console. Left empty, the console is silently off and no hook can reach the server."
+    },
+    {
+      "key": "Open",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Open"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Access",
+      "liveReloadable": true,
+      "description": "On: a first-time player creates an account just by joining. Off: only accounts made by an admin can log in."
+    },
+    {
+      "key": "AutoCreateUserInWhiteList",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "AutoCreateUserInWhiteList"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Access",
+      "removedIn": "42",
+      "description": "Build 41 only: it added unknown names to the whitelist. Build 42 ignores it; kept untouched when found, never added."
+    },
+    {
+      "key": "DropOffWhiteListAfterDeath",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DropOffWhiteListAfterDeath"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Access",
+      "liveReloadable": true,
+      "description": "Deletes an account once its character dies, giving closed servers a one-life-per-account rule."
+    },
+    {
+      "key": "MaxAccountsPerUser",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "MaxAccountsPerUser"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 50,
+      "unit": "count",
+      "group": "Access",
+      "liveReloadable": true,
+      "description": "How many user names one Steam account may register on this server; zero removes the cap."
+    },
+    {
+      "key": "DoLuaChecksum",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DoLuaChecksum"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Access",
+      "restartRequired": true,
+      "description": "Rejects clients whose scripts differ from the server copy. Switch off only briefly while debugging mod mismatches."
+    },
+    {
+      "key": "AntiCheatProtectionType1",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "AntiCheatProtectionType1"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Access",
+      "removedIn": "42",
+      "description": "Build 41 anti-cheat switch; Build 42 replaced the numbered switches with named integer settings. Kept, never added."
+    },
+    {
+      "key": "Mods",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Mods"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Mods and world",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Mod IDs to activate, separated by semicolons, in load order. IDs may contain spaces; one Workshop item can hold several."
+    },
+    {
+      "key": "WorkshopItems",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "WorkshopItems"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Mods and world",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Numeric Workshop item IDs fetched when the server starts, separated by semicolons. Downloading an item does not activate the mods inside it."
+    },
+    {
+      "key": "Map",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Map"
+      },
+      "type": "string",
+      "default": "Muldraugh, KY",
+      "max": 256,
+      "group": "Mods and world",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Map folder names separated by semicolons. Custom maps come first; the base map entry is expected last."
+    },
+    {
+      "key": "SpawnPoint",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SpawnPoint"
+      },
+      "type": "string",
+      "default": "0,0,0",
+      "max": 32,
+      "group": "Mods and world",
+      "liveReloadable": true,
+      "description": "Fixed x,y,z start location for every new character; 0,0,0 keeps the normal spawn region choice."
+    },
+    {
+      "key": "SpawnItems",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SpawnItems"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Mods and world",
+      "liveReloadable": true,
+      "description": "Item type IDs in Module.Item form, comma separated, given to each new character on first spawn."
+    },
+    {
+      "key": "Seed",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Seed"
+      },
+      "type": "string",
+      "max": 32,
+      "group": "Mods and world",
+      "restartRequired": true,
+      "description": "World generation seed. Only takes effect on a fresh world or after the stored world-generation data is removed."
+    },
+    {
+      "key": "ResetID",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "ResetID"
+      },
+      "type": "int",
+      "min": 0,
+      "max": 2147483647,
+      "group": "Mods and world",
+      "restartRequired": true,
+      "description": "Soft-reset marker. A mismatch forces players to make new characters, so treat it as read-only unless wiping."
+    },
+    {
+      "key": "PVP",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PVP"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Master switch letting characters damage one another; the personal opt-in is handled by the safety system."
+    },
+    {
+      "key": "SafetySystem",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafetySystem"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Gives each player a personal PVP toggle. With it off and PVP on, every player is always attackable."
+    },
+    {
+      "key": "ShowSafety",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "ShowSafety"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Draws a marker above characters whose PVP toggle is active, so others can see who is hostile."
+    },
+    {
+      "key": "SafetyToggleTimer",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafetyToggleTimer"
+      },
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 1000,
+      "unit": "seconds",
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Delay before a change of a player's personal PVP state actually takes hold."
+    },
+    {
+      "key": "PVPMeleeDamageModifier",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PVPMeleeDamageModifier"
+      },
+      "type": "float",
+      "default": 30.0,
+      "min": 0,
+      "max": 500,
+      "unit": "percent",
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Scales close-combat damage between players; the stock value is far below full strength."
+    },
+    {
+      "key": "PVPFirearmDamageModifier",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PVPFirearmDamageModifier"
+      },
+      "type": "float",
+      "default": 50.0,
+      "min": 0,
+      "max": 500,
+      "unit": "percent",
+      "group": "PVP",
+      "liveReloadable": true,
+      "description": "Scales gun damage between players; raise it for harsher encounters, lower it for softer ones."
+    },
+    {
+      "key": "PauseEmpty",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PauseEmpty"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Stops the in-game clock while nobody is online, so the world does not decay between sessions."
+    },
+    {
+      "key": "SleepAllowed",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SleepAllowed"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Lets tired characters use beds. Sleep stays optional unless needing sleep is also on."
+    },
+    {
+      "key": "SleepNeeded",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SleepNeeded"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Makes fatigue build up until characters must sleep. Has no effect while beds are not allowed."
+    },
+    {
+      "key": "FastForwardMultiplier",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "FastForwardMultiplier"
+      },
+      "type": "float",
+      "default": 40.0,
+      "min": 1,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "How much faster game time runs while every connected player is asleep at once."
+    },
+    {
+      "key": "NoFire",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "NoFire"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Blocks all fire except campfires, a common guard against arson griefing on public servers."
+    },
+    {
+      "key": "AnnounceDeath",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "AnnounceDeath"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Broadcasts a chat notice to everyone whenever a player character dies."
+    },
+    {
+      "key": "KnockedDownAllowed",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "KnockedDownAllowed"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Lets players knock each other to the ground. Experimental in Build 42 and may desync positions."
+    },
+    {
+      "key": "ItemNumbersLimitPerContainer",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "ItemNumbersLimitPerContainer"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 9000,
+      "unit": "count",
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Caps the number of items per container, where every single nail counts; zero means no cap."
+    },
+    {
+      "key": "CarEngineAttractionModifier",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "CarEngineAttractionModifier"
+      },
+      "type": "float",
+      "default": 0.5,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Scales how far running engines pull zombies in; lower values can also ease server load."
+    },
+    {
+      "key": "AllowDestructionBySledgehammer",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "AllowDestructionBySledgehammer"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Permits demolishing walls and world objects with a sledgehammer; turn off to curb griefing."
+    },
+    {
+      "key": "PlayerBumpPlayer",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PlayerBumpPlayer"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Running into another player can shove them over; usually left off on crowded servers."
+    },
+    {
+      "key": "BloodSplatLifespanDays",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "BloodSplatLifespanDays"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 365,
+      "unit": "days",
+      "group": "Gameplay",
+      "liveReloadable": true,
+      "description": "Age at which old blood decals are cleared when a chunk loads; zero keeps them. The sandbox file holds a copy of this key."
+    },
+    {
+      "key": "PlayerSafehouse",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "PlayerSafehouse"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Allows ordinary players, not just staff, to claim a building as their protected safehouse."
+    },
+    {
+      "key": "AdminSafehouse",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "AdminSafehouse"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Restricts safehouse claims to staff accounts; use it for curated or event servers."
+    },
+    {
+      "key": "SafehouseAllowTrepass",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehouseAllowTrepass"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Non-members may walk into a claimed safehouse. The key is misspelled by the game itself; never correct it."
+    },
+    {
+      "key": "SafehouseAllowFire",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehouseAllowFire"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Fire can damage claimed safehouses; turning it off protects them from arson."
+    },
+    {
+      "key": "SafehouseAllowLoot",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehouseAllowLoot"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Non-members may take items from containers inside a safehouse claimed by somebody else."
+    },
+    {
+      "key": "SafehouseAllowRespawn",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehouseAllowRespawn"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "A member who dies can choose to come back inside the safehouse they belonged to."
+    },
+    {
+      "key": "SafehouseDaySurvivedToClaim",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehouseDaySurvivedToClaim"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 365,
+      "unit": "days",
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "In-game days a character must stay alive before being allowed to claim a safehouse."
+    },
+    {
+      "key": "SafeHouseRemovalTime",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafeHouseRemovalTime"
+      },
+      "type": "int",
+      "default": 144,
+      "min": 0,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Real-world hours of absence after which a member is removed from their safehouse."
+    },
+    {
+      "key": "DisableSafehouseWhenOwnerConnected",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DisableSafehouseWhenOwnerConnected"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Protection applies only while the owner is offline. Build 42 name; Build 41 used DisableSafehouseWhenPlayerConnected."
+    },
+    {
+      "key": "SafehousePreventsLootRespawn",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SafehousePreventsLootRespawn"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Containers inside claimed safehouses are skipped when the sandbox loot refill runs."
+    },
+    {
+      "key": "Faction",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "Faction"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Safehouses",
+      "liveReloadable": true,
+      "description": "Lets players found factions with group tags; turn off for purely cooperative servers."
+    },
+    {
+      "key": "GlobalChat",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "GlobalChat"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Enables the chat channel that reaches every connected player regardless of distance."
+    },
+    {
+      "key": "ChatStreams",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "ChatStreams"
+      },
+      "type": "string",
+      "default": "s,r,a,w,y,sh,f,all",
+      "max": 32,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Comma list of chat channel codes clients may use: say, radio, admin, whisper, yell, safehouse, faction or all."
+    },
+    {
+      "key": "ServerWelcomeMessage",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "ServerWelcomeMessage"
+      },
+      "type": "string",
+      "max": 1024,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Greeting shown in chat at login. The game's own line-break and colour tags work inside it."
+    },
+    {
+      "key": "DisplayUserName",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DisplayUserName"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Shows the account name of each player floating above their character."
+    },
+    {
+      "key": "MouseOverToSeeDisplayName",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "MouseOverToSeeDisplayName"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Names appear only while the cursor hovers over a character, which keeps the screen less cluttered."
+    },
+    {
+      "key": "MapRemotePlayerVisibility",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "MapRemotePlayerVisibility"
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Hidden"
+        },
+        {
+          "value": 2,
+          "label": "Friends"
+        },
+        {
+          "value": 3,
+          "label": "Friends and nearby"
+        },
+        {
+          "value": 4,
+          "label": "Everyone"
+        }
+      ],
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Who shows up on the world map for each player."
+    },
+    {
+      "key": "VoiceEnable",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "VoiceEnable"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Turns the built-in proximity voice chat on; its distance settings sit next to it in the file."
+    },
+    {
+      "key": "VoiceMinDistance",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "VoiceMinDistance"
+      },
+      "type": "float",
+      "default": 10.0,
+      "min": 0,
+      "max": 100000,
+      "unit": "tiles",
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Nearest range, in tiles, at which voice chat starts to fade with distance."
+    },
+    {
+      "key": "VoiceMaxDistance",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "VoiceMaxDistance"
+      },
+      "type": "float",
+      "default": 100.0,
+      "min": 0,
+      "max": 100000,
+      "unit": "tiles",
+      "group": "Chat",
+      "liveReloadable": true,
+      "description": "Range in tiles beyond which other players' voice chat goes silent."
+    },
+    {
+      "key": "SaveWorldEveryMinutes",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "SaveWorldEveryMinutes"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1440,
+      "unit": "minutes",
+      "group": "Saving",
+      "liveReloadable": true,
+      "description": "Real-time interval for saving loaded map areas; zero relies only on the usual save moments."
+    },
+    {
+      "key": "BackupsCount",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "BackupsCount"
+      },
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 300,
+      "unit": "count",
+      "group": "Saving",
+      "liveReloadable": true,
+      "description": "How many rotating world backups the server keeps before deleting the oldest."
+    },
+    {
+      "key": "BackupsOnStart",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "BackupsOnStart"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Saving",
+      "restartRequired": true,
+      "description": "Takes a backup on every boot. Only checked at startup, so a change applies from the next start."
+    },
+    {
+      "key": "BackupsPeriod",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "BackupsPeriod"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1500,
+      "unit": "minutes",
+      "group": "Saving",
+      "liveReloadable": true,
+      "description": "Gap between automatic backups while running; zero turns periodic backups off."
+    },
+    {
+      "key": "DiscordEnable",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DiscordEnable"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Integrations",
+      "restartRequired": true,
+      "description": "Connects global chat to a Discord channel through a bot account that you supply."
+    },
+    {
+      "key": "DiscordToken",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DiscordToken"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Integrations",
+      "secret": true,
+      "restartRequired": true,
+      "description": "Bot token used by the Discord bridge. Treat it like a password and never show it in logs."
+    },
+    {
+      "key": "DiscordChatChannel",
+      "file": "serverini",
+      "locator": {
+        "kind": "ini",
+        "section": null,
+        "key": "DiscordChatChannel"
+      },
+      "type": "string",
+      "default": "",
+      "max": 128,
+      "group": "Integrations",
+      "restartRequired": true,
+      "description": "Build 42 channel name for relayed chat. Build 41 used a channel name and a channel id pair instead."
+    },
+    {
+      "key": "SandboxVars.Zombies",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Zombies"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Insane"
+        },
+        {
+          "value": 2,
+          "label": "Very high"
+        },
+        {
+          "value": 3,
+          "label": "High"
+        },
+        {
+          "value": 4,
+          "label": "Normal"
+        },
+        {
+          "value": 5,
+          "label": "Low"
+        },
+        {
+          "value": 6,
+          "label": "None"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Population preset; choosing one also rewrites the population multiplier below it."
+    },
+    {
+      "key": "SandboxVars.Distribution",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Distribution"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Urban focused"
+        },
+        {
+          "value": 2,
+          "label": "Uniform"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Where the dead gather across the map."
+    },
+    {
+      "key": "SandboxVars.ZombieRespawn",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieRespawn"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "High"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Low"
+        },
+        {
+          "value": 4,
+          "label": "None"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Respawn preset for the undead population."
+    },
+    {
+      "key": "SandboxVars.ZombieMigrate",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieMigrate"]
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Population and time",
+      "description": "Lets the horde drift into cleared cells over time."
+    },
+    {
+      "key": "SandboxVars.DayLength",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "DayLength"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "15 minutes"
+        },
+        {
+          "value": 2,
+          "label": "30 minutes"
+        },
+        {
+          "value": 3,
+          "label": "1 hour"
+        },
+        {
+          "value": 4,
+          "label": "1 hour 30"
+        },
+        {
+          "value": 5,
+          "label": "2 hours"
+        },
+        {
+          "value": 6,
+          "label": "3 hours"
+        },
+        {
+          "value": 7,
+          "label": "4 hours"
+        },
+        {
+          "value": 8,
+          "label": "5 hours"
+        },
+        {
+          "value": 9,
+          "label": "6 hours"
+        },
+        {
+          "value": 10,
+          "label": "7 hours"
+        },
+        {
+          "value": 11,
+          "label": "8 hours"
+        },
+        {
+          "value": 12,
+          "label": "9 hours"
+        },
+        {
+          "value": 13,
+          "label": "10 hours"
+        },
+        {
+          "value": 14,
+          "label": "11 hours"
+        },
+        {
+          "value": 15,
+          "label": "12 hours"
+        },
+        {
+          "value": 16,
+          "label": "13 hours"
+        },
+        {
+          "value": 17,
+          "label": "14 hours"
+        },
+        {
+          "value": 18,
+          "label": "15 hours"
+        },
+        {
+          "value": 19,
+          "label": "16 hours"
+        },
+        {
+          "value": 20,
+          "label": "17 hours"
+        },
+        {
+          "value": 21,
+          "label": "18 hours"
+        },
+        {
+          "value": 22,
+          "label": "19 hours"
+        },
+        {
+          "value": 23,
+          "label": "20 hours"
+        },
+        {
+          "value": 24,
+          "label": "21 hours"
+        },
+        {
+          "value": 25,
+          "label": "22 hours"
+        },
+        {
+          "value": 26,
+          "label": "23 hours"
+        },
+        {
+          "value": 27,
+          "label": "Real time"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Real duration of one game day."
+    },
+    {
+      "key": "SandboxVars.StartMonth",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "StartMonth"]
+      },
+      "type": "enum",
+      "default": 7,
+      "enum": [
+        {
+          "value": 1,
+          "label": "January"
+        },
+        {
+          "value": 2,
+          "label": "February"
+        },
+        {
+          "value": 3,
+          "label": "March"
+        },
+        {
+          "value": 4,
+          "label": "April"
+        },
+        {
+          "value": 5,
+          "label": "May"
+        },
+        {
+          "value": 6,
+          "label": "June"
+        },
+        {
+          "value": 7,
+          "label": "July"
+        },
+        {
+          "value": 8,
+          "label": "August"
+        },
+        {
+          "value": 9,
+          "label": "September"
+        },
+        {
+          "value": 10,
+          "label": "October"
+        },
+        {
+          "value": 11,
+          "label": "November"
+        },
+        {
+          "value": 12,
+          "label": "December"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Calendar month of the first day of a new world."
+    },
+    {
+      "key": "SandboxVars.StartTime",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "StartTime"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "7 AM"
+        },
+        {
+          "value": 2,
+          "label": "9 AM"
+        },
+        {
+          "value": 3,
+          "label": "12 PM"
+        },
+        {
+          "value": 4,
+          "label": "2 PM"
+        },
+        {
+          "value": 5,
+          "label": "5 PM"
+        },
+        {
+          "value": 6,
+          "label": "9 PM"
+        },
+        {
+          "value": 7,
+          "label": "12 AM"
+        },
+        {
+          "value": 8,
+          "label": "2 AM"
+        },
+        {
+          "value": 9,
+          "label": "5 AM"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Clock time at world start."
+    },
+    {
+      "key": "SandboxVars.TimeSinceApo",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "TimeSinceApo"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "0 months"
+        },
+        {
+          "value": 2,
+          "label": "1 month"
+        },
+        {
+          "value": 3,
+          "label": "2 months"
+        },
+        {
+          "value": 4,
+          "label": "3 months"
+        },
+        {
+          "value": 5,
+          "label": "4 months"
+        },
+        {
+          "value": 6,
+          "label": "5 months"
+        },
+        {
+          "value": 7,
+          "label": "6 months"
+        },
+        {
+          "value": 8,
+          "label": "7 months"
+        },
+        {
+          "value": 9,
+          "label": "8 months"
+        },
+        {
+          "value": 10,
+          "label": "9 months"
+        },
+        {
+          "value": 11,
+          "label": "10 months"
+        },
+        {
+          "value": 12,
+          "label": "11 months"
+        },
+        {
+          "value": 13,
+          "label": "12 months"
+        }
+      ],
+      "group": "Population and time",
+      "description": "Months already passed since the outbreak, which ages a new world."
+    },
+    {
+      "key": "SandboxVars.WaterShut",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "WaterShut"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Instant"
+        },
+        {
+          "value": 2,
+          "label": "Within 30 days"
+        },
+        {
+          "value": 3,
+          "label": "Within 2 months"
+        },
+        {
+          "value": 4,
+          "label": "Within 6 months"
+        },
+        {
+          "value": 5,
+          "label": "Within a year"
+        },
+        {
+          "value": 6,
+          "label": "Within 5 years"
+        },
+        {
+          "value": 7,
+          "label": "After 2 to 6 months"
+        },
+        {
+          "value": 8,
+          "label": "After 6 to 12 months"
+        },
+        {
+          "value": 9,
+          "label": "Never"
+        }
+      ],
+      "group": "Population and time",
+      "description": "When the taps run dry."
+    },
+    {
+      "key": "SandboxVars.ElecShut",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ElecShut"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Instant"
+        },
+        {
+          "value": 2,
+          "label": "Within 14 to 30 days"
+        },
+        {
+          "value": 3,
+          "label": "After 14 days to 2 months"
+        },
+        {
+          "value": 4,
+          "label": "After 14 days to 6 months"
+        },
+        {
+          "value": 5,
+          "label": "After 14 days to a year"
+        },
+        {
+          "value": 6,
+          "label": "After 14 days to 5 years"
+        },
+        {
+          "value": 7,
+          "label": "After 2 to 6 months"
+        },
+        {
+          "value": 8,
+          "label": "After 6 to 12 months"
+        },
+        {
+          "value": 9,
+          "label": "Never"
+        }
+      ],
+      "group": "Population and time",
+      "description": "When the power grid fails."
+    },
+    {
+      "key": "SandboxVars.FoodLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "FoodLootNew"]
+      },
+      "type": "float",
+      "default": 0.8,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for perishable food. A Build 42 number that replaces the Build 41 rarity scale."
+    },
+    {
+      "key": "SandboxVars.WeaponLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "WeaponLootNew"]
+      },
+      "type": "float",
+      "default": 0.6,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for melee weapons that are not counted as tools."
+    },
+    {
+      "key": "SandboxVars.RangedWeaponLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "RangedWeaponLootNew"]
+      },
+      "type": "float",
+      "default": 1.2,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for guns and their attachments."
+    },
+    {
+      "key": "SandboxVars.AmmoLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "AmmoLootNew"]
+      },
+      "type": "float",
+      "default": 0.6,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for rounds, boxes and magazines."
+    },
+    {
+      "key": "SandboxVars.MedicalLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MedicalLootNew"]
+      },
+      "type": "float",
+      "default": 0.6,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for medicine and first-aid supplies."
+    },
+    {
+      "key": "SandboxVars.SkillBookLoot",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "SkillBookLoot"]
+      },
+      "type": "float",
+      "default": 0.6,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Spawn weight for books that boost skill experience."
+    },
+    {
+      "key": "SandboxVars.OtherLootNew",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "OtherLootNew"]
+      },
+      "type": "float",
+      "default": 0.8,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Catch-all weight for items without a category; it also affects foraging in towns."
+    },
+    {
+      "key": "SandboxVars.RollsMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "RollsMultiplier"]
+      },
+      "type": "float",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Loot",
+      "description": "Multiplies loot-table rolls. The game allows far more, but high values hurt performance, so this cap is lower."
+    },
+    {
+      "key": "SandboxVars.LootItemRemovalList",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "LootItemRemovalList"]
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Loot",
+      "description": "Item types, separated by commas, that the loot tables leave out of ordinary containers."
+    },
+    {
+      "key": "SandboxVars.HoursForLootRespawn",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "HoursForLootRespawn"]
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Loot",
+      "description": "Game hours after which emptied town containers fill up again; 0 turns refilling off."
+    },
+    {
+      "key": "SandboxVars.MaxItemsForLootRespawn",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MaxItemsForLootRespawn"]
+      },
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 1000,
+      "unit": "count",
+      "group": "Loot",
+      "description": "Containers holding at least this many items are skipped by the refill."
+    },
+    {
+      "key": "SandboxVars.MaximumLooted",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MaximumLooted"]
+      },
+      "type": "int",
+      "default": 25,
+      "min": 0,
+      "max": 200,
+      "unit": "percent",
+      "group": "Loot",
+      "description": "Top chance in percent that a building is found already looted."
+    },
+    {
+      "key": "SandboxVars.Temperature",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Temperature"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very cold"
+        },
+        {
+          "value": 2,
+          "label": "Cold"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "Hot"
+        },
+        {
+          "value": 5,
+          "label": "Very hot"
+        }
+      ],
+      "group": "Environment",
+      "description": "Climate offset for the whole map."
+    },
+    {
+      "key": "SandboxVars.Rain",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Rain"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very dry"
+        },
+        {
+          "value": 2,
+          "label": "Dry"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "Rainy"
+        },
+        {
+          "value": 5,
+          "label": "Very rainy"
+        }
+      ],
+      "group": "Environment",
+      "description": "How often it rains across the world."
+    },
+    {
+      "key": "SandboxVars.ErosionSpeed",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ErosionSpeed"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "20 days"
+        },
+        {
+          "value": 2,
+          "label": "50 days"
+        },
+        {
+          "value": 3,
+          "label": "100 days"
+        },
+        {
+          "value": 4,
+          "label": "200 days"
+        },
+        {
+          "value": 5,
+          "label": "500 days"
+        }
+      ],
+      "group": "Environment",
+      "description": "How fast nature reclaims the map."
+    },
+    {
+      "key": "SandboxVars.StatsDecrease",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "StatsDecrease"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very fast"
+        },
+        {
+          "value": 2,
+          "label": "Fast"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "Slow"
+        },
+        {
+          "value": 5,
+          "label": "Very slow"
+        }
+      ],
+      "group": "Environment",
+      "description": "Drain rate of hunger, thirst and fatigue."
+    },
+    {
+      "key": "SandboxVars.NatureAbundance",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "NatureAbundance"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very poor"
+        },
+        {
+          "value": 2,
+          "label": "Poor"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "Abundant"
+        },
+        {
+          "value": 5,
+          "label": "Very abundant"
+        }
+      ],
+      "group": "Environment",
+      "description": "How much foraging yields in the wild."
+    },
+    {
+      "key": "SandboxVars.FoodRotSpeed",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "FoodRotSpeed"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very fast"
+        },
+        {
+          "value": 2,
+          "label": "Fast"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "Slow"
+        },
+        {
+          "value": 5,
+          "label": "Very slow"
+        }
+      ],
+      "group": "Environment",
+      "description": "Spoilage pace of food."
+    },
+    {
+      "key": "SandboxVars.Nutrition",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Nutrition"]
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Environment",
+      "description": "When on, calories and nutrients change body weight and health."
+    },
+    {
+      "key": "SandboxVars.StarterKit",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "StarterKit"]
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Environment",
+      "description": "New characters start with a small bag of basic gear."
+    },
+    {
+      "key": "SandboxVars.CharacterFreePoints",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "CharacterFreePoints"]
+      },
+      "type": "int",
+      "default": 0,
+      "min": -100,
+      "max": 100,
+      "unit": "count",
+      "group": "Environment",
+      "description": "Bonus or penalty trait points available at character creation."
+    },
+    {
+      "key": "SandboxVars.HoursForCorpseRemoval",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "HoursForCorpseRemoval"]
+      },
+      "type": "float",
+      "default": 216.0,
+      "min": -1,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Environment",
+      "description": "Game hours before bodies vanish; zero also stops maggots."
+    },
+    {
+      "key": "SandboxVars.Helicopter",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Helicopter"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Once"
+        },
+        {
+          "value": 3,
+          "label": "Sometimes"
+        },
+        {
+          "value": 4,
+          "label": "Often"
+        }
+      ],
+      "group": "Environment",
+      "description": "How often the helicopter event happens."
+    },
+    {
+      "key": "SandboxVars.MetaEvent",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MetaEvent"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Sometimes"
+        },
+        {
+          "value": 3,
+          "label": "Often"
+        }
+      ],
+      "group": "Environment",
+      "description": "Off-screen noises that pull zombies toward players."
+    },
+    {
+      "key": "SandboxVars.GeneratorSpawning",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "GeneratorSpawning"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "None"
+        },
+        {
+          "value": 2,
+          "label": "Insanely rare"
+        },
+        {
+          "value": 3,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 4,
+          "label": "Rare"
+        },
+        {
+          "value": 5,
+          "label": "Normal"
+        },
+        {
+          "value": 6,
+          "label": "Common"
+        },
+        {
+          "value": 7,
+          "label": "Abundant"
+        }
+      ],
+      "group": "Environment",
+      "description": "How rare generators are."
+    },
+    {
+      "key": "SandboxVars.Alarm",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Alarm"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 3,
+          "label": "Rare"
+        },
+        {
+          "value": 4,
+          "label": "Sometimes"
+        },
+        {
+          "value": 5,
+          "label": "Often"
+        },
+        {
+          "value": 6,
+          "label": "Very often"
+        }
+      ],
+      "group": "Environment",
+      "description": "Chance of tripping a house alarm."
+    },
+    {
+      "key": "SandboxVars.LockedHouses",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "LockedHouses"]
+      },
+      "type": "enum",
+      "default": 6,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 3,
+          "label": "Rare"
+        },
+        {
+          "value": 4,
+          "label": "Sometimes"
+        },
+        {
+          "value": 5,
+          "label": "Often"
+        },
+        {
+          "value": 6,
+          "label": "Very often"
+        }
+      ],
+      "group": "Environment",
+      "description": "How often house doors are locked."
+    },
+    {
+      "key": "SandboxVars.HoursForWorldItemRemoval",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "HoursForWorldItemRemoval"]
+      },
+      "type": "float",
+      "default": 24.0,
+      "min": 0,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Environment",
+      "description": "Game hours before listed floor items are cleaned up; zero means off."
+    },
+    {
+      "key": "SandboxVars.BloodSplatLifespanDays",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "BloodSplatLifespanDays"]
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 365,
+      "unit": "days",
+      "group": "Environment",
+      "description": "Sandbox copy of the blood decal lifetime; the ini file holds a key with the same name, and each file keeps its own."
+    },
+    {
+      "key": "SandboxVars.EnableVehicles",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "EnableVehicles"]
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Vehicles",
+      "description": "Master switch for cars spawning in the world."
+    },
+    {
+      "key": "SandboxVars.CarSpawnRate",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "CarSpawnRate"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "None"
+        },
+        {
+          "value": 2,
+          "label": "Very low"
+        },
+        {
+          "value": 3,
+          "label": "Low"
+        },
+        {
+          "value": 4,
+          "label": "Normal"
+        },
+        {
+          "value": 5,
+          "label": "High"
+        }
+      ],
+      "group": "Vehicles",
+      "description": "How many vehicles stand around the map."
+    },
+    {
+      "key": "SandboxVars.InitialGas",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "InitialGas"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Very low"
+        },
+        {
+          "value": 2,
+          "label": "Low"
+        },
+        {
+          "value": 3,
+          "label": "Normal"
+        },
+        {
+          "value": 4,
+          "label": "High"
+        },
+        {
+          "value": 5,
+          "label": "Very high"
+        },
+        {
+          "value": 6,
+          "label": "Full"
+        }
+      ],
+      "group": "Vehicles",
+      "description": "Fuel left in found cars."
+    },
+    {
+      "key": "SandboxVars.LockedCar",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "LockedCar"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 3,
+          "label": "Rare"
+        },
+        {
+          "value": 4,
+          "label": "Sometimes"
+        },
+        {
+          "value": 5,
+          "label": "Often"
+        },
+        {
+          "value": 6,
+          "label": "Very often"
+        }
+      ],
+      "group": "Vehicles",
+      "description": "How often cars are locked."
+    },
+    {
+      "key": "SandboxVars.FuelStationGasInfinite",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "FuelStationGasInfinite"]
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Vehicles",
+      "description": "Fuel pumps never run dry."
+    },
+    {
+      "key": "SandboxVars.AnimalRanchChance",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "AnimalRanchChance"]
+      },
+      "type": "enum",
+      "default": 5,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 3,
+          "label": "Rare"
+        },
+        {
+          "value": 4,
+          "label": "Sometimes"
+        },
+        {
+          "value": 5,
+          "label": "Often"
+        },
+        {
+          "value": 6,
+          "label": "Very often"
+        },
+        {
+          "value": 7,
+          "label": "Always"
+        }
+      ],
+      "group": "Build 42 systems",
+      "description": "How often farms still hold livestock."
+    },
+    {
+      "key": "SandboxVars.MaximumRatIndex",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MaximumRatIndex"]
+      },
+      "type": "int",
+      "default": 25,
+      "min": 0,
+      "max": 50,
+      "unit": "level",
+      "group": "Build 42 systems",
+      "description": "Peak vermin intensity in infested buildings."
+    },
+    {
+      "key": "SandboxVars.Basement.SpawnFrequency",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Basement", "SpawnFrequency"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Never"
+        },
+        {
+          "value": 2,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 3,
+          "label": "Rare"
+        },
+        {
+          "value": 4,
+          "label": "Sometimes"
+        },
+        {
+          "value": 5,
+          "label": "Often"
+        },
+        {
+          "value": 6,
+          "label": "Very often"
+        },
+        {
+          "value": 7,
+          "label": "Always"
+        }
+      ],
+      "group": "Build 42 systems",
+      "description": "How often random basements are placed."
+    },
+    {
+      "key": "SandboxVars.Map.AllowMiniMap",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "Map", "AllowMiniMap"]
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Build 42 systems",
+      "description": "Offers a corner minimap to players."
+    },
+    {
+      "key": "SandboxVars.MultiplierConfig.Global",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MultiplierConfig", "Global"]
+      },
+      "type": "float",
+      "default": 1.0,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Build 42 systems",
+      "description": "Experience rate for all skills, replacing the Build 41 global multiplier. The game allows far more; this cap keeps it sane."
+    },
+    {
+      "key": "SandboxVars.MultiplierConfig.GlobalToggle",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "MultiplierConfig", "GlobalToggle"]
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Build 42 systems",
+      "description": "On: the global rate applies to every skill. Off: the per-skill rates apply."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Speed",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Speed"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Sprinters"
+        },
+        {
+          "value": 2,
+          "label": "Fast shamblers"
+        },
+        {
+          "value": 3,
+          "label": "Shamblers"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How fast zombies move once they notice prey."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.SprinterPercentage",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "SprinterPercentage"]
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "unit": "percent",
+      "group": "Zombie lore",
+      "description": "Share of sprinters in percent, used only when movement is set to random."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Strength",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Strength"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Superhuman"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Weak"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How hard zombies hit."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Toughness",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Toughness"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Tough"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Fragile"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How much damage zombies take before dying."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Transmission",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Transmission"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Blood and saliva"
+        },
+        {
+          "value": 2,
+          "label": "Saliva only"
+        },
+        {
+          "value": 3,
+          "label": "Everyone carries it"
+        },
+        {
+          "value": 4,
+          "label": "None"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How the infection spreads."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Mortality",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Mortality"]
+      },
+      "type": "enum",
+      "default": 5,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Instant"
+        },
+        {
+          "value": 2,
+          "label": "Within 30 seconds"
+        },
+        {
+          "value": 3,
+          "label": "Within a minute"
+        },
+        {
+          "value": 4,
+          "label": "Within 12 hours"
+        },
+        {
+          "value": 5,
+          "label": "2 to 3 days"
+        },
+        {
+          "value": 6,
+          "label": "1 to 2 weeks"
+        },
+        {
+          "value": 7,
+          "label": "Never"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "Time until the infection kills."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Reanimate",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Reanimate"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Instant"
+        },
+        {
+          "value": 2,
+          "label": "Within 30 seconds"
+        },
+        {
+          "value": 3,
+          "label": "Within a minute"
+        },
+        {
+          "value": 4,
+          "label": "Within 12 hours"
+        },
+        {
+          "value": 5,
+          "label": "2 to 3 days"
+        },
+        {
+          "value": 6,
+          "label": "1 to 2 weeks"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "Time until the infected dead rise again."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Cognition",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Cognition"]
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Navigate and open doors"
+        },
+        {
+          "value": 2,
+          "label": "Navigate"
+        },
+        {
+          "value": 3,
+          "label": "Basic navigation"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How clever zombies are."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Memory",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Memory"]
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Long"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Short"
+        },
+        {
+          "value": 4,
+          "label": "None"
+        },
+        {
+          "value": 5,
+          "label": "Random"
+        },
+        {
+          "value": 6,
+          "label": "Random normal or none"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How long zombies keep chasing."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Sight",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Sight"]
+      },
+      "type": "enum",
+      "default": 5,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Eagle"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Poor"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        },
+        {
+          "value": 5,
+          "label": "Random normal or poor"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How well zombies see."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.Hearing",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "Hearing"]
+      },
+      "type": "enum",
+      "default": 5,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Pinpoint"
+        },
+        {
+          "value": 2,
+          "label": "Normal"
+        },
+        {
+          "value": 3,
+          "label": "Poor"
+        },
+        {
+          "value": 4,
+          "label": "Random"
+        },
+        {
+          "value": 5,
+          "label": "Random normal or poor"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "How well zombies hear."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.ActiveOnly",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "ActiveOnly"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "Both"
+        },
+        {
+          "value": 2,
+          "label": "Night"
+        },
+        {
+          "value": 3,
+          "label": "Day"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "When the dead are fully active."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.ThumpOnConstruction",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "ThumpOnConstruction"]
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Zombie lore",
+      "description": "Zombies can break structures built by players."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.DisableFakeDead",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "DisableFakeDead"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "World zombies"
+        },
+        {
+          "value": 2,
+          "label": "World and combat zombies"
+        },
+        {
+          "value": 3,
+          "label": "Never"
+        }
+      ],
+      "group": "Zombie lore",
+      "description": "Corpses that only pretend to be dead."
+    },
+    {
+      "key": "SandboxVars.ZombieLore.FenceThumpersRequired",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieLore", "FenceThumpersRequired"]
+      },
+      "type": "int",
+      "default": 25,
+      "min": -1,
+      "max": 100,
+      "unit": "count",
+      "group": "Zombie lore",
+      "description": "Crowd size needed to damage tall fences."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.PopulationMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "PopulationMultiplier"]
+      },
+      "type": "float",
+      "default": 0.65,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Zombie population",
+      "description": "Base population factor written by the population preset; editing it directly overrides the preset."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.PopulationStartMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "PopulationStartMultiplier"]
+      },
+      "type": "float",
+      "default": 1.0,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Zombie population",
+      "description": "Target zombie density on day one."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.PopulationPeakMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "PopulationPeakMultiplier"]
+      },
+      "type": "float",
+      "default": 1.5,
+      "min": 0,
+      "max": 4,
+      "unit": "multiplier",
+      "group": "Zombie population",
+      "description": "Target zombie density on the peak day."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.PopulationPeakDay",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "PopulationPeakDay"]
+      },
+      "type": "int",
+      "default": 28,
+      "min": 1,
+      "max": 365,
+      "unit": "days",
+      "group": "Zombie population",
+      "description": "Day on which the population target reaches its peak."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.RespawnHours",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "RespawnHours"]
+      },
+      "type": "float",
+      "default": 0.0,
+      "min": 0,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Zombie population",
+      "description": "Game hours before a cell may repopulate; zero means never."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.RespawnUnseenHours",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "RespawnUnseenHours"]
+      },
+      "type": "float",
+      "default": 0.0,
+      "min": 0,
+      "max": 8760,
+      "unit": "hours",
+      "group": "Zombie population",
+      "description": "A chunk must go unobserved this long before it repopulates."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.RespawnMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "RespawnMultiplier"]
+      },
+      "type": "float",
+      "default": 0.0,
+      "min": 0,
+      "max": 1,
+      "unit": "multiplier",
+      "group": "Zombie population",
+      "description": "Share of the target population restored per respawn cycle."
+    },
+    {
+      "key": "SandboxVars.ZombieConfig.ZombiesCountBeforeDelete",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "ZombieConfig", "ZombiesCountBeforeDelete"]
+      },
+      "type": "int",
+      "default": 300,
+      "min": 100,
+      "max": 1000,
+      "unit": "count",
+      "group": "Zombie population",
+      "description": "Number of tracked zombies before cleanup starts. The game allows 0 to 5000; extreme values risk severe lag."
+    },
+    {
+      "key": "SandboxVars.XpMultiplier",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "XpMultiplier"]
+      },
+      "type": "float",
+      "default": 1.0,
+      "min": 0,
+      "max": 1000,
+      "unit": "multiplier",
+      "group": "Zombie population",
+      "removedIn": "42",
+      "description": "Build 41 global experience rate, replaced by the per-skill rates in Build 42. Kept, never added."
+    },
+    {
+      "key": "SandboxVars.FoodLoot",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "FoodLoot"]
+      },
+      "type": "enum",
+      "default": 4,
+      "enum": [
+        {
+          "value": 1,
+          "label": "None"
+        },
+        {
+          "value": 2,
+          "label": "Insanely rare"
+        },
+        {
+          "value": 3,
+          "label": "Extremely rare"
+        },
+        {
+          "value": 4,
+          "label": "Rare"
+        },
+        {
+          "value": 5,
+          "label": "Normal"
+        },
+        {
+          "value": 6,
+          "label": "Common"
+        }
+      ],
+      "group": "Loot",
+      "removedIn": "42",
+      "description": "Build 41 rarity scale for food; Build 42 uses numeric spawn weights instead. Kept, never added."
+    },
+    {
+      "key": "SandboxVars.LootRespawn",
+      "file": "sandbox",
+      "locator": {
+        "kind": "lua",
+        "path": ["SandboxVars", "LootRespawn"]
+      },
+      "type": "enum",
+      "default": 1,
+      "enum": [
+        {
+          "value": 1,
+          "label": "None"
+        },
+        {
+          "value": 2,
+          "label": "Every day"
+        },
+        {
+          "value": 3,
+          "label": "Every week"
+        },
+        {
+          "value": 4,
+          "label": "Every month"
+        }
+      ],
+      "group": "Loot",
+      "removedIn": "42",
+      "description": "Build 41 loot refill period, replaced by the hour-based refill in Build 42. Kept, never added."
+    }
+  ],
+  "rules": [
+    {
+      "id": "rcon-password-empty",
+      "severity": "error",
+      "settings": ["RCONPassword"],
+      "message": "The remote console has no password, so it stays off and the save and stop hooks cannot reach the server.",
+      "when": {
+        "==": [
+          {
+            "var": "RCONPassword"
+          },
+          ""
+        ]
+      }
+    },
+    {
+      "id": "port-collision",
+      "severity": "error",
+      "settings": ["DefaultPort", "UDPPort", "RCONPort"],
+      "message": "Two services share a port. The two game ports and the remote console port must all differ.",
+      "when": {
+        "or": [
+          {
+            "==": [
+              {
+                "var": "DefaultPort"
+              },
+              {
+                "var": "UDPPort"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "RCONPort"
+              },
+              {
+                "var": "DefaultPort"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "RCONPort"
+              },
+              {
+                "var": "UDPPort"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "workshop-without-mods",
+      "severity": "warning",
+      "settings": ["WorkshopItems", "Mods"],
+      "message": "Workshop items are downloaded but no mod ID is activated, so none of them run.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "WorkshopItems"
+            }
+          },
+          {
+            "!": {
+              "var": "Mods"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "mods-without-workshop",
+      "severity": "info",
+      "settings": ["Mods", "WorkshopItems"],
+      "message": "Mods are activated with no Workshop items listed; fine for local mods, otherwise they will not load.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "Mods"
+            }
+          },
+          {
+            "!": {
+              "var": "WorkshopItems"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "closed-server-no-autocreate",
+      "severity": "info",
+      "settings": ["Open", "AutoCreateUserInWhiteList"],
+      "message": "The server is closed, so an admin must create every account; automatic whitelisting no longer exists in Build 42.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "Open"
+              },
+              false
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "AutoCreateUserInWhiteList"
+              },
+              false
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sleep-needed-not-allowed",
+      "severity": "warning",
+      "settings": ["SleepNeeded", "SleepAllowed"],
+      "message": "Sleep is required but beds are not allowed, so the need for sleep is ignored.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "SleepNeeded"
+              },
+              true
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "SleepAllowed"
+              },
+              false
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sprinters-ignored",
+      "severity": "info",
+      "settings": ["SandboxVars.ZombieLore.SprinterPercentage"],
+      "message": "The sprinter share only applies when zombie movement is set to random.",
+      "when": {
+        "and": [
+          {
+            ">": [
+              {
+                "var": "SandboxVars.ZombieLore.SprinterPercentage"
+              },
+              0
+            ]
+          },
+          {
+            "!=": [
+              {
+                "var": "SandboxVars.ZombieLore.Speed"
+              },
+              4
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "public-without-password",
+      "severity": "info",
+      "settings": ["Public", "Password", "Open"],
+      "message": "The server is listed publicly, open to new accounts and has no join password.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "Public"
+              },
+              true
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "Password"
+              },
+              ""
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "Open"
+              },
+              true
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "b41-key-autocreateuserinwhitelist",
+      "severity": "info",
+      "settings": ["AutoCreateUserInWhiteList"],
+      "message": "A Build 41 key in a Build 42 file: the automatic whitelist no longer exists in Build 42. The game ignores it and it is kept untouched.",
+      "when": {
+        "!=": [
+          {
+            "var": "AutoCreateUserInWhiteList"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "b41-key-anticheatprotectiontype1",
+      "severity": "info",
+      "settings": ["AntiCheatProtectionType1"],
+      "message": "A Build 41 key in a Build 42 file: Build 42 replaced the numbered anti-cheat switches. The game ignores it and it is kept untouched.",
+      "when": {
+        "!=": [
+          {
+            "var": "AntiCheatProtectionType1"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "b41-key-sandboxvars-xpmultiplier",
+      "severity": "info",
+      "settings": ["SandboxVars.XpMultiplier"],
+      "message": "A Build 41 key in a Build 42 file: Build 42 reads the per-skill rates instead. The game ignores it and it is kept untouched.",
+      "when": {
+        "!=": [
+          {
+            "var": "SandboxVars.XpMultiplier"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "b41-key-sandboxvars-foodloot",
+      "severity": "info",
+      "settings": ["SandboxVars.FoodLoot"],
+      "message": "A Build 41 key in a Build 42 file: Build 42 reads the numeric spawn weights. The game ignores it and it is kept untouched.",
+      "when": {
+        "!=": [
+          {
+            "var": "SandboxVars.FoodLoot"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "b41-key-sandboxvars-lootrespawn",
+      "severity": "info",
+      "settings": ["SandboxVars.LootRespawn"],
+      "message": "A Build 41 key in a Build 42 file: Build 42 reads the hour-based refill. The game ignores it and it is kept untouched.",
+      "when": {
+        "!=": [
+          {
+            "var": "SandboxVars.LootRespawn"
+          },
+          null
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "apocalypse",
+      "label": "Apocalypse (42 defaults)",
+      "description": "The values a freshly generated Build 42 server writes: normal population, no respawns, utilities failing early.",
+      "values": {
+        "PVP": true,
+        "PauseEmpty": true,
+        "Open": true,
+        "SleepAllowed": false,
+        "SandboxVars.Zombies": 4,
+        "SandboxVars.ZombieConfig.PopulationMultiplier": 0.65,
+        "SandboxVars.ZombieLore.Speed": 4,
+        "SandboxVars.ZombieLore.SprinterPercentage": 0,
+        "SandboxVars.ZombieLore.Transmission": 1,
+        "SandboxVars.ZombieLore.Mortality": 5,
+        "SandboxVars.ZombieRespawn": 4,
+        "SandboxVars.ZombieConfig.RespawnHours": 0.0,
+        "SandboxVars.WaterShut": 2,
+        "SandboxVars.ElecShut": 2,
+        "SandboxVars.Helicopter": 2,
+        "SandboxVars.MultiplierConfig.Global": 1.0
+      }
+    },
+    {
+      "id": "builder",
+      "label": "Builder",
+      "description": "Peaceful building: no PVP, no fire, fewer zombies, utilities that stay on and faster skill growth.",
+      "values": {
+        "PVP": false,
+        "PlayerSafehouse": true,
+        "SafehouseAllowTrepass": false,
+        "SafehouseAllowLoot": false,
+        "NoFire": true,
+        "SleepAllowed": true,
+        "AllowDestructionBySledgehammer": false,
+        "SandboxVars.Zombies": 5,
+        "SandboxVars.ZombieConfig.PopulationMultiplier": 0.15,
+        "SandboxVars.ZombieRespawn": 4,
+        "SandboxVars.ZombieConfig.RespawnHours": 0.0,
+        "SandboxVars.ZombieLore.Speed": 3,
+        "SandboxVars.ZombieLore.ThumpOnConstruction": false,
+        "SandboxVars.WaterShut": 9,
+        "SandboxVars.ElecShut": 9,
+        "SandboxVars.GeneratorSpawning": 6,
+        "SandboxVars.Helicopter": 1,
+        "SandboxVars.MetaEvent": 1,
+        "SandboxVars.MultiplierConfig.Global": 3.0,
+        "SandboxVars.CharacterFreePoints": 8,
+        "SandboxVars.StarterKit": true,
+        "SandboxVars.LockedHouses": 3
+      }
+    },
+    {
+      "id": "survivor-hard",
+      "label": "Survivor, hard",
+      "description": "Scarce loot, sprinters mixed in, fast corpse removal and rare loot refills for a harsh run.",
+      "values": {
+        "PVP": true,
+        "SafetySystem": true,
+        "SleepAllowed": true,
+        "SleepNeeded": true,
+        "PauseEmpty": true,
+        "SandboxVars.Zombies": 2,
+        "SandboxVars.ZombieConfig.PopulationMultiplier": 1.6,
+        "SandboxVars.ZombieRespawn": 3,
+        "SandboxVars.ZombieConfig.RespawnHours": 72.0,
+        "SandboxVars.ZombieConfig.RespawnUnseenHours": 16.0,
+        "SandboxVars.ZombieConfig.RespawnMultiplier": 0.1,
+        "SandboxVars.ZombieLore.Speed": 4,
+        "SandboxVars.ZombieLore.SprinterPercentage": 10,
+        "SandboxVars.ZombieLore.Sight": 2,
+        "SandboxVars.ZombieLore.Hearing": 2,
+        "SandboxVars.FoodLootNew": 0.4,
+        "SandboxVars.WeaponLootNew": 0.3,
+        "SandboxVars.RangedWeaponLootNew": 0.6,
+        "SandboxVars.AmmoLootNew": 0.3,
+        "SandboxVars.MedicalLootNew": 0.3,
+        "SandboxVars.MaximumLooted": 50,
+        "SandboxVars.WaterShut": 1,
+        "SandboxVars.ElecShut": 1,
+        "SandboxVars.Helicopter": 3,
+        "SandboxVars.MetaEvent": 3,
+        "SandboxVars.Alarm": 5,
+        "SandboxVars.StatsDecrease": 2,
+        "SandboxVars.CharacterFreePoints": 0
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "sourceRcon",
+      "portSetting": "RCONPort",
+      "passwordSetting": "RCONPassword",
+      "host": "127.0.0.1",
+      "allow": ["reloadoptions", "quit"],
+      "saveCommand": "reloadoptions",
+      "stopCommand": "quit"
+    }
+  ],
+  "hooksSupported": ["save", "stop"],
+  "sources": [
+    "https://github.com/mj8724/gameserver/tree/6c322494d24db23dfd7217813ca0b35909440fbc/docs/acceptance/evidence/vendor-config",
+    "https://github.com/Nekrasov-V-O/Zomboid-B42-files",
+    "https://github.com/Shuzzilay/KentuckyFriedSurvivors/blob/main/docker/testdata/servertest_SandboxVars.lua",
+    "https://github.com/MCrank/ZWarden",
+    "https://github.com/Danixu/project-zomboid-server-docker",
+    "https://github.com/GameServerManagers/Game-Server-Configs/blob/master/pz/server.ini",
+    "https://github.com/chrisrabe/pz-dedicated-hosting/blob/main/specs/servertest_SandboxVars.lua",
+    "https://github.com/CubeCoders/AMPTemplates",
+    "https://github.com/kaanzapkinus/ZomboidServer-arm/blob/main/templates/ProjectZomboid64.json"
+  ]
+}

@@ -1,0 +1,2457 @@
+{
+  "id": "ark-sa",
+  "version": "1.0.0",
+  "displayName": "ARK: Survival Ascended",
+  "steamAppId": 2430930,
+  "builds": {
+    "from": 0,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "ShooterGame/Binaries/Win64/ArkAscendedServer.exe"
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "gus",
+      "paths": {
+        "linux": [
+          "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini"
+        ],
+        "windows": [
+          "ShooterGame/Saved/Config/WindowsServer/GameUserSettings.ini"
+        ]
+      },
+      "adapter": "ueini",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "game",
+      "paths": {
+        "linux": ["ShooterGame/Saved/Config/WindowsServer/Game.ini"],
+        "windows": ["ShooterGame/Saved/Config/WindowsServer/Game.ini"]
+      },
+      "adapter": "ueini",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime",
+      "launchSources": [
+        {
+          "kind": "args"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "SessionName",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "SessionSettings",
+        "key": "SessionName"
+      },
+      "type": "string",
+      "group": "Identity",
+      "panelManaged": true,
+      "description": "Name players see in the in-game browser. A name given on the launch line replaces this one.",
+      "restartRequired": true
+    },
+    {
+      "key": "Message",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "MessageOfTheDay",
+        "key": "Message"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Identity",
+      "description": "Welcome text shown to players on login. A literal backslash-n in the value becomes a line break.",
+      "restartRequired": true
+    },
+    {
+      "key": "Duration",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "MessageOfTheDay",
+        "key": "Duration"
+      },
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 300,
+      "unit": "seconds",
+      "group": "Identity",
+      "description": "How many seconds the message of the day stays on screen after a player joins.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerPassword",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Identity",
+      "secret": true,
+      "panelManaged": true,
+      "description": "Password players must type to join. Leave it blank for an open server; it cannot hold a question mark or the launch chain breaks.",
+      "restartRequired": true
+    },
+    {
+      "key": "SpectatorPassword",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "SpectatorPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Identity",
+      "secret": true,
+      "description": "Separate password that lets a non-admin enter spectator mode to watch the server.",
+      "restartRequired": true
+    },
+    {
+      "key": "RCONPort",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "RCONPort"
+      },
+      "type": "int",
+      "default": 27020,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Remote console",
+      "panelManaged": true,
+      "description": "TCP port of the remote console the Dialwarden hooks use. A value on the launch line takes priority over this one.",
+      "restartRequired": true
+    },
+    {
+      "key": "RCONEnabled",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "RCONEnabled"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Remote console",
+      "description": "Turns on the remote console. The save, chat and clean-exit hooks all depend on it.",
+      "restartRequired": true
+    },
+    {
+      "key": "RCONServerGameLogBuffer",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "RCONServerGameLogBuffer"
+      },
+      "type": "float",
+      "default": 600,
+      "min": 0,
+      "max": 10000,
+      "unit": "count",
+      "group": "Remote console",
+      "description": "How many recent game-log lines the server keeps for remote console clients to fetch.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerAdminPassword",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerAdminPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 128,
+      "group": "Remote console",
+      "secret": true,
+      "panelManaged": true,
+      "description": "Unlocks admin commands and is also the remote console login. Use a long secret without spaces or question marks.",
+      "restartRequired": true
+    },
+    {
+      "key": "AdminLogging",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AdminLogging"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Remote console",
+      "description": "Copies admin command use into the chat log so players can see what admins did.",
+      "restartRequired": true
+    },
+    {
+      "key": "KickIdlePlayersPeriod",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "KickIdlePlayersPeriod"
+      },
+      "type": "float",
+      "default": 3600,
+      "min": 60,
+      "max": 86400,
+      "unit": "seconds",
+      "group": "Remote console",
+      "description": "Idle time before a player is kicked. Only applies when the server runs with the idle-kick launch flag.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoSavePeriodMinutes",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AutoSavePeriodMinutes"
+      },
+      "type": "float",
+      "default": 15,
+      "min": 1,
+      "max": 120,
+      "unit": "minutes",
+      "group": "Saving",
+      "description": "Minutes between automatic world saves. Very short intervals cause noticeable hitches.",
+      "restartRequired": true
+    },
+    {
+      "key": "XPMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "XPMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Scales experience from every source, for survivors, tribes and tamed creatures alike.",
+      "restartRequired": true
+    },
+    {
+      "key": "TamingSpeedMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "TamingSpeedMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Speeds up taming progress. A value of 2 roughly halves the time a tame takes.",
+      "restartRequired": true
+    },
+    {
+      "key": "DayCycleSpeedScale",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DayCycleSpeedScale"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Overall speed of in-game time. Values above 1 make each full day pass faster.",
+      "restartRequired": true
+    },
+    {
+      "key": "KillXPMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "KillXPMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Extra scaling applied only to experience earned from kills, on top of the global rate.",
+      "restartRequired": true
+    },
+    {
+      "key": "HarvestXPMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "HarvestXPMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Extra scaling applied only to experience earned from gathering resources.",
+      "restartRequired": true
+    },
+    {
+      "key": "CraftXPMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "CraftXPMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Extra scaling applied only to experience earned from crafting items.",
+      "restartRequired": true
+    },
+    {
+      "key": "OverrideMaxExperiencePointsPlayer",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "OverrideMaxExperiencePointsPlayer"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000000,
+      "unit": "count",
+      "group": "Progression",
+      "description": "Replaces the survivor experience cap. Zero keeps the built-in cap; a custom level ramp is usually needed too.",
+      "restartRequired": true
+    },
+    {
+      "key": "PassiveTameIntervalMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PassiveTameIntervalMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Progression",
+      "description": "Scales the wait between feedings on passive tames. Lower values let players feed sooner.",
+      "restartRequired": true
+    },
+    {
+      "key": "HarvestAmountMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "HarvestAmountMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "How many resources each gathering hit gives, for both survivors and creatures.",
+      "restartRequired": true
+    },
+    {
+      "key": "HarvestHealthMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "HarvestHealthMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "Toughness of trees, rocks and bushes. Higher values let each node take more hits.",
+      "restartRequired": true
+    },
+    {
+      "key": "ResourcesRespawnPeriodMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ResourcesRespawnPeriodMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "Regrowth delay for harvested nodes. Lower values bring them back sooner.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerHarvestingDamageMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PlayerHarvestingDamageMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "Damage survivors deal to resource nodes, which changes how fast a node is used up.",
+      "restartRequired": true
+    },
+    {
+      "key": "DinoHarvestingDamageMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "DinoHarvestingDamageMultiplier"
+      },
+      "type": "float",
+      "default": 3.2,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "Damage creatures deal to resource nodes. The shipped value is 3.2, not 1.",
+      "restartRequired": true
+    },
+    {
+      "key": "ClampResourceHarvestDamage",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ClampResourceHarvestDamage"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Harvest",
+      "description": "Limits harvest damage to the health left in the node, which curbs extreme yields from strong tames.",
+      "restartRequired": true
+    },
+    {
+      "key": "CropGrowthSpeedMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "CropGrowthSpeedMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Harvest",
+      "description": "How quickly seeds in crop plots grow into harvestable plants.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerDamageMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerDamageMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "Scales all damage that survivors deal, with weapons or with their fists.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerResistanceMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerResistanceMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "Scales damage survivors receive. Values below 1 make them harder to kill.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerCharacterFoodDrainMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerCharacterFoodDrainMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "How fast survivors get hungry. Lower values mean eating less often.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerCharacterWaterDrainMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerCharacterWaterDrainMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "How fast survivors get thirsty. Lower values mean drinking less often.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerCharacterStaminaDrainMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerCharacterStaminaDrainMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "Stamina cost of sprinting, jumping, swimming and melee for survivors.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerCharacterHealthRecoveryMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PlayerCharacterHealthRecoveryMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "Speed at which survivors regain health over time on their own.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowUnlimitedRespecs",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bAllowUnlimitedRespecs"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Survivors",
+      "description": "Lets survivors reset their stat points with a respec potion without waiting for the cooldown.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerBaseStatMultipliers.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PlayerBaseStatMultipliers[0]"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Survivors",
+      "description": "Scales the starting value of a survivor stat. The index picks the stat; index 0 is health.",
+      "restartRequired": true
+    },
+    {
+      "key": "DinoDamageMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DinoDamageMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Creatures",
+      "description": "Scales damage dealt by wild creatures. Tamed creatures use their own multiplier, TamedDinoDamageMultiplier.",
+      "restartRequired": true
+    },
+    {
+      "key": "DinoResistanceMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DinoResistanceMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Creatures",
+      "description": "Scales damage wild creatures receive; values below 1 make them tougher. Tamed creatures use TamedDinoResistanceMultiplier.",
+      "restartRequired": true
+    },
+    {
+      "key": "DinoCharacterFoodDrainMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DinoCharacterFoodDrainMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Creatures",
+      "description": "Hunger speed for creatures. It also changes how fast unconscious tames burn through food.",
+      "restartRequired": true
+    },
+    {
+      "key": "TamedDinoCharacterFoodDrainMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "TamedDinoCharacterFoodDrainMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Creatures",
+      "description": "Extra hunger scaling for tamed creatures only, applied on top of the general food drain.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxTamedDinos",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxTamedDinos"
+      },
+      "type": "float",
+      "default": 5000,
+      "min": 0,
+      "max": 100000,
+      "unit": "count",
+      "group": "Creatures",
+      "description": "Total number of tamed creatures allowed on the whole server before taming is refused.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxPersonalTamedDinos",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxPersonalTamedDinos"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 100000,
+      "unit": "count",
+      "group": "Creatures",
+      "description": "Per-tribe tame limit. Zero means no per-tribe limit; only the server-wide one applies.",
+      "restartRequired": true
+    },
+    {
+      "key": "DinoCountMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DinoCountMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Creatures",
+      "description": "Density of wild creature spawns. High values cost a lot of server CPU and memory.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowSpeedLeveling",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bAllowSpeedLeveling"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Creatures",
+      "description": "Allows putting level-up points into movement speed on ground creatures.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowFlyerSpeedLeveling",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bAllowFlyerSpeedLeveling"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Creatures",
+      "description": "Allows putting level-up points into movement speed on flying creatures.",
+      "restartRequired": true
+    },
+    {
+      "key": "AllowFlyerCarryPvE",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AllowFlyerCarryPvE"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Creatures",
+      "description": "On PvE servers, lets flying tames pick up and carry other players and creatures.",
+      "restartRequired": true
+    },
+    {
+      "key": "MatingIntervalMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "MatingIntervalMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "Cooldown before a female can mate again. Lower values shorten the wait.",
+      "restartRequired": true
+    },
+    {
+      "key": "EggHatchSpeedMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "EggHatchSpeedMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 1000,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "How quickly fertilized eggs incubate and gestation finishes. Higher values are faster.",
+      "restartRequired": true
+    },
+    {
+      "key": "LayEggIntervalMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "LayEggIntervalMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "Time between unfertilized egg drops. Lower values mean more eggs for kibble.",
+      "restartRequired": true
+    },
+    {
+      "key": "BabyMatureSpeedMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "BabyMatureSpeedMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 1000,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "How quickly babies grow to adulthood. Imprint timing scales along with it.",
+      "restartRequired": true
+    },
+    {
+      "key": "BabyFoodConsumptionSpeedMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "BabyFoodConsumptionSpeedMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "How fast babies eat. Lower values make raising them easier to keep up with.",
+      "restartRequired": true
+    },
+    {
+      "key": "BabyCuddleIntervalMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "BabyCuddleIntervalMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "Time between imprint care requests. Lower values bring more frequent requests, each worth more.",
+      "restartRequired": true
+    },
+    {
+      "key": "BabyImprintingStatScaleMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "BabyImprintingStatScaleMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "Size of the stat bonus a fully imprinted creature gets. Zero removes the bonus.",
+      "restartRequired": true
+    },
+    {
+      "key": "BabyImprintAmountMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "BabyImprintAmountMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Breeding",
+      "description": "Imprint percentage gained from each completed care request.",
+      "restartRequired": true
+    },
+    {
+      "key": "AllowAnyoneBabyImprintCuddle",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AllowAnyoneBabyImprintCuddle"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Breeding",
+      "description": "Lets any tribe member do the imprint care, not only the player who claimed the baby.",
+      "restartRequired": true
+    },
+    {
+      "key": "DisableImprintDinoBuff",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DisableImprintDinoBuff"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Breeding",
+      "description": "Removes the extra damage and resistance a rider gets on a creature they imprinted.",
+      "restartRequired": true
+    },
+    {
+      "key": "StructureResistanceMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "StructureResistanceMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Structures",
+      "description": "Scales damage buildings receive. Values below 1 make bases harder to break.",
+      "restartRequired": true
+    },
+    {
+      "key": "StructureDamageMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "StructureDamageMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Structures",
+      "description": "Scales damage dealt by structures such as turrets and spike walls.",
+      "restartRequired": true
+    },
+    {
+      "key": "TheMaxStructuresInRange",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "TheMaxStructuresInRange"
+      },
+      "type": "int",
+      "default": 10500,
+      "min": 100,
+      "max": 100000,
+      "unit": "count",
+      "group": "Structures",
+      "description": "Most building pieces allowed in one local area. It limits base sprawl and lag.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerPlatformMaxStructuresMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PerPlatformMaxStructuresMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Structures",
+      "description": "Scales how many pieces fit on platform saddles and rafts.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxPlatformSaddleStructureLimit",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxPlatformSaddleStructureLimit"
+      },
+      "type": "int",
+      "default": 75,
+      "min": 0,
+      "max": 1000,
+      "unit": "count",
+      "group": "Structures",
+      "description": "Server-wide limit on how many platform saddles and rafts may exist at once. Pieces per saddle are set by PerPlatformMaxStructuresMultiplier.",
+      "restartRequired": true
+    },
+    {
+      "key": "OverrideStructurePlatformPrevention",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "OverrideStructurePlatformPrevention"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Structures",
+      "description": "Allows turrets and other normally blocked structures to be placed on platform saddles.",
+      "restartRequired": true
+    },
+    {
+      "key": "AlwaysAllowStructurePickup",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AlwaysAllowStructurePickup"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Structures",
+      "description": "Lets players pick structures back up at any time, not just shortly after placing them.",
+      "restartRequired": true
+    },
+    {
+      "key": "StructurePickupTimeAfterPlacement",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "StructurePickupTimeAfterPlacement"
+      },
+      "type": "float",
+      "default": 30,
+      "min": 0,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Structures",
+      "description": "Window after placing a structure during which it can still be picked up.",
+      "restartRequired": true
+    },
+    {
+      "key": "bDisableStructurePlacementCollision",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bDisableStructurePlacementCollision"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Structures",
+      "description": "Allows building pieces to be placed even when they would clip into terrain or objects.",
+      "restartRequired": true
+    },
+    {
+      "key": "serverPVE",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "serverPVE"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "PvP and PvE",
+      "panelManaged": true,
+      "description": "Turns the server into PvE: players cannot damage players, tames or bases of other tribes.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerHardcore",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerHardcore"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "PvP and PvE",
+      "description": "Hardcore mode: a dead survivor starts over from level 1 with a new character.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventOfflinePvP",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventOfflinePvP"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "PvP and PvE",
+      "description": "Shields the base of a tribe once all members have logged off, after the configured delay.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventOfflinePvPInterval",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventOfflinePvPInterval"
+      },
+      "type": "float",
+      "default": 0,
+      "min": 0,
+      "max": 86400,
+      "unit": "seconds",
+      "group": "PvP and PvE",
+      "description": "Delay after the last tribe member logs off before offline raid protection starts.",
+      "restartRequired": true
+    },
+    {
+      "key": "bDisableFriendlyFire",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bDisableFriendlyFire"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "PvP and PvE",
+      "description": "Stops tribe members and their tames from hurting each other on PvP servers.",
+      "restartRequired": true
+    },
+    {
+      "key": "bPvEDisableFriendlyFire",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bPvEDisableFriendlyFire"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "PvP and PvE",
+      "description": "Same protection against hurting your own tribe, applied on PvE servers.",
+      "restartRequired": true
+    },
+    {
+      "key": "bPvEAllowTribeWar",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bPvEAllowTribeWar"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PvP and PvE",
+      "description": "On PvE, lets two tribes agree to a timed war during which they can fight each other.",
+      "restartRequired": true
+    },
+    {
+      "key": "bIncreasePvPRespawnInterval",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bIncreasePvPRespawnInterval"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PvP and PvE",
+      "description": "Adds a growing respawn delay for players killed again and again in PvP.",
+      "restartRequired": true
+    },
+    {
+      "key": "AllowThirdPersonPlayer",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AllowThirdPersonPlayer"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PvP and PvE",
+      "description": "Lets survivors switch to an over-the-shoulder camera on foot.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerCrosshair",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerCrosshair"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PvP and PvE",
+      "description": "Shows the aiming crosshair for players. Turn it off for a harder shooting experience.",
+      "restartRequired": true
+    },
+    {
+      "key": "ShowMapPlayerLocation",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ShowMapPlayerLocation"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "PvP and PvE",
+      "description": "Marks the position of each player on their own map screen.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxNumberOfPlayersInTribe",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "MaxNumberOfPlayersInTribe"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 500,
+      "unit": "players",
+      "group": "PvP and PvE",
+      "description": "Largest allowed tribe size. Zero means no limit; 1 makes everyone play solo.",
+      "restartRequired": true
+    },
+    {
+      "key": "DisableStructureDecayPvE",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DisableStructureDecayPvE"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Decay",
+      "description": "Stops abandoned buildings on PvE from becoming claimable or removed over time.",
+      "restartRequired": true
+    },
+    {
+      "key": "DisableDinoDecayPvE",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DisableDinoDecayPvE"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Decay",
+      "description": "Stops tames of inactive PvE players from becoming claimable by others over time.",
+      "restartRequired": true
+    },
+    {
+      "key": "PvEStructureDecayPeriodMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PvEStructureDecayPeriodMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Decay",
+      "description": "Scales how long PvE buildings last without their owner. Higher values keep them longer.",
+      "restartRequired": true
+    },
+    {
+      "key": "PvEDinoDecayPeriodMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PvEDinoDecayPeriodMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Decay",
+      "description": "Scales how long PvE tames stay protected while their owner is inactive.",
+      "restartRequired": true
+    },
+    {
+      "key": "PvPStructureDecay",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PvPStructureDecay"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Decay",
+      "description": "Turns on the abandoned-building timer on PvP servers, using the PvE decay periods.",
+      "restartRequired": true
+    },
+    {
+      "key": "PvPDinoDecay",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PvPDinoDecay"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Decay",
+      "description": "Turns on the abandoned-tame timer on PvP servers, so tames of inactive tribes expire.",
+      "restartRequired": true
+    },
+    {
+      "key": "AutoDestroyOldStructuresMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "AutoDestroyOldStructuresMultiplier"
+      },
+      "type": "float",
+      "default": 0,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Decay",
+      "description": "Removes buildings left alone for long enough. Zero turns this cleanup off completely.",
+      "restartRequired": true
+    },
+    {
+      "key": "GlobalSpoilingTimeMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "GlobalSpoilingTimeMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Decay",
+      "description": "Shelf life of perishable items. Higher values make food and meat last longer.",
+      "restartRequired": true
+    },
+    {
+      "key": "GlobalCorpseDecompositionTimeMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "GlobalCorpseDecompositionTimeMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Decay",
+      "description": "How long bodies stay in the world before vanishing, including the body of the player.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventDownloadSurvivors",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventDownloadSurvivors"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops players bringing in characters uploaded on another server. Belongs in the server settings; the client section copy has no effect.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventDownloadItems",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventDownloadItems"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops players taking items out of the transfer storage on this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventDownloadDinos",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventDownloadDinos"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops players taking creatures out of the transfer storage on this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventUploadSurvivors",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventUploadSurvivors"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops characters from leaving this server for other servers.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventUploadItems",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventUploadItems"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops players putting items into transfer storage from this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventUploadDinos",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventUploadDinos"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Transfers",
+      "description": "Stops players putting creatures into transfer storage from this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxTributeDinos",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxTributeDinos"
+      },
+      "type": "int",
+      "default": 20,
+      "min": 0,
+      "max": 500,
+      "unit": "count",
+      "group": "Transfers",
+      "description": "How many creatures one player can hold in transfer storage at once.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxTributeItems",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "MaxTributeItems"
+      },
+      "type": "int",
+      "default": 50,
+      "min": 0,
+      "max": 500,
+      "unit": "count",
+      "group": "Transfers",
+      "description": "How many item stacks one player can hold in transfer storage at once.",
+      "restartRequired": true
+    },
+    {
+      "key": "ItemStackSizeMultiplier",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ItemStackSizeMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Items",
+      "description": "Scales how many of one item fit into a single inventory slot.",
+      "restartRequired": true
+    },
+    {
+      "key": "SupplyCrateLootQualityMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "SupplyCrateLootQualityMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Items",
+      "description": "Raises or lowers the quality of gear found in supply drops and loot crates.",
+      "restartRequired": true
+    },
+    {
+      "key": "FishingLootQualityMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "FishingLootQualityMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 5,
+      "unit": "multiplier",
+      "group": "Items",
+      "description": "Raises or lowers the quality of items pulled up with a fishing rod.",
+      "restartRequired": true
+    },
+    {
+      "key": "CraftingSkillBonusMultiplier",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "CraftingSkillBonusMultiplier"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Items",
+      "description": "How strongly the crafting skill of a survivor improves the quality of crafted gear.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAllowCustomRecipes",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bAllowCustomRecipes"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Items",
+      "description": "Lets players write their own cooking recipes for meals and drinks.",
+      "restartRequired": true
+    },
+    {
+      "key": "bAutoUnlockAllEngrams",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bAutoUnlockAllEngrams"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Items",
+      "description": "Gives every survivor all crafting recipes straight away, with no engram points needed.",
+      "restartRequired": true
+    },
+    {
+      "key": "bDisableLootCrates",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bDisableLootCrates"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Items",
+      "description": "Stops supply drops and loot crates from spawning anywhere on the map.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_Player.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_Player[0]"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Health a survivor gains for each point spent on level-up.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_Player.7",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_Player[7]"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Carry weight a survivor gains for each point spent on level-up.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_Player.8",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_Player[8]"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Melee damage a survivor gains for each point spent on level-up.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_DinoWild.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_DinoWild[0]"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Health that wild creatures roll for each level they spawn with.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_DinoTamed.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_DinoTamed[0]"
+      },
+      "type": "float",
+      "default": 0.2,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Health a tame gains for each point spent after taming. The built-in value is 0.2, not 1.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_DinoTamed.8",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_DinoTamed[8]"
+      },
+      "type": "float",
+      "default": 0.17,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Melee damage a tame gains for each point spent after taming. The built-in value is 0.17.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_DinoTamed_Add.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_DinoTamed_Add[0]"
+      },
+      "type": "float",
+      "default": 0.14,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Flat health bonus a creature gets at the moment it is tamed. The built-in value is 0.14.",
+      "restartRequired": true
+    },
+    {
+      "key": "PerLevelStatsMultiplier_DinoTamed_Affinity.0",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "PerLevelStatsMultiplier_DinoTamed_Affinity[0]"
+      },
+      "type": "float",
+      "default": 0.44,
+      "min": 0.01,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Per-level stats",
+      "description": "Extra health from taming effectiveness, so better tames get more. The built-in value is 0.44.",
+      "restartRequired": true
+    },
+    {
+      "key": "OverrideOfficialDifficulty",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "OverrideOfficialDifficulty"
+      },
+      "type": "float",
+      "default": 0,
+      "min": 0,
+      "max": 20,
+      "unit": "multiplier",
+      "group": "World",
+      "description": "Sets difficulty directly; the top wild level is 30 times this value. Zero means unused; 5 gives level 150 creatures.",
+      "restartRequired": true
+    },
+    {
+      "key": "DifficultyOffset",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DifficultyOffset"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 1,
+      "group": "World",
+      "description": "Older difficulty slider within the base range of the map. It mostly stops mattering once the override is set.",
+      "restartRequired": true
+    },
+    {
+      "key": "bUseSingleplayerSettings",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bUseSingleplayerSettings"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Applies the solo-play balance (faster taming, breeding and more) to a dedicated server.",
+      "restartRequired": true
+    },
+    {
+      "key": "bUseCorpseLocator",
+      "file": "game",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/ShooterGame.ShooterGameMode",
+        "key": "bUseCorpseLocator"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "World",
+      "description": "Shows a beam of light where a player died so they can find their gear again.",
+      "restartRequired": true
+    },
+    {
+      "key": "PreventDiseases",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "PreventDiseases"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Turns off illnesses that survivors can otherwise catch, such as swamp fever.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerAutoForceRespawnWildDinosInterval",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "ServerAutoForceRespawnWildDinosInterval"
+      },
+      "type": "float",
+      "default": 0,
+      "min": 0,
+      "max": 604800,
+      "unit": "seconds",
+      "group": "World",
+      "description": "Wipes and respawns all wild creatures at this interval on restart. Zero turns it off.",
+      "restartRequired": true
+    },
+    {
+      "key": "DisableCryopodFridgeRequirement",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "ServerSettings",
+        "key": "DisableCryopodFridgeRequirement"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "World",
+      "description": "Cryopods keep their creature safe without having to be stored in a cryofridge.",
+      "restartRequired": true
+    },
+    {
+      "key": "ini.MaxPlayers",
+      "file": "gus",
+      "locator": {
+        "kind": "ini",
+        "section": "/Script/Engine.GameSession",
+        "key": "MaxPlayers"
+      },
+      "type": "int",
+      "default": 70,
+      "min": 1,
+      "max": 255,
+      "unit": "players",
+      "group": "Identity",
+      "description": "Older slot limit. Hosting tools report that the server ignores it; keep it equal to the launch flag.",
+      "restartRequired": true
+    },
+    {
+      "key": "cli.SessionName",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "?SessionName",
+        "before": ["?ServerAdminPassword"]
+      },
+      "type": "string",
+      "group": "Identity",
+      "panelManaged": true,
+      "description": "Server name on the travel chain. It must not contain a question mark or quotes; quote the whole chain when it has spaces.",
+      "restartRequired": true
+    },
+    {
+      "key": "Port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-Port"
+      },
+      "type": "int",
+      "default": 7777,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "panelManaged": true,
+      "description": "UDP game port players connect to. Use the dash form; the question-mark form is handled inconsistently by tools.",
+      "restartRequired": true
+    },
+    {
+      "key": "cli.Port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "?Port",
+        "before": ["?ServerAdminPassword"]
+      },
+      "type": "int",
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "description": "The game port written as a question-mark option. The server best follows the dash form, so remove this one.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxPlayers",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-WinLiveMaxPlayers"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 255,
+      "unit": "players",
+      "group": "Network",
+      "panelManaged": true,
+      "description": "Player slot limit the server actually honours. Set the cap here, not in the INI.",
+      "restartRequired": true
+    },
+    {
+      "key": "cli.RCONPort",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "?RCONPort",
+        "before": ["?ServerAdminPassword"]
+      },
+      "type": "int",
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Remote console",
+      "description": "Remote console port given on the travel chain. One tool measured that an INI-only value was ignored, so keep this in line with the INI.",
+      "restartRequired": true
+    },
+    {
+      "key": "cli.RCONEnabled",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "?RCONEnabled",
+        "before": ["?ServerAdminPassword"]
+      },
+      "type": "bool",
+      "group": "Remote console",
+      "description": "Launch-line switch for the remote console. When present it replaces the INI setting.",
+      "restartRequired": true
+    },
+    {
+      "key": "cli.ServerAdminPassword",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "?ServerAdminPassword"
+      },
+      "type": "string",
+      "max": 128,
+      "group": "Remote console",
+      "secret": true,
+      "panelManaged": true,
+      "description": "Admin password on the travel chain. It must be the last question-mark option: everything after it is read as part of the password.",
+      "restartRequired": true
+    },
+    {
+      "key": "MULTIHOME",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-MULTIHOME"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Network",
+      "description": "Binds the server to one local IP address on hosts with several network interfaces.",
+      "restartRequired": true
+    },
+    {
+      "key": "NoBattlEye",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-NoBattlEye"
+      },
+      "type": "bool",
+      "group": "Network",
+      "description": "Starts the server without the anti-cheat. Some launchers pass the opposite switch instead.",
+      "restartRequired": true
+    },
+    {
+      "key": "servergamelog",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-servergamelog"
+      },
+      "type": "bool",
+      "group": "Network",
+      "description": "Writes admin and gameplay events to a separate server log that remote console clients can also read.",
+      "restartRequired": true
+    },
+    {
+      "key": "usestore",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-usestore"
+      },
+      "type": "bool",
+      "group": "Saving",
+      "description": "Save layout where player and tribe data live inside the map save; needed for some hosted-save imports.",
+      "restartRequired": true
+    },
+    {
+      "key": "clusterid",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-clusterid"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "Transfers",
+      "panelManaged": true,
+      "description": "Shared id that links servers for travel. Use a random private string, never the word default.",
+      "restartRequired": true
+    },
+    {
+      "key": "ClusterDirOverride",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-ClusterDirOverride"
+      },
+      "type": "string",
+      "max": 256,
+      "group": "Transfers",
+      "description": "Folder holding transfer data. Every server in the cluster must point to the same path.",
+      "restartRequired": true
+    },
+    {
+      "key": "NoTransferFromFiltering",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-NoTransferFromFiltering"
+      },
+      "type": "bool",
+      "group": "Transfers",
+      "description": "Blocks characters and items arriving from servers outside your own cluster id.",
+      "restartRequired": true
+    },
+    {
+      "key": "ForceAllowCaveFlyers",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-ForceAllowCaveFlyers"
+      },
+      "type": "bool",
+      "group": "World",
+      "description": "Lets players fly creatures inside caves, which is normally blocked on most maps.",
+      "restartRequired": true
+    },
+    {
+      "key": "ActiveEvent",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-ActiveEvent"
+      },
+      "type": "string",
+      "max": 64,
+      "group": "World",
+      "description": "Turns on a seasonal event by its internal name. Leave empty for no event.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerPlatform",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-ServerPlatform"
+      },
+      "type": "string",
+      "default": "ALL",
+      "max": 64,
+      "group": "Network",
+      "description": "Which client platforms may join: PC, XSX, PS5, WINGDK or ALL, combined with plus signs.",
+      "restartRequired": true
+    },
+    {
+      "key": "mods",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-mods"
+      },
+      "type": "string",
+      "max": 256,
+      "group": "Mods",
+      "panelManaged": true,
+      "description": "Comma-separated CurseForge project ids. The server downloads and loads them at boot.",
+      "restartRequired": true
+    },
+    {
+      "key": "passivemods",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-passivemods"
+      },
+      "type": "string",
+      "max": 256,
+      "group": "Mods",
+      "description": "Mod ids kept loaded so their saved data survives, but not active in gameplay.",
+      "restartRequired": true
+    }
+  ],
+  "rules": [
+    {
+      "id": "port-dash-form",
+      "severity": "warning",
+      "settings": ["cli.Port"],
+      "message": "The game port is given as a question-mark option; write it as -Port= instead, which every tool reads.",
+      "when": {
+        "!!": {
+          "var": "cli.Port"
+        }
+      }
+    },
+    {
+      "id": "rcon-no-password",
+      "severity": "error",
+      "settings": ["RCONEnabled", "ServerAdminPassword"],
+      "message": "The remote console is on but there is no admin password, so it cannot log in and the save, chat and exit hooks fail.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "RCONEnabled"
+              },
+              true
+            ]
+          },
+          {
+            "!": {
+              "var": "ServerAdminPassword"
+            }
+          }
+        ]
+      },
+      "serverEvaluated": true
+    },
+    {
+      "id": "difficulty-conflict",
+      "severity": "warning",
+      "settings": ["OverrideOfficialDifficulty", "DifficultyOffset"],
+      "message": "The difficulty override is set, so the older difficulty offset is effectively ignored.",
+      "when": {
+        "and": [
+          {
+            ">": [
+              {
+                "var": "OverrideOfficialDifficulty"
+              },
+              0
+            ]
+          },
+          {
+            "!=": [
+              {
+                "var": "DifficultyOffset"
+              },
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "pve-with-pvp-options",
+      "severity": "warning",
+      "settings": [
+        "serverPVE",
+        "PreventOfflinePvP",
+        "PvPStructureDecay",
+        "PvPDinoDecay",
+        "bDisableFriendlyFire"
+      ],
+      "message": "The server is PvE, but options that only matter on PvP servers are set.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "serverPVE"
+              },
+              true
+            ]
+          },
+          {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "PreventOfflinePvP"
+                  },
+                  true
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "PvPStructureDecay"
+                  },
+                  true
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "PvPDinoDecay"
+                  },
+                  true
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "bDisableFriendlyFire"
+                  },
+                  true
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "maxplayers-ini-only",
+      "severity": "info",
+      "settings": ["ini.MaxPlayers", "MaxPlayers"],
+      "message": "The slot limit is set only in the INI; add the launch flag, which is the one the server honours.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "ini.MaxPlayers"
+            }
+          },
+          {
+            "!": {
+              "var": "MaxPlayers"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "url-unsafe-chars",
+      "severity": "error",
+      "settings": ["cli.SessionName", "cli.ServerAdminPassword"],
+      "message": "A question mark in the chain parts, or a space in the admin password, breaks the travel chain: use the INI for those values.",
+      "when": {
+        "or": [
+          {
+            "in": [
+              "?",
+              {
+                "var": "cli.SessionName"
+              }
+            ]
+          },
+          {
+            "in": [
+              "?",
+              {
+                "var": "cli.ServerAdminPassword"
+              }
+            ]
+          },
+          {
+            "in": [
+              " ",
+              {
+                "var": "cli.ServerAdminPassword"
+              }
+            ]
+          }
+        ]
+      },
+      "serverEvaluated": true
+    },
+    {
+      "id": "cluster-default-id",
+      "severity": "info",
+      "settings": ["clusterid"],
+      "message": "The cluster id is the word default, so unrelated servers may appear in the travel list. Use a private random id.",
+      "when": {
+        "==": [
+          {
+            "var": "clusterid"
+          },
+          "default"
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "official-default",
+      "label": "Stock defaults",
+      "description": "The shipped rates: normal taming and experience, standard harvest and the built-in creature anchors.",
+      "values": {
+        "XPMultiplier": 1,
+        "TamingSpeedMultiplier": 1,
+        "HarvestAmountMultiplier": 1,
+        "serverPVE": false,
+        "DinoHarvestingDamageMultiplier": 3.2,
+        "PerLevelStatsMultiplier_DinoTamed.0": 0.2,
+        "PerLevelStatsMultiplier_DinoTamed.8": 0.17,
+        "PerLevelStatsMultiplier_DinoTamed_Add.0": 0.14,
+        "PerLevelStatsMultiplier_DinoTamed_Affinity.0": 0.44,
+        "OverrideOfficialDifficulty": 0,
+        "DifficultyOffset": 1,
+        "DayCycleSpeedScale": 1
+      }
+    },
+    {
+      "id": "boosted-2x",
+      "label": "Boosted 2x",
+      "description": "Double experience, taming and harvest with faster breeding; the usual friendly boost.",
+      "values": {
+        "XPMultiplier": 2,
+        "TamingSpeedMultiplier": 2,
+        "HarvestAmountMultiplier": 2,
+        "EggHatchSpeedMultiplier": 2,
+        "BabyMatureSpeedMultiplier": 2,
+        "MatingIntervalMultiplier": 0.5,
+        "BabyCuddleIntervalMultiplier": 0.5,
+        "CropGrowthSpeedMultiplier": 2,
+        "ResourcesRespawnPeriodMultiplier": 0.5
+      }
+    },
+    {
+      "id": "boosted-5x-breeding",
+      "label": "Boosted 5x breeding",
+      "description": "Normal rates with very fast hatching and maturing, for tribes that only want the breeding loop sped up.",
+      "values": {
+        "EggHatchSpeedMultiplier": 5,
+        "BabyMatureSpeedMultiplier": 5,
+        "MatingIntervalMultiplier": 0.2,
+        "LayEggIntervalMultiplier": 0.5,
+        "BabyCuddleIntervalMultiplier": 0.2,
+        "BabyImprintAmountMultiplier": 1.5,
+        "BabyFoodConsumptionSpeedMultiplier": 0.5,
+        "AllowAnyoneBabyImprintCuddle": true
+      }
+    },
+    {
+      "id": "hardcore-pve",
+      "label": "Hardcore PvE",
+      "description": "PvE with hardcore deaths, high difficulty and harsher survival drains.",
+      "values": {
+        "serverPVE": true,
+        "ServerHardcore": true,
+        "OverrideOfficialDifficulty": 5,
+        "DifficultyOffset": 1,
+        "PlayerResistanceMultiplier": 1.25,
+        "PlayerCharacterFoodDrainMultiplier": 1.5,
+        "PlayerCharacterWaterDrainMultiplier": 1.5,
+        "ShowMapPlayerLocation": false,
+        "ServerCrosshair": false,
+        "AllowThirdPersonPlayer": false,
+        "AllowFlyerCarryPvE": false,
+        "bUseCorpseLocator": false,
+        "DisableStructureDecayPvE": false
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "sourceRcon",
+      "portSetting": "RCONPort",
+      "passwordSetting": "ServerAdminPassword",
+      "host": "127.0.0.1",
+      "allow": ["SaveWorld", "ServerChat", "Broadcast", "DoExit"],
+      "saveCommand": "SaveWorld",
+      "stopCommand": "DoExit"
+    }
+  ],
+  "hooksSupported": ["save", "stop"],
+  "sources": [
+    "https://github.com/mschnitzer/ark-survival-ascended-linux-container-image",
+    "https://github.com/Acekorneya/Ark-Survival-Ascended-Server",
+    "https://github.com/cdp1337/ARKSurvivalAscended-Linux",
+    "https://github.com/ChronosWS/asma",
+    "https://github.com/ryoucerious/cerious-aasm",
+    "https://github.com/JensvandeWiel/ArkAscendedServerManager",
+    "https://github.com/Olrik-WP/ASADedicatedManager_Releases"
+  ]
+}

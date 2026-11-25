@@ -1,0 +1,1 @@
+-servername servertest -cachedir=Zomboid -steamport1 8766 -steamport2 8767
