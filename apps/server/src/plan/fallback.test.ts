@@ -70,7 +70,8 @@ describe("the Free fallback (F-01 to F-06)", () => {
     expect(stored.value).toBe("editor");
     // A switch back restores the same sessions at once.
     await toPaid(app, owner);
-    const again = await call(app, editor, "POST", url, editsOf(32));
+    // A value the file does not hold yet, so the edit is a change.
+    const again = await call(app, editor, "POST", url, editsOf(28));
     expect(again.statusCode).toBe(201);
   });
 
