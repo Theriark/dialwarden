@@ -236,6 +236,9 @@ describe("ARK: Survival Ascended pack", () => {
 
   it("notes a slot limit that lives only in the INI", () => {
     const values = fixtureValues(pack);
+    // The fixture keeps its INI slot limit in the wrong section, where the
+    // pack does not read it, so the value the rule needs is set here.
+    values.set("ini.MaxPlayers", 70);
     values.delete("MaxPlayers");
     expect(validate(pack, values)).toContainEqual({
       key: "ini.MaxPlayers",

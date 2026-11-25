@@ -100,17 +100,24 @@ describe("demo seed", () => {
     expect(await readdir(join(demoDir, "enshrouded"))).toContain(
       "enshrouded_server.json",
     );
-    for (const slug of ["demo-palworld", "demo-enshrouded"]) {
+    // On Free the first three servers are editable: enshrouded, the third,
+    // gets the app's change; palworld, the fourth, only the import and the
+    // outside edit.
+    const expected = {
+      "demo-enshrouded": ["external", "app", "import"],
+      "demo-palworld": ["external", "import"],
+    };
+    for (const [slug, causes] of Object.entries(expected)) {
       const past = await history(api, slug);
-      const causes = past.entries.map((entry) => entry.cause);
-      expect(causes, slug).toEqual(["external", "app", "import"]);
+      expect(past.entries.map((entry) => entry.cause), slug).toEqual(causes);
       const statuses = new Set(past.entries.map((entry) => entry.status));
       expect([...statuses], slug).toEqual(["applied"]);
-      const [outside, made] = past.entries;
+      const [outside] = past.entries;
       expect(outside?.author).toBe("outside the app");
-      expect(made?.author).toBe("Dialwarden demo");
       expect(outside?.chips.length, slug).toBe(1);
     }
+    const made = (await history(api, "demo-enshrouded")).entries.at(1);
+    expect(made?.author).toBe("Dialwarden demo");
   });
 
   it("adds missing demo servers next to a server that already exists", async () => {
@@ -128,12 +135,12 @@ describe("demo seed", () => {
   it("does not touch demo servers that already exist", async () => {
     const first = await start(true);
     const before = first.ctx.changes.history(
-      first.ctx.servers.require("demo-palworld"),
+      first.ctx.servers.require("demo-enshrouded"),
     );
     const again = await start(true);
     expect(again.ctx.servers.count()).toBe(7);
     const after = again.ctx.changes.history(
-      again.ctx.servers.require("demo-palworld"),
+      again.ctx.servers.require("demo-enshrouded"),
     );
     expect(after.entries).toHaveLength(before.entries.length);
     expect(after.entries.map((entry) => entry.cause)).toEqual([

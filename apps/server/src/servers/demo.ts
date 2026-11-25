@@ -6,7 +6,9 @@
 // made by the app, and one edit made outside the app, found by the same
 // outside-edit detection a real server gets, so it can be seen on Development
 // and Stage. A server that already exists is left untouched, so an upgrade
-// that ships new packs adds their demo servers without a reset.
+// that ships new packs adds their demo servers without a reset. On Free only
+// the first three servers can be changed (contract C1), so a demo server past
+// them gets the import and the outside edit but not the app's change.
 //
 // The fixtures are written through the Local connector (contract C4); only
 // the folders are made here, because a connector writes into folders that
@@ -135,7 +137,9 @@ async function seedPack(pack: Pack, options: DemoSeedOptions) {
   const server = servers.insert({ id, name, packId, os, spec, demo: true });
   await changes.importServer(server, DEMO_AUTHOR);
   const [first, second] = await demoEdits(pack, server, changes);
-  if (first !== undefined) {
+  // A change set on a server past the editable three is refused with 402;
+  // without this check the seed stopped at the fourth pack.
+  if (first !== undefined && servers.isEditable(id)) {
     const edits = [{ key: first.setting.key, value: first.value }];
     const draft = await changes.create(server, { edits }, DEMO_AUTHOR);
     await changes.apply(draft.id, DEMO_AUTHOR);
