@@ -29,6 +29,7 @@ import type { Store } from "../db/store.js";
 import type { LicenceService } from "../licence/service.js";
 import type { EditableServers } from "../plan/editable.js";
 import type { PresetService } from "../presets/service.js";
+import type { RetentionService } from "../privacy/retention.js";
 import type { ServerService } from "../servers/service.js";
 import type { SnapshotStore } from "../snapshots/store.js";
 import type { TokenService } from "../team/api-access.js";
@@ -92,6 +93,8 @@ export interface AppContext {
   tokens: TokenService;
   /** The hash-chained audit log and its settings (P8-A). */
   audit: AuditService;
+  /** Privacy retention: snapshots, the audit log, the daily job (P8-A). */
+  retention: RetentionService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */

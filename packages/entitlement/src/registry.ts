@@ -230,6 +230,8 @@ export const ALWAYS_FREE_ROUTES: readonly string[] = [
   "GET /api/v1/me/export",
   "GET /api/v1/settings/audit",
   "PUT /api/v1/settings/audit",
+  "GET /api/v1/settings/snapshots",
+  "PUT /api/v1/settings/snapshots",
   // The audit log is recorded on every plan, and the owner can always read
   // and verify it; its CSV export is the Paid part (R&D default D5).
   "GET /api/v1/audit",

@@ -4,6 +4,7 @@ import { buildApp } from "./app.js";
 const app = await buildApp();
 const { config } = app.ctx;
 app.ctx.backups.start(config.backupSchedule, config.backupTimezone);
+app.ctx.retention.start(config.retentionSchedule, config.retentionTimezone);
 
 const shutdown = (signal: string) => {
   app.log.info({ signal }, "shutting down");

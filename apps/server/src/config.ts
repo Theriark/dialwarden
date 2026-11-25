@@ -23,6 +23,9 @@ export interface AppConfig {
   envLicence: string | null;
   backupSchedule: string;
   backupTimezone: string;
+  /** The privacy retention job (P8-A): RETENTION_SCHEDULE and RETENTION_TZ. */
+  retentionSchedule: string;
+  retentionTimezone: string;
   demoSeed: boolean;
   /** DEMO_SERVERS_DIR: where the demo seed makes its game folders. */
   demoServersDir: string;
@@ -122,6 +125,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     envLicence: nonEmpty(env["DIALWARDEN_LICENCE"]),
     backupSchedule: nonEmpty(env["BACKUP_SCHEDULE"]) ?? "30 3 * * *",
     backupTimezone: nonEmpty(env["BACKUP_TZ"]) ?? "Europe/Lisbon",
+    retentionSchedule: nonEmpty(env["RETENTION_SCHEDULE"]) ?? "50 3 * * *",
+    retentionTimezone: nonEmpty(env["RETENTION_TZ"]) ?? "Europe/Lisbon",
     demoSeed: env["DEMO_SEED"] === "true",
     demoServersDir: nonEmpty(env["DEMO_SERVERS_DIR"]) ?? "/demo-servers",
     webDist: nonEmpty(env["WEB_DIST"]) ?? DEFAULT_WEB_DIST,
