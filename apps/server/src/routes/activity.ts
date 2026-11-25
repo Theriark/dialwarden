@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ACTIVITY_TYPES } from "../activity/service.js";
 import type { ZodTypeProvider } from "../http/zod.js";
+import { atLeast } from "../team/roles.js";
 
 const eventSchema = z.object({
   id: z.number().int(),
@@ -37,11 +38,19 @@ export function activityRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const { before, limit, type, serverId } = request.query;
+      const principal = request.principal;
+      // Editors and viewers see the events of their servers only; user and
+      // licence events, which carry e-mail addresses, stay with the owner
+      // and admins (D23).
+      const limited = principal !== null && !atLeast(principal.role, "admin");
+      const grants = limited ? app.ctx.team.grantsOf(principal.userId) : [];
+      const onlyServers = grants.map((grant) => grant.server);
       return app.ctx.activity.list({
         limit,
         ...(before === undefined ? {} : { before }),
         ...(type === undefined ? {} : { type }),
         ...(serverId === undefined ? {} : { serverId }),
+        ...(limited ? { onlyServers } : {}),
       });
     },
   );

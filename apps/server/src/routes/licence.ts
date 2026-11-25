@@ -141,11 +141,16 @@ export function licenceRoutes(app: FastifyInstance): void {
         response: { 200: editableSchema },
       },
     },
-    async () => ({
-      servers: app.ctx.editable.effective(),
-      chosen: app.ctx.editable.chosen(),
-      max: app.ctx.editable.max,
-    }),
+    async (request) => {
+      // Only the servers this user may see (D25).
+      const visible = app.ctx.team.visibleServers(request.principal);
+      const mine = (ids: string[]) => ids.filter((id) => visible(id));
+      return {
+        servers: mine(app.ctx.editable.effective()),
+        chosen: mine(app.ctx.editable.chosen()),
+        max: app.ctx.editable.max,
+      };
+    },
   );
 
   api.put(
