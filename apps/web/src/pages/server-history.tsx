@@ -17,7 +17,8 @@ import {
   CalendarClock,
   Layers,
 } from "lucide-react";
-import { useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
+import { SHELL_ADAPTERS, type PackFile } from "@dialwarden/packs-schema";
 import { restoreSnapshot, runHook } from "../api/changes";
 import { errorMessage } from "../api/errors";
 import {
@@ -27,6 +28,7 @@ import {
   p6keys,
   pendingQuery,
   serverQuery,
+  settingsMetaQuery,
 } from "../api/queries";
 import type {
   Cause,
@@ -35,9 +37,20 @@ import type {
   HistoryEntry as Entry,
   HistorySnapshot,
 } from "../api/schema";
-import { useCanRunHooks } from "../api/session";
+import {
+  RESTORE_ROLES,
+  SHELL_RESTORE_ROLES,
+  useCanRestore,
+  useCanRunHooks,
+  useSessionUser,
+} from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { ChangeChip } from "../components/change-chip";
+import { ReadOnlyNotice } from "../components/read-only-notice";
+import {
+  isServerMissing,
+  ServerMissingState,
+} from "../components/server-missing";
 import { ServerTabs } from "../components/server-tabs";
 import { UpgradeHint } from "../components/upgrade-hint";
 import { Alert } from "../components/ui/alert";
@@ -117,19 +130,58 @@ export function snapshotsToRestore(entry: Entry): HistorySnapshot[] {
   return [...wanted.values()];
 }
 
+/**
+ * Whether the signed-in user may restore an entry (P8 live check F1):
+ * allowed; read-only for a viewer, who sees no restore control at all (the
+ * page says why once); admin-only for an editor on a version that holds a
+ * shell-read file, where the control stays visible but off with the reason.
+ */
+export type RestoreAccess = "allowed" | "read-only" | "admin-only";
+
+export const ADMIN_ONLY_REASON =
+  "This version holds a launch or shell file: restoring it needs the owner or an admin.";
+
+/** The ids of the pack files a shell reads (the server's isShellFile rule). */
+export function shellFileIds(files: readonly PackFile[]): ReadonlySet<string> {
+  return new Set(
+    files.filter((file) => SHELL_ADAPTERS.has(file.adapter)).map((f) => f.id),
+  );
+}
+
+/** The access of one role to one entry, given the shell-read files. */
+export function restoreAccessOf(
+  role: string | null,
+  entry: Entry,
+  shellFiles: ReadonlySet<string>,
+): RestoreAccess {
+  if (role === null || !RESTORE_ROLES.includes(role)) {
+    return "read-only";
+  }
+  if (SHELL_RESTORE_ROLES.includes(role)) {
+    return "allowed";
+  }
+  const touchesShell = snapshotsToRestore(entry).some((snapshot) =>
+    shellFiles.has(snapshot.fileId),
+  );
+  return touchesShell ? "admin-only" : "allowed";
+}
+
 export function TimelineRow({
   entry,
   last,
   onRestore,
   restoring,
+  access = "allowed",
 }: {
   entry: Entry;
   last: boolean;
   onRestore: (entry: Entry) => void;
   restoring: boolean;
+  access?: RestoreAccess | undefined;
 }) {
   const CauseIcon = CAUSE_ICONS[entry.cause];
   const kind = STATUS_KINDS[entry.status];
+  const reasonId = `${entry.changeSetId}-restore-reason`;
   return (
     <li className="relative flex gap-4 pb-8">
       {last ? null : (
@@ -164,10 +216,17 @@ export function TimelineRow({
             <ChangeChip key={`${entry.changeSetId}-${index}`} chip={chip} />
           ))}
         </ul>
-        {entry.snapshots.length > 0 ? (
-          <div>
+        {entry.snapshots.length === 0 ? (
+          <p className="text-xs text-fg-muted">
+            Nothing to restore for this entry
+          </p>
+        ) : access === "read-only" ? null : (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button
               loading={restoring}
+              disabled={access === "admin-only"}
+              aria-describedby={access === "admin-only" ? reasonId : undefined}
+              title={access === "admin-only" ? ADMIN_ONLY_REASON : undefined}
               icon={<RotateCcw className="size-4" aria-hidden="true" />}
               onClick={() => {
                 onRestore(entry);
@@ -175,11 +234,12 @@ export function TimelineRow({
             >
               Restore this version
             </Button>
+            {access === "admin-only" ? (
+              <span id={reasonId} className="text-xs text-fg-muted">
+                {ADMIN_ONLY_REASON}
+              </span>
+            ) : null}
           </div>
-        ) : (
-          <p className="text-xs text-fg-muted">
-            Nothing to restore for this entry
-          </p>
         )}
       </div>
     </li>
@@ -332,6 +392,20 @@ export function ServerHistoryPage() {
   const history = useQuery(historyQuery(slug));
   const client = useQueryClient();
   const toast = useToast();
+  const user = useSessionUser();
+  const canRestore = useCanRestore();
+  // The pack's file list tells which snapshots hold a shell-read file; while
+  // it is unknown (loading, or a failed read) the server's own check answers
+  // a click, and the toast says why (live check F2).
+  const packId = server.data?.packId;
+  const meta = useQuery({
+    ...settingsMetaQuery(packId ?? ""),
+    enabled: packId !== undefined,
+  });
+  const shellFiles = useMemo(
+    () => shellFileIds((meta.data?.files ?? []) as PackFile[]),
+    [meta.data],
+  );
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
   const restore = useMutation({
@@ -415,6 +489,10 @@ export function ServerHistoryPage() {
     );
   }
 
+  if (isServerMissing(server.error) || isServerMissing(history.error)) {
+    return <ServerMissingState />;
+  }
+
   if (server.isError) {
     return (
       <ErrorState
@@ -437,6 +515,14 @@ export function ServerHistoryPage() {
         description="Every change of this server, newest first. One click puts the settings back to how they were before a change."
       />
       <ServerTabs slug={slug} current="history" />
+      {canRestore ? null : (
+        <ReadOnlyNotice
+          role={user?.role ?? "viewer"}
+          reads="this history"
+          writes="restores a version"
+          className="mb-4"
+        />
+      )}
       <div className="mb-6 empty:hidden">
         <PendingList slug={slug} />
       </div>
@@ -465,6 +551,7 @@ export function ServerHistoryPage() {
                   restore.mutate(item);
                 }}
                 restoring={restoringId === entry.changeSetId}
+                access={restoreAccessOf(user?.role ?? null, entry, shellFiles)}
               />
             ))}
           </ol>
