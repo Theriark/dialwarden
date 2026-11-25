@@ -224,7 +224,7 @@ export const cfgKit: Kit = {
   matches: (value, got) => textMatches(value, got),
   cleared: () => true,
   seeds: fixtures("cfg"),
-  alphabet: [...LINES, '"', ";", "//", ".", "_"],
+  alphabet: [...LINES, '"', ";", "//", "#", ".", "_"],
 };
 
 const SHELL = [...LINES, "=", '"', "'", "\\", "#", "_", "$", "`", ";"];

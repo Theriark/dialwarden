@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bytes, edited, errorCode, text } from "../test/harness.js";
 import { fixture } from "../test/kits.js";
+import { cfgLocators } from "./cfg.js";
 import { cfgAdapter as cfg, type CfgLocator } from "./index.js";
 
 function command(name: string): CfgLocator {
@@ -150,5 +151,76 @@ describe("console cfg edge cases", () => {
     expect(out).toBe(source.replace("sv_lan 0", "sv_lan 1"));
     const added = edited(cfg, data, (d) => cfg.insert(d, command("x"), true));
     expect(added).toBe(`${source}x 1\r\n`);
+  });
+});
+
+describe("console cfg # comments", () => {
+  const data = fixture("cfg/hash-comments.cfg");
+  const source = text(data);
+  const doc = cfg.parse(data);
+  const names = (d: typeof doc) => cfgLocators(d).map((l) => l.command);
+
+  it("never reads a # comment line as a command", () => {
+    // Repeated, empty and indented comment lines raise nothing; the one
+    // warning is the real duplicate server.pvp / SERVER.PVP.
+    expect(cfg.lint(doc)).toMatchObject([
+      { code: "duplicate-key", severity: "warning", line: 15, column: 1 },
+    ]);
+    expect(names(doc)).toEqual([
+      "server.hostname",
+      "server.maxplayers",
+      "server.tags",
+      "server.pvp",
+    ]);
+    expect(cfg.get(doc, command("#"))).toBeUndefined();
+    expect(cfg.get(doc, command("#server.pve"))).toBeUndefined();
+    expect(cfg.get(doc, command("say"))).toBeUndefined();
+    expect(cfg.get(doc, command("server.hostname"))).toBe("Hash Point");
+    expect(cfg.get(doc, command("server.maxplayers"))).toBe("50");
+    expect(cfg.get(doc, command("server.tags"))).toBe("a#b");
+    expect(cfg.get(doc, command("server.pvp"))).toBe("false");
+  });
+
+  it("keeps comment lines byte for byte on every write", () => {
+    const set = edited(cfg, data, (d) =>
+      cfg.set(d, command("server.pvp"), true),
+    );
+    expect(set).toBe(source.replace("SERVER.PVP false", "SERVER.PVP true"));
+    const removed = edited(cfg, data, (d) =>
+      cfg.remove(d, command("server.pvp")),
+    );
+    expect(removed).toBe(
+      source.replace("server.pvp true\nSERVER.PVP false\n", ""),
+    );
+    const beforeComment = edited(cfg, data, (d) =>
+      cfg.remove(d, command("server.maxplayers")),
+    );
+    expect(beforeComment).toBe(source.replace("server.maxplayers 50; ", ""));
+    const added = edited(cfg, data, (d) =>
+      cfg.insert(d, command("server.pve"), false),
+    );
+    expect(added).toBe(`${source}server.pve 0\n`);
+  });
+
+  it("refuses to insert a command that would read back as a comment", () => {
+    expect(errorCode(() => cfg.insert(doc, command("#x"), 1))).toBe(
+      "invalid-locator",
+    );
+  });
+
+  it("still warns on a real duplicate between comment lines", () => {
+    const lines = cfg.parse(bytes("# a\nx 1\n# a\n  # a\nX 2\n"));
+    expect(cfg.lint(lines)).toMatchObject([
+      { code: "duplicate-key", severity: "warning", line: 5 },
+    ]);
+  });
+
+  it("ends the line at a # where a statement starts", () => {
+    const after = cfg.parse(bytes("x 1; # y 2; z 3\n"));
+    expect(names(after)).toEqual(["x"]);
+    const bom = String.fromCharCode(0xfeff);
+    const crlf = cfg.parse(bytes(`${bom}# a\r\n# a\r\nx 1\r\n`));
+    expect(cfg.lint(crlf)).toEqual([]);
+    expect(names(crlf)).toEqual(["x"]);
   });
 });
