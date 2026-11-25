@@ -2,7 +2,11 @@
 // config.entitlement answers 402 with its feature name on Free, is never
 // public, and works on Paid; every Paid route the registry lists declares its
 // feature. P1 has no Paid route yet, so a probe route stands in for them.
-import { FEATURES, type FeatureKey } from "@dialwarden/entitlement";
+import {
+  ALWAYS_FREE_ROUTES,
+  FEATURES,
+  type FeatureKey,
+} from "@dialwarden/entitlement";
 import { customerLicence } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +16,7 @@ import {
   testApp,
   type TestApp,
 } from "../../test/helpers.js";
+import type { RouteInfo } from "./context.js";
 
 const PROBE_URL = "/api/v1/test/paid-probe";
 const PROBE_FEATURE: FeatureKey = "reports";
@@ -32,6 +37,35 @@ function withProbe(app: FastifyInstance): void {
 
 /** The URL of a route with every path parameter filled in. */
 const concrete = (url: string): string => url.replace(/:[^/]+/g, "x");
+
+/**
+ * Every /api/v1 route must be listed exactly once: under the feature it
+ * declares, or in ALWAYS_FREE_ROUTES without a declaration. HEAD routes
+ * follow their GET route.
+ */
+function registryProblems(routes: readonly RouteInfo[]): string[] {
+  const paid = new Map<string, FeatureKey>();
+  for (const feature of FEATURES) {
+    for (const key of feature.routes) paid.set(key, feature.key);
+  }
+  const free = new Set(ALWAYS_FREE_ROUTES);
+  const problems: string[] = [];
+  for (const route of routes) {
+    if (route.method === "HEAD" || !route.url.startsWith("/api/v1/")) continue;
+    const key = `${route.method} ${route.url}`;
+    const feature = paid.get(key);
+    if (feature !== undefined && free.has(key)) {
+      problems.push(`${key} is in both lists`);
+    } else if (feature !== undefined && route.entitlement !== feature) {
+      problems.push(`${key} does not declare ${feature}`);
+    } else if (free.has(key) && route.entitlement !== null) {
+      problems.push(`${key} is Always Free but declares a feature`);
+    } else if (feature === undefined && !free.has(key)) {
+      problems.push(`${key} is in neither list`);
+    }
+  }
+  return problems;
+}
 
 describe("feature registry on the server (contract C1)", () => {
   it("every Paid route answers 402 with its feature on Free", async () => {
@@ -90,6 +124,28 @@ describe("feature registry on the server (contract C1)", () => {
     for (const route of routes.filter((r) => r.entitlement !== null)) {
       expect(route.auth, `${route.method} ${route.url}`).not.toBe("public");
     }
+  });
+
+  it("every API route is Paid under one feature or listed as Always Free", async () => {
+    // D1: a Paid route that forgets config.entitlement and is not listed
+    // would otherwise pass silently. The probe is in neither list.
+    current = await testApp({ extend: withProbe });
+    const problems = registryProblems(current.app.ctx.routes);
+    expect(problems).toEqual([
+      `GET ${PROBE_URL} is in neither list`,
+      `POST ${PROBE_URL} is in neither list`,
+    ]);
+  });
+
+  it("finds an unlisted route that forgot its entitlement", async () => {
+    const forgotten = "/api/v1/test/forgotten-paid-route";
+    current = await testApp({
+      extend: (app) => {
+        app.post(forgotten, async () => ({ ok: true }));
+      },
+    });
+    const problems = registryProblems(current.app.ctx.routes);
+    expect(problems).toEqual([`POST ${forgotten} is in neither list`]);
   });
 
   it("every route with config.entitlement is listed under its feature", async () => {
