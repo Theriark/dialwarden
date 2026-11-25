@@ -98,7 +98,7 @@ describe("ARK: Survival Ascended pack", () => {
       "MatingIntervalMultiplier",
       "bAllowUnlimitedRespecs",
       "bAutoUnlockAllEngrams",
-      "PerLevelStatsMultiplier_Player[0]",
+      "PerLevelStatsMultiplier_Player.0",
       "bUseSingleplayerSettings",
     ]);
     for (const issue of misplaced) {

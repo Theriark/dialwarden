@@ -944,7 +944,7 @@
       "description": "Local address the remote console binds to. 127.0.0.1 keeps it reachable only from the host."
     },
     {
-      "key": "-batchmode",
+      "key": "batchmode",
       "file": "launch",
       "locator": {
         "kind": "launch",
@@ -956,7 +956,7 @@
       "description": "Runs the server headless without a window. Every known start script includes it."
     },
     {
-      "key": "-logfile",
+      "key": "logfile",
       "file": "launch",
       "locator": {
         "kind": "launch",

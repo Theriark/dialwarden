@@ -236,8 +236,16 @@ describe("Project Zomboid pack", () => {
       severity: "warning",
       message: expect.stringContaining("beds are not allowed"),
     });
+    // A sprinter share counts only with random movement, the fixture's
+    // setting; with fast shamblers the share is ignored and said so.
     const sprinters = fixtureValues(pack);
     sprinters.set("SandboxVars.ZombieLore.SprinterPercentage", 10);
+    expect(
+      validate(pack, sprinters).some(
+        (issue) => issue.key === "SandboxVars.ZombieLore.SprinterPercentage",
+      ),
+    ).toBe(false);
+    sprinters.set("SandboxVars.ZombieLore.Speed", 2);
     expect(validate(pack, sprinters)).toContainEqual({
       key: "SandboxVars.ZombieLore.SprinterPercentage",
       severity: "info",
