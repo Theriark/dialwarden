@@ -206,7 +206,7 @@ export function connectorRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const { host, port, fingerprint, replace } = request.body;
-      const by = request.session?.user.email ?? null;
+      const by = request.principal?.userId ?? null;
       let result: ConfirmResult;
       try {
         result = await app.ctx.connectors.confirmHostKey(

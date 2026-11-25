@@ -18,6 +18,7 @@ import { onSlug } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
+import { actorLabel } from "../team/labels.js";
 import { atLeast } from "../team/roles.js";
 import { actorOf } from "./changes.js";
 import { connectorFailure } from "./connectors.js";
@@ -111,6 +112,8 @@ const statusSchema = z.object({
 interface HooksDeps {
   readonly servers: ServerService;
   readonly hooks: HookService;
+  /** Resolves the updatedBy actor id to its display label (D7). */
+  readonly labelOf: (id: string | null) => string | null;
 }
 
 const EMPTY_ACTIONS = {
@@ -168,7 +171,7 @@ async function hooksView(
     probes,
     available,
     updatedAt: updated?.updatedAt ?? null,
-    updatedBy: updated?.updatedBy ?? null,
+    updatedBy: deps.labelOf(updated?.updatedBy ?? null),
   };
 }
 
@@ -177,6 +180,7 @@ export function hookRoutes(app: FastifyInstance): void {
   const deps = (): HooksDeps => ({
     servers: app.ctx.servers,
     hooks: app.ctx.hooks,
+    labelOf: (id) => (id === null ? null : actorLabel(app.ctx.store, id)),
   });
 
   api.get(
