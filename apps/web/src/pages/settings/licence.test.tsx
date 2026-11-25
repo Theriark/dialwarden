@@ -2,7 +2,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
-import { keys } from "../../api/queries";
+import type { QueryClient } from "@tanstack/react-query";
+import { keys, PLAN_DEPENDENT_KEYS } from "../../api/queries";
 import type { Entitlement, LicenceState } from "../../api/schema";
 import { DevLicenceBanner } from "../../components/dev-licence-banner";
 import {
@@ -58,6 +59,24 @@ function renderLicence(session = OWNER) {
   withSession(client, session);
   const { container } = renderWithProviders(<LicencePage />, client);
   return { client, container };
+}
+
+/** Cached answers for every plan-dependent key, fresh before the change. */
+function seedPlanDependent(client: QueryClient): void {
+  for (const queryKey of PLAN_DEPENDENT_KEYS) {
+    client.setQueryData(queryKey, { cached: true });
+    expect(client.getQueryState(queryKey)?.isInvalidated).toBe(false);
+  }
+}
+
+/** Every plan-dependent answer is stale after the licence change. */
+function expectPlanDependentInvalidated(client: QueryClient): void {
+  for (const queryKey of PLAN_DEPENDENT_KEYS) {
+    expect({
+      queryKey,
+      invalidated: client.getQueryState(queryKey)?.isInvalidated,
+    }).toEqual({ queryKey, invalidated: true });
+  }
 }
 
 const VIEWER = { ...OWNER, user: { ...OWNER.user, role: "viewer" } };
@@ -206,6 +225,7 @@ describe("LicencePage", () => {
     });
     const { client } = renderLicence();
     client.setQueryData(keys.health, { status: "ok" });
+    seedPlanDependent(client);
     const user = userEvent.setup();
     const field = await screen.findByLabelText("Key");
     await user.type(field, "  DW1.example.key  ");
@@ -224,6 +244,9 @@ describe("LicencePage", () => {
     // reads the new plan badge on its next visit.
     expect(client.getQueryState(keys.health)?.isInvalidated).toBe(true);
     expect(healthReads).toBe(0);
+    // The users, invitations, audit, tokens, single sign-on and servers
+    // answer differently on the new plan: all of them are fetched again.
+    expectPlanDependentInvalidated(client);
   });
 
   it("shows the server reason when a pasted key is refused", async () => {
@@ -263,7 +286,8 @@ describe("LicencePage", () => {
       }
       return undefined;
     });
-    renderLicence();
+    const { client } = renderLicence();
+    seedPlanDependent(client);
     const user = userEvent.setup();
     const toggle = await freeSwitch();
     expect(toggle.disabled).toBe(true);
@@ -280,6 +304,7 @@ describe("LicencePage", () => {
     expect(screen.queryByText(/A key added in the UI decides/)).toBeNull();
     expect((await freeSwitch()).disabled).toBe(false);
     expect(screen.queryByRole("alertdialog")).toBeNull();
+    expectPlanDependentInvalidated(client);
   });
 
   it("tells a non-owner what only the owner can change", async () => {

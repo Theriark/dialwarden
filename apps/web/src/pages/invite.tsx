@@ -7,7 +7,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
 import { MailOpen } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ApiError } from "../api/client";
 import { errorMessage, fieldErrors } from "../api/errors";
 import { rememberSession } from "../api/session";
@@ -27,6 +27,19 @@ export function tokenFromHash(hash: string): string | null {
   return value === "" ? null : value;
 }
 
+/**
+ * Once the page holds the value, the address bar and the history entry drop
+ * it, so it is not left on screen or in the back button. The router's own
+ * history state is kept.
+ */
+export function useForgetHash(proof: string | null): void {
+  useEffect(() => {
+    if (proof === null || window.location.hash === "") return;
+    const { pathname, search } = window.location;
+    window.history.replaceState(window.history.state, "", pathname + search);
+  }, [proof]);
+}
+
 export function InvitePage() {
   const client = useQueryClient();
   const router = useRouter();
@@ -36,6 +49,7 @@ export function InvitePage() {
   const [again, setAgain] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  useForgetHash(proof);
 
   if (proof === null) {
     return (

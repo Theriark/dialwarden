@@ -15,7 +15,7 @@ import { Button } from "../components/ui/button";
 import { PasswordField } from "../components/ui/field";
 import { EmptyState } from "../components/ui/states";
 import { AuthFrame } from "./auth-frame";
-import { tokenFromHash } from "./invite";
+import { tokenFromHash, useForgetHash } from "./invite";
 
 const MIN_PASSWORD = 12;
 
@@ -29,6 +29,7 @@ export function ResetPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [failure, setFailure] = useState<unknown>(null);
+  useForgetHash(proof);
 
   if (proof === null) {
     return (

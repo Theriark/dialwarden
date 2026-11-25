@@ -55,6 +55,9 @@ function CreateCard({
   const create = useMutation({
     mutationFn: (input: { name: string; role: AssignableRole }) =>
       createToken(input.name, input.role),
+    // The value lives only in the reveal dialog: the finished mutation is
+    // dropped from the cache at once instead of after the default gcTime.
+    gcTime: 0,
     onSuccess: (made) => {
       void client.invalidateQueries({ queryKey: p8keys.tokens });
       setName("");
@@ -65,6 +68,7 @@ function CreateCard({
         value: made.token,
         note: USAGE,
       });
+      create.reset();
     },
   });
   const payment =

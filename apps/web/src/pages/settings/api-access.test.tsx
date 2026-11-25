@@ -2,7 +2,8 @@
 // The API tokens page: on Free the form is stopped with the hint and the
 // list keeps its revoke; on Paid a new token is shown once and the list
 // refreshes; the role choice never reaches above the signed-in user's own.
-import { screen, waitFor, within } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TokenView } from "../../api/schema";
@@ -91,7 +92,7 @@ describe("ApiAccessPage", () => {
       }
       return undefined;
     });
-    startRouter("/settings/tokens");
+    const { client } = startRouter("/settings/tokens");
     await screen.findByText("Ready");
     const user = userEvent.setup();
     const name = screen.getByLabelText("Name");
@@ -108,16 +109,62 @@ describe("ApiAccessPage", () => {
     await waitFor(() => {
       expect((name as HTMLInputElement).value).toBe("");
     });
+    // Only the dialog holds the value: no mutation in the cache keeps it.
+    await waitFor(() => {
+      expect(JSON.stringify(mutationData(client))).not.toContain(
+        "value_shown_once",
+      );
+    });
+    await user.click(within(reveal).getByLabelText("I have copied it"));
+    await user.click(within(reveal).getByRole("button", { name: "Done" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+    expect(document.body.textContent).not.toContain("value_shown_once");
   });
 
-  it("offers an editor only the editor and viewer roles", async () => {
+  it("offers each role only the roles up to its own", async () => {
+    const offered: [string, (string | null)[]][] = [];
+    for (const role of ["owner", "admin", "editor", "viewer"]) {
+      stubViewport(1280);
+      stubWorld(true, { ...OWNER, user: { ...OWNER.user, role } });
+      startRouter("/settings/tokens");
+      await screen.findByText("Ready");
+      offered.push([
+        role,
+        within(screen.getByLabelText("Acts as"))
+          .getAllByRole("option")
+          .map((option) => option.textContent),
+      ]);
+      resetAfterEach();
+    }
+    expect(offered).toEqual([
+      ["owner", ["Admin", "Editor", "Viewer"]],
+      ["admin", ["Admin", "Editor", "Viewer"]],
+      ["editor", ["Editor", "Viewer"]],
+      ["viewer", ["Viewer"]],
+    ]);
+  });
+
+  it("keeps Create token off on Free even with a name typed", async () => {
     stubViewport(1280);
-    stubWorld(true, { ...OWNER, user: { ...OWNER.user, role: "editor" } });
+    stubWorld(false);
     startRouter("/settings/tokens");
-    await screen.findByText("Ready");
-    const options = within(screen.getByLabelText("Acts as"))
-      .getAllByRole("option")
-      .map((option) => option.textContent);
-    expect(options).toEqual(["Editor", "Viewer"]);
+    await screen.findByText("Stopped on Free");
+    const name = screen.getByLabelText<HTMLInputElement>("Name");
+    // The field is disabled; a value set from outside still makes no token.
+    fireEvent.change(name, { target: { value: "Deploy job" } });
+    expect(screen.getByRole("button", { name: "Create token" })).toHaveProperty(
+      "disabled",
+      true,
+    );
   });
 });
+
+/** The data every mutation in the cache still holds. */
+function mutationData(client: QueryClient): unknown[] {
+  return client
+    .getMutationCache()
+    .getAll()
+    .map((mutation) => mutation.state.data);
+}
