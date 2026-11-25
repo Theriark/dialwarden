@@ -8,6 +8,7 @@ import { z } from "zod";
 import { CAUSES, CHANGE_SET_STATUSES } from "../changes/types.js";
 import { ControlError } from "../control/types.js";
 import { controlFailure } from "../control/hooks.js";
+import { onChangeSet, onSlug, onSnapshot } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import { connectorFailure } from "./connectors.js";
@@ -133,20 +134,19 @@ const slugParams = z.object({
   slug: z.string().max(63).regex(SERVER_ID, "not a server id"),
 });
 
-/** Who acts: the signed-in user's e-mail address. */
+/** Who acts: the e-mail address of the signed-in user (or token owner). */
 export function actorOf(request: FastifyRequest): string {
-  return request.session?.user.email ?? "system";
+  return request.principal?.email ?? "system";
 }
 
 export function changeRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const owner = { auth: "owner" as const };
-  const user = { auth: "user" as const };
 
   api.post(
     "/api/v1/servers/:slug/change-sets",
     {
-      config: user,
+      config: onSlug("write"),
       schema: {
         tags: ["changes"],
         params: slugParams,
@@ -177,7 +177,7 @@ export function changeRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/change-sets/:id",
     {
-      config: user,
+      config: onChangeSet("read"),
       schema: {
         tags: ["changes"],
         params: idParams,
@@ -190,7 +190,7 @@ export function changeRoutes(app: FastifyInstance): void {
   api.post(
     "/api/v1/change-sets/:id/apply",
     {
-      config: user,
+      config: onChangeSet("write"),
       schema: {
         tags: ["changes"],
         params: idParams,
@@ -218,7 +218,7 @@ export function changeRoutes(app: FastifyInstance): void {
   api.post(
     "/api/v1/snapshots/:id/restore",
     {
-      config: user,
+      config: onSnapshot("write"),
       schema: {
         tags: ["changes"],
         params: idParams,

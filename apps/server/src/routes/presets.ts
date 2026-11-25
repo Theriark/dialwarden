@@ -11,6 +11,7 @@
 import { isPackId } from "@dialwarden/packs-schema";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { onBodyServer } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import { actorOf, changeSetSchema } from "./changes.js";
@@ -95,7 +96,7 @@ export function presetRoutes(app: FastifyInstance): void {
   api.post(
     "/api/v1/presets/:id/apply",
     {
-      config: user,
+      config: onBodyServer("write"),
       schema: {
         tags: ["presets"],
         params: idParams,
