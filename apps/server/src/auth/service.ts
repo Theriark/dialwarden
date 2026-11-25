@@ -352,7 +352,7 @@ export class AuthService {
       .set({ totpPendingEnc, updatedAt: this.#now().toISOString() })
       .where(eq(users.id, userId))
       .run();
-    { secret, otpauthUri: otpauthUri(secret, row.email) };
+    return { secret, otpauthUri: otpauthUri(secret, row.email) };
   }
 
   /** Confirms enrolment with a code; returns the 10 recovery codes once. */
