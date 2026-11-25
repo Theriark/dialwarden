@@ -8,9 +8,11 @@ import { z } from "zod";
 import { CAUSES, CHANGE_SET_STATUSES } from "../changes/types.js";
 import { ControlError } from "../control/types.js";
 import { controlFailure } from "../control/hooks.js";
+import { ApiError } from "../http/errors.js";
 import { onChangeSet, onSlug, onSnapshot } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
+import { atLeast } from "../team/roles.js";
 import { connectorFailure } from "./connectors.js";
 
 const CHIP_KINDS = [
@@ -139,6 +141,22 @@ export function actorOf(request: FastifyRequest): string {
   return request.principal?.email ?? "system";
 }
 
+/**
+ * The raw rule of rnd-decision-p8a Q2 (P3 X1 left open): raw text can carry
+ * a command into a file the game host reads with a shell, which no typed
+ * value check sees. Raw patches to any file are owner and admin only,
+ * checked at create and again at apply; a restore into a shell-read file is
+ * too. Editors keep typed edits, which pass the X1 value check.
+ */
+function isAdmin(request: FastifyRequest): boolean {
+  const principal = request.principal;
+  return principal !== null && atLeast(principal.role, "admin");
+}
+
+const rawRequiresAdmin = () => new ApiError(403, "raw_requires_admin");
+const shellFileRequiresAdmin = () =>
+  new ApiError(403, "shell_file_requires_admin");
+
 export function changeRoutes(app: FastifyInstance): void {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const owner = { auth: "owner" as const };
@@ -155,8 +173,11 @@ export function changeRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const server = app.ctx.servers.require(request.params.slug);
       const body = request.body;
+      if ((body.patches ?? []).length > 0 && !isAdmin(request)) {
+        throw rawRequiresAdmin();
+      }
+      const server = app.ctx.servers.require(request.params.slug);
       const edits = (body.edits ?? []).map((edit) => ({
         key: edit.settingKey,
         value: edit.value,
@@ -199,6 +220,12 @@ export function changeRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
+      if (!isAdmin(request)) {
+        // A restore keeps its own rule; any other raw patch needs an admin.
+        const scope = app.ctx.changes.rawScope(request.params.id);
+        if (scope.restore && scope.shellFile) throw shellFileRequiresAdmin();
+        if (scope.patches && !scope.restore) throw rawRequiresAdmin();
+      }
       const actor = actorOf(request);
       try {
         return await app.ctx.changes.apply(
@@ -226,9 +253,13 @@ export function changeRoutes(app: FastifyInstance): void {
       },
     },
     async (request) => {
+      const id = request.params.id;
+      if (!isAdmin(request) && app.ctx.changes.snapshotIsShellFile(id)) {
+        throw shellFileRequiresAdmin();
+      }
       const actor = actorOf(request);
       try {
-        return await app.ctx.changes.restore(request.params.id, actor);
+        return await app.ctx.changes.restore(id, actor);
       } catch (error) {
         throw connectorFailure(error);
       }

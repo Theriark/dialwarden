@@ -21,8 +21,17 @@ async function fixture(): Promise<TeamFixture> {
   return made;
 }
 
-function rowsOf(t: TeamFixture) {
+type AuditRow = typeof auditEvents.$inferSelect;
+
+function rowsOf(t: TeamFixture): AuditRow[] {
   return t.app.ctx.store.db.select().from(auditEvents).all();
+}
+
+/** The hashed columns of a row as text: every column but the address. */
+function hashedText(row: AuditRow): string {
+  const copy: Partial<AuditRow> = { ...row };
+  delete copy.ip;
+  return JSON.stringify(copy);
 }
 
 /** More audit rows, made by real requests of the owner. */
@@ -143,8 +152,7 @@ describe("audit chain (C-01 to C-12)", () => {
         const name = `Editor ${String(n)}`;
         await call(t.app, t.editor, "PATCH", "/api/v1/auth/profile", { name });
       }
-      const hashed = () =>
-        rowsOf(t).map(({ ip: _ip, ...rest }) => JSON.stringify(rest));
+      const hashed = () => rowsOf(t).map(hashedText);
       const before = hashed();
       const url = `/api/v1/users/${t.editor.userId}`;
       const done =
@@ -170,9 +178,7 @@ describe("audit chain (C-01 to C-12)", () => {
     const t = await fixture();
     await actions(t, 3);
     const people = [t.owner, t.admin, t.editor, t.viewer, t.loner];
-    const hashed = rowsOf(t)
-      .map(({ ip: _ip, ...rest }) => JSON.stringify(rest))
-      .join("\n");
+    const hashed = rowsOf(t).map(hashedText).join("\n");
     for (const person of people) {
       expect(hashed).not.toContain(person.email);
     }
