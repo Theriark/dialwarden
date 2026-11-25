@@ -49,6 +49,7 @@ import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
+import { RetentionService } from "./privacy/retention.js";
 import { activityRoutes } from "./routes/activity.js";
 import { apiAccessRoutes } from "./routes/api-access.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -61,6 +62,7 @@ import { hookRoutes } from "./routes/hooks.js";
 import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
 import { presetRoutes } from "./routes/presets.js";
+import { retentionRoutes } from "./routes/retention.js";
 import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
 import { userRoutes } from "./routes/users.js";
@@ -265,6 +267,14 @@ export async function buildApp(
     now,
   });
   const audit = new AuditService({ store, settings, appKey: appKey.key, now });
+  const retention = new RetentionService({
+    store,
+    settings,
+    snapshots,
+    audit,
+    log: app.log,
+    now,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -300,6 +310,7 @@ export async function buildApp(
     team,
     tokens: new TokenService({ store, entitlement, now }),
     audit,
+    retention,
     maintenance: false,
     importing: false,
     routes: [],
@@ -325,6 +336,7 @@ export async function buildApp(
   });
   app.addHook("onClose", async () => {
     await ctx.backups.stop();
+    ctx.retention.stop();
     ctx.store.close();
   });
 
@@ -372,6 +384,7 @@ export async function buildApp(
   apiAccessRoutes(app);
   invitationRoutes(app);
   auditRoutes(app);
+  retentionRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
