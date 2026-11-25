@@ -1,6 +1,7 @@
 // Runtime configuration from the environment (dev-work-plan Runtime). Secrets
 // are kept in this object only; nothing here is logged.
 import { createRequire } from "node:module";
+import { isIP } from "node:net";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -40,7 +41,6 @@ export interface AppConfig {
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace"];
 const HEX64 = /^[0-9a-fA-F]{64}$/;
 const PROXY_ENTRY = /^[0-9a-fA-F.:]+(?:\/\d|\/\d\d|\/\d\d\d)?$/;
-const ZERO_PREFIX = /\/0+$/;
 
 // The folder public next to the server build (dist/config.js), which is
 // /app/public in the image. From the sources it is apps/server/public, which
@@ -73,9 +73,19 @@ const hex64 = (name: string, value: string | undefined): string | null => {
   return found === null ? null : found.toLowerCase();
 };
 
-/** An IP address or CIDR range; a /0 range trusts everyone, like a wildcard. */
+/**
+ * An IP address or CIDR range. A wide range trusts nearly everyone, like a
+ * wildcard: IPv4 ranges need at least /8 and IPv6 ranges at least /32 (D22),
+ * so 0.0.0.0/0 and pairs such as 0.0.0.0/1 plus 128.0.0.0/1 are refused.
+ */
 function proxyEntry(entry: string): boolean {
-  return PROXY_ENTRY.test(entry) && !ZERO_PREFIX.test(entry);
+  if (!PROXY_ENTRY.test(entry)) return false;
+  const [address = "", prefix] = entry.split("/");
+  const kind = isIP(address);
+  if (kind === 0) return false;
+  if (prefix === undefined) return true;
+  const bits = Number(prefix);
+  return kind === 4 ? bits >= 8 && bits <= 32 : bits >= 32 && bits <= 128;
 }
 
 /** IP addresses and CIDR ranges only; a wildcard is refused. */

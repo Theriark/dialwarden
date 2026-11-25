@@ -13,6 +13,7 @@ import type {
 } from "@dialwarden/entitlement";
 import type { Pack } from "@dialwarden/packs-schema";
 import type { ActivityService } from "../activity/service.js";
+import type { AuditService } from "../audit/service.js";
 import type { ChangeSetService } from "../changes/service.js";
 import type { AuthService } from "../auth/service.js";
 import type { SetupToken } from "../auth/first-run.js";
@@ -86,6 +87,8 @@ export interface AppContext {
   snapshots: SnapshotStore;
   /** Users, roles, grants, invitations and the privacy controls (P8-A). */
   team: TeamService;
+  /** The hash-chained audit log and its settings (P8-A). */
+  audit: AuditService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */
@@ -113,6 +116,8 @@ declare module "fastify" {
     principal: Principal | null;
     /** The access the principal holds on the route's server, if scoped. */
     serverLevel: GrantLevel | null;
+    /** The game server of a server-scoped route (the audit log names it). */
+    serverId: string | null;
   }
   interface FastifyContextConfig {
     auth?: AuthLevel;

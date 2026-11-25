@@ -18,6 +18,8 @@ import {
 import { loadPacks } from "@dialwarden/packs-schema/node";
 import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
+import { registerAuditRecording } from "./audit/record.js";
+import { AuditService } from "./audit/service.js";
 import { bootstrapOwner, openFirstRunSetup } from "./auth/bootstrap.js";
 import { SetupToken } from "./auth/first-run.js";
 import { LoginLimiter } from "./auth/limiter.js";
@@ -48,6 +50,7 @@ import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
 import { activityRoutes } from "./routes/activity.js";
+import { auditRoutes } from "./routes/audit.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
 import { connectorRoutes } from "./routes/connectors.js";
@@ -259,6 +262,7 @@ export async function buildApp(
     baseUrl: config.baseUrl,
     now,
   });
+  const audit = new AuditService({ store, settings, appKey: appKey.key, now });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -292,6 +296,7 @@ export async function buildApp(
     presets,
     snapshots,
     team,
+    audit,
     maintenance: false,
     importing: false,
     routes: [],
@@ -343,6 +348,7 @@ export async function buildApp(
     transform: openApiTransform,
   });
   registerGuard(app, { authProbe: options.authProbe === true });
+  registerAuditRecording(app);
   // Contract C8: the built web app (none in tests and API-only runs) and the
   // security headers of every response.
   const web = loadWebDist(config.webDist, app.log);
@@ -361,6 +367,7 @@ export async function buildApp(
   hookRoutes(app);
   userRoutes(app);
   invitationRoutes(app);
+  auditRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },

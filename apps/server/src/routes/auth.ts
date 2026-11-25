@@ -50,11 +50,14 @@ export function startSession(
   if (request.session !== null) {
     app.ctx.sessions.destroy(request.session.id);
   }
+  // The session keeps the address as the audit IP setting says (D18).
   const session = app.ctx.sessions.create(user.id, {
-    ip: request.ip,
+    ip: app.ctx.audit.address(request.ip),
     userAgent: request.headers["user-agent"] ?? null,
   });
   setSessionCookie(app, reply, session);
+  // From here the request acts as the new user (the audit log names them).
+  request.principal = app.ctx.team.principalOf(user);
   return {
     status: "ok" as const,
     user: userView(app, user),

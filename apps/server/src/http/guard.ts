@@ -26,11 +26,13 @@ import {
   type NewSession,
 } from "../auth/sessions.js";
 import { changeSets, snapshots } from "../db/schema.js";
+import { SERVER_ID } from "../plan/editable.js";
 import { atLeast, serverLevel, type Principal } from "../team/roles.js";
 import type { AuthLevel, ServerScope, ServerSource } from "./context.js";
 import { ApiError, featureRequired } from "./errors.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The header of the role-matrix test seam (BuildOptions.authProbe). */
 export const AUTH_PROBE_HEADER = "x-dialwarden-auth-probe";
@@ -91,16 +93,26 @@ function textField(value: unknown, field: string): string | null {
   return typeof found === "string" ? found : null;
 }
 
-/** The game server a scoped route acts on, or null when there is none. */
+/**
+ * The game server a scoped route acts on: a slug, the server of a change set
+ * or snapshot, or null when there is none. A value that is not even shaped
+ * like an id is left to the schema (400), so it reveals nothing either.
+ */
 function serverOf(
   app: FastifyInstance,
   request: FastifyRequest,
   from: ServerSource,
-): string | null {
+): string | null | "malformed" {
   const db = app.ctx.store.db;
-  if (from === "slug") return textField(request.params, "slug");
-  if (from === "bodyServer") return textField(request.body, "server");
+  if (from === "slug" || from === "bodyServer") {
+    const slug =
+      from === "slug"
+        ? textField(request.params, "slug")
+        : textField(request.body, "server");
+    return slug !== null && SERVER_ID.test(slug) ? slug : "malformed";
+  }
   const id = textField(request.params, "id") ?? "";
+  if (!UUID.test(id)) return "malformed";
   if (from === "changeSet") {
     const row = db
       .select({ serverId: changeSets.serverId })
@@ -125,11 +137,14 @@ function checkServer(
   scope: ServerScope,
 ): void {
   const serverId = serverOf(app, request, scope.from);
+  // A malformed id never reaches the handler: the schema answers 400.
+  if (serverId === "malformed") return;
   if (serverId === null) throw missing(scope.from);
   const grant = app.ctx.team.grantLevel(principal.userId, serverId);
   const level = serverLevel(principal, grant);
   if (level === null) throw missing(scope.from);
   request.serverLevel = level;
+  request.serverId = serverId;
   const allowed =
     scope.access === "read" ||
     (scope.access === "write" && level === "write") ||
@@ -145,6 +160,7 @@ export function registerGuard(
   app.decorateRequest("session", null);
   app.decorateRequest("principal", null);
   app.decorateRequest("serverLevel", null);
+  app.decorateRequest("serverId", null);
   app.addHook("onRequest", async (request) => {
     if (app.ctx.maintenance && routePath(request).startsWith("/api/")) {
       throw new ApiError(503, "maintenance");
