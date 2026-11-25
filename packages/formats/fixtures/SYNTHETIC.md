@@ -10,6 +10,7 @@ section 2).
 | sample.ini | a minimal INI file: a section, keys, an empty value and comments |
 | cfg/SYNTHETIC.md | the list of the cfg fixtures |
 | cfg/server.cfg | console commands: quoted and bare values, an empty value, a // comment after a value, dotted Rust names, two commands on one line, a duplicate in another case and trailing spaces |
+| cfg/hash-comments.cfg | # comment lines (repeated, empty, indented with spaces or a tab, one holding an unclosed quote, a commented-out command), a # comment after a ;, a # inside a value, a // comment after a command and one real duplicate in another case |
 | cfg/crlf-bom.cfg | CRLF line endings, a BOM and a non-ASCII value |
 | cfg/malformed-unclosed-quote.cfg | malformed: a quote that is not closed |
 | ini/SYNTHETIC.md | the list of the ini fixtures |

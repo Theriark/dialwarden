@@ -3,7 +3,7 @@
 // and bare value forms the server writes, and the rules of the pack draft.
 // Every convar the pack does not know stays in the file untouched.
 import { getAdapter } from "@dialwarden/formats";
-import { validate, writeFileValues } from "@dialwarden/packs-schema";
+import { lintFile, validate, writeFileValues } from "@dialwarden/packs-schema";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -114,6 +114,21 @@ describe("Rust pack", () => {
         command: "server.idlekick",
       }),
     ).toBe("15");
+  });
+
+  it("reads no comment line as a convar (F-P7-1)", () => {
+    // Both files repeat # comment lines; each once raised a duplicate-key
+    // warning on every save.
+    const files = { servercfg: serverCfg(), userscfg: usersCfg() };
+    for (const [id, bytes] of Object.entries(files)) {
+      const lines = text(bytes).split("\n");
+      const hashed = lines.filter((line) => line.trimStart().startsWith("#"));
+      expect(hashed.length, id).toBeGreaterThan(1);
+      const duplicates = lintFile(pack, id, bytes).filter(
+        (issue) => issue.code === "duplicate-key",
+      );
+      expect(duplicates, id).toEqual([]);
+    }
   });
 
   it("reads the launch convars of the args line", () => {

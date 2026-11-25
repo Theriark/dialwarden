@@ -68,7 +68,7 @@ const CASES: Case[] = [
     kit: cfgKit,
     folder: "cfg",
     broken: ["malformed-unclosed-quote.cfg"],
-    identity: ["crlf-bom.cfg", "server.cfg"],
+    identity: ["crlf-bom.cfg", "hash-comments.cfg", "server.cfg"],
   },
   {
     kit: shellVarKit,

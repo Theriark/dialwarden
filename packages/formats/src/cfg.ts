@@ -1,13 +1,17 @@
 // Console cfg files (Source server.cfg, Rust server.cfg): one command per
 // statement, such as hostname "My server" or server.hostname "x". Statements
-// end at a line break or a ; outside quotes, and // starts a comment. Names
-// are compared without case. As in the games, the last statement of a
-// command wins: get and set use it, remove removes every statement.
+// end at a line break or a ; outside quotes, and // starts a comment. A #
+// where a statement would start (first on the line after blanks, or after a
+// ;) starts a comment to the end of the line too, so Rust's # comment lines
+// are never commands; a # later in a statement is part of it. Names are
+// compared without case. As in the games, the last statement of a command
+// wins: get and set use it, remove removes every statement.
 
 import { appendLines, lineRange, mergeRanges, verified } from "./edits.js";
 import {
   applySplices,
   hasLineBreak,
+  isBlank,
   own,
   Source,
   sortedIssues,
@@ -73,11 +77,20 @@ function split(src: Source, line: Line): { end: number; sep: number }[] {
   const text = src.text;
   const out: { end: number; sep: number }[] = [];
   let quoted = false;
+  // Only blanks so far in this statement: a # here starts a comment.
+  let fresh = true;
   for (let i = line.start; i < line.end; i++) {
     const ch = text.charAt(i);
+    if (fresh && ch === "#") {
+      out.push({ end: i, sep: -1 });
+      return out;
+    }
+    if (!isBlank(text.charCodeAt(i))) fresh = false;
     if (ch === '"') quoted = !quoted;
-    else if (!quoted && ch === ";") out.push({ end: i, sep: i });
-    else if (!quoted && text.startsWith("//", i)) {
+    else if (!quoted && ch === ";") {
+      out.push({ end: i, sep: i });
+      fresh = true;
+    } else if (!quoted && text.startsWith("//", i)) {
       out.push({ end: i, sep: -1 });
       return out;
     }
@@ -222,7 +235,8 @@ export const cfgAdapter: FormatAdapter<CfgLocator> = {
       throw new FormatError("exists", `${locator.command} already exists`);
     }
     const { command } = locator;
-    if (/[\s";]/.test(command) || command.includes("//")) {
+    const comment = command.includes("//") || command.startsWith("#");
+    if (/[\s";]/.test(command) || comment) {
       throw new FormatError("invalid-locator", `${command} is not a command`);
     }
     const text = valueText(value, undefined);
