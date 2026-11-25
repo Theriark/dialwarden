@@ -102,7 +102,7 @@
       "default": "",
       "max": 256,
       "group": "Identity",
-      "description": "Link the browser shows as clickable for this server, for example a community page or a chat invite.",
+      "description": "Optional web address for your community. The server browser turns it into a link players can click.",
       "restartRequired": true
     },
     {
@@ -118,7 +118,7 @@
       "group": "Identity",
       "secret": true,
       "panelManaged": true,
-      "description": "Password needed to join. Empty means an open server; it is stored as plain text in the file.",
+      "description": "Players must enter this to connect. Leave it empty for an open server. The file keeps it in plain text.",
       "restartRequired": true
     },
     {
@@ -132,7 +132,7 @@
       "default": "",
       "max": 1000,
       "group": "Identity",
-      "description": "Rules text each joining player must accept before entering. Empty skips the confirmation dialog.",
+      "description": "Optional text, such as house rules, that a joining player has to confirm before the game lets them in. Leave it empty to skip that step.",
       "restartRequired": true
     },
     {
@@ -201,7 +201,7 @@
       "default": "English",
       "max": 32,
       "group": "Identity",
-      "description": "Main language of the community, written as its English name (German, not Deutsch), for browser search.",
+      "description": "The community's main language, spelled in English (German rather than Deutsch), so that searches in the server browser find it.",
       "restartRequired": true
     },
     {
@@ -218,7 +218,7 @@
       "unit": "port",
       "group": "Network",
       "panelManaged": true,
-      "description": "Base game port. The server also takes the next two UDP ports, so port+1 and port+2 must be free too.",
+      "description": "UDP port for game traffic. The game also uses the two ports right after it, so keep those free and open as well.",
       "restartRequired": true
     },
     {
@@ -348,7 +348,7 @@
       "max": 64,
       "unit": "count",
       "group": "Multiplayer",
-      "description": "Slots, counted inside the player cap, held back for users with a strong enough permission level.",
+      "description": "Part of the player cap set aside for players whose permission level qualifies. 0 means no slots are held back.",
       "restartRequired": true
     },
     {
@@ -364,7 +364,7 @@
       "max": 1000,
       "unit": "level",
       "group": "Multiplayer",
-      "description": "Permission level a player needs to use a reserved slot. Lower numbers mean more privilege.",
+      "description": "Permission level that unlocks the reserved slots. In this game a lower number is a higher rank.",
       "restartRequired": true
     },
     {
@@ -380,7 +380,7 @@
       "max": 16,
       "unit": "count",
       "group": "Multiplayer",
-      "description": "Extra slots above the player cap that only admins can take once the server is full.",
+      "description": "Admins can still connect when the server is full, up to this many on top of the player cap.",
       "restartRequired": true
     },
     {
@@ -396,7 +396,7 @@
       "max": 1000,
       "unit": "level",
       "group": "Multiplayer",
-      "description": "Permission level a user needs to take one of the extra admin slots above the normal cap.",
+      "description": "Permission level that counts as admin for the full-server admin slots. Lower numbers rank higher.",
       "restartRequired": true
     },
     {
@@ -443,7 +443,7 @@
       "max": 10000,
       "unit": "blocks",
       "group": "Multiplayer",
-      "description": "Distance within which party members share kill experience and quest kill credit.",
+      "description": "Party members closer than this many blocks to a kill get a share of its experience and count it for party kill quests.",
       "restartRequired": true
     },
     {
@@ -456,7 +456,7 @@
       "type": "bool",
       "default": false,
       "group": "Multiplayer",
-      "description": "When true, each player is locked to the character profile they last joined with, which blocks profile swapping.",
+      "description": "When on, a returning player always gets the profile used on the previous visit; when off, any profile may be chosen at join.",
       "restartRequired": true
     },
     {
@@ -469,7 +469,7 @@
       "type": "bool",
       "default": true,
       "group": "Admin interfaces",
-      "description": "Turns on the plain-text remote console the Dialwarden save, announce and stop actions use.",
+      "description": "Turns on the plain-text remote console the Dialwarden save and stop actions use.",
       "restartRequired": true
     },
     {
@@ -518,7 +518,7 @@
       "max": 100,
       "unit": "count",
       "group": "Admin interfaces",
-      "description": "Wrong-password attempts from one address before that address is temporarily locked out of the console.",
+      "description": "Number of bad console passwords one remote address may send before the console refuses that address for a while.",
       "restartRequired": true
     },
     {
@@ -534,7 +534,7 @@
       "max": 3600,
       "unit": "seconds",
       "group": "Admin interfaces",
-      "description": "How long a console client stays blocked after reaching the failed-login limit.",
+      "description": "Length of the console ban, in seconds, for an address that sent too many bad passwords.",
       "restartRequired": true
     },
     {
@@ -547,7 +547,7 @@
       "type": "bool",
       "default": true,
       "group": "Admin interfaces",
-      "description": "Opens a separate log and command window on Windows hosts. It has no effect on Linux servers.",
+      "description": "Windows only: a console window with live log output and a command line opens next to the server. Linux ignores it.",
       "restartRequired": true
     },
     {
@@ -578,7 +578,7 @@
         }
       ],
       "group": "Admin interfaces",
-      "description": "How much admin command use is hidden from logs: 0 nothing hidden, up to 3 hidden everywhere.",
+      "description": "Keeps admin command use out of logs: 0 logs everything, 1 hides it from console and panel, 2 also from game clients, 3 everywhere.",
       "restartRequired": true
     },
     {
@@ -649,7 +649,7 @@
       "default": "",
       "max": 256,
       "group": "Web dashboard",
-      "description": "Public address to advertise when the dashboard sits behind a reverse proxy. Include scheme and port.",
+      "description": "Needed only when players reach the dashboard through a reverse proxy or a domain: the complete address, with https and port. Empty means the server IP and dashboard port.",
       "restartRequired": true
     },
     {
@@ -693,7 +693,7 @@
       "max": 64,
       "group": "World",
       "panelManaged": true,
-      "description": "Seed text, used only when the world is RWG. The same seed and size always reproduce the same layout.",
+      "description": "Starting text for the RWG generator; other GameWorld values ignore it. When a world from this seed and size already exists, the server loads it rather than generating a new one.",
       "restartRequired": true
     },
     {
@@ -721,7 +721,7 @@
       ],
       "unit": "blocks",
       "group": "World",
-      "description": "Edge length of a generated RWG world. Crossplay allows 8192 at most.",
+      "description": "Map width and height in blocks for a generated RWG world, in steps of 2048 from 6144 to 10240. Crossplay servers are limited to 8192.",
       "restartRequired": true
     },
     {
@@ -737,7 +737,7 @@
       "max": 64,
       "group": "World",
       "panelManaged": true,
-      "description": "Save slot name, also used to seed decoration. Changing it starts a fresh save.",
+      "description": "Name of the save, also used to place trees and other decoration. A new name means a new save; the RWG terrain layout does not change.",
       "restartRequired": true
     },
     {
@@ -767,7 +767,7 @@
       "max": 9999,
       "unit": "days",
       "group": "World",
-      "description": "In-game days after which unvisited, unprotected chunks reset to their original state; -1 means never.",
+      "description": "Days of game time a chunk may go without visitors before it reverts to how it was generated. Land claims and bedrolls nearby protect it; -1 turns resets off.",
       "restartRequired": true
     },
     {
@@ -815,7 +815,7 @@
       "max": 100,
       "unit": "level",
       "group": "Gameplay",
-      "description": "Players at or below this level get a temporary enemy-free bubble when they spawn.",
+      "description": "Highest player level that still gets an enemy-free area on spawning, giving new characters a calm start.",
       "restartRequired": true
     },
     {
@@ -831,7 +831,7 @@
       "max": 24,
       "unit": "hours",
       "group": "Gameplay",
-      "description": "How long the new-player spawn bubble lasts, in in-game hours, before enemies may appear.",
+      "description": "Game-time hours that the new-player spawn protection stays in place.",
       "restartRequired": true
     },
     {
@@ -860,7 +860,7 @@
       "max": 100,
       "unit": "blocks",
       "group": "Gameplay",
-      "description": "Half-width of the no-spawn box around an active bedroll. Cleared sleepers inside it do not come back.",
+      "description": "Zombies cannot spawn in a box around an active bedroll; this value is half its side length. Sleeper rooms touching that box stay empty once cleared.",
       "restartRequired": true
     },
     {
@@ -876,7 +876,7 @@
       "max": 365,
       "unit": "days",
       "group": "Gameplay",
-      "description": "Real-world days a bedroll keeps working after its owner was last online.",
+      "description": "Number of real days without a login by its owner after which a bedroll stops working.",
       "restartRequired": true
     },
     {
@@ -903,7 +903,7 @@
         }
       ],
       "group": "Gameplay",
-      "description": "Option on first join to spawn near an online friend: 0 off, 1 anywhere, 2 forest biome only.",
+      "description": "Whether a first-time player may start next to a friend who is online: 0 never, 1 always, 2 only when that friend is in the forest biome.",
       "restartRequired": true
     },
     {
@@ -946,7 +946,7 @@
       "max": 1000,
       "unit": "level",
       "group": "Gameplay",
-      "description": "Permission level a streamer needs to use the Twitch integration on this server.",
+      "description": "Permission level a streamer must hold to run the Twitch integration here; lower numbers rank higher.",
       "restartRequired": true
     },
     {
@@ -991,7 +991,7 @@
       "max": 201,
       "unit": "blocks",
       "group": "Land claims",
-      "description": "Edge length of the protected cube centred on each land claim block.",
+      "description": "Width in blocks of the area a land claim block protects, measured with the claim block in the middle.",
       "restartRequired": true
     },
     {
@@ -1007,7 +1007,7 @@
       "max": 200,
       "unit": "blocks",
       "group": "Land claims",
-      "description": "Minimum distance between claim blocks owned by players who are not friends.",
+      "description": "Players who are not friends cannot place claim blocks closer together than this many blocks.",
       "restartRequired": true
     },
     {
@@ -1050,7 +1050,7 @@
         }
       ],
       "group": "Land claims",
-      "description": "How protection fades while the owner is offline: 0 linear, 1 exponential, 2 full until expiry.",
+      "description": "Protection curve for an absent owner's claim: 0 slow (linear), 1 fast (exponential), 2 none until the claim expires.",
       "restartRequired": true
     },
     {
@@ -1066,7 +1066,7 @@
       "max": 100,
       "unit": "multiplier",
       "group": "Land claims",
-      "description": "Block hardness multiplier inside a claim while the owner is online; 0 makes the blocks unbreakable.",
+      "description": "Factor by which claimed blocks get harder to break while their owner is logged in. 4 is the stock value; 0 means they take no damage.",
       "restartRequired": true
     },
     {
@@ -1082,7 +1082,7 @@
       "max": 100,
       "unit": "multiplier",
       "group": "Land claims",
-      "description": "Block hardness multiplier inside a claim while the owner is offline; 0 makes the blocks unbreakable.",
+      "description": "Factor by which claimed blocks get harder to break while their owner is logged out. 4 is the stock value; 0 means they take no damage.",
       "restartRequired": true
     },
     {
@@ -1098,7 +1098,7 @@
       "max": 1440,
       "unit": "minutes",
       "group": "Land claims",
-      "description": "Minutes after logout before the offline multiplier replaces the online one.",
+      "description": "Minutes the online hardness factor keeps applying after the owner logs out; the offline factor takes over after that.",
       "restartRequired": true
     },
     {
@@ -1130,7 +1130,7 @@
       "max": 200,
       "unit": "count",
       "group": "Performance",
-      "description": "World-wide cap on live animals. Cheaper than zombies; raise it for busy, spread-out servers.",
+      "description": "Ceiling on animals alive at once across the map. Biomes still limit local spawns, so raise it only if many players spread far apart.",
       "restartRequired": true
     },
     {
@@ -1162,7 +1162,7 @@
       "max": 10000,
       "unit": "count",
       "group": "Performance",
-      "description": "Queue limit for chunk mesh building. Lower saves memory; higher can load chunks faster.",
+      "description": "Upper bound on chunk mesh layers waiting to be built. A smaller queue uses less memory, but chunks may take longer to appear.",
       "restartRequired": true
     },
     {
@@ -1188,7 +1188,7 @@
       "type": "bool",
       "default": true,
       "group": "Performance",
-      "description": "Limits dynamic mesh work to areas around land claims, which saves CPU on large worlds.",
+      "description": "When on, only claimed areas get dynamic mesh updates; turning it off covers the whole world at a higher CPU cost.",
       "restartRequired": true
     },
     {
@@ -1204,7 +1204,7 @@
       "max": 10,
       "unit": "chunks",
       "group": "Performance",
-      "description": "Extra chunk radius around each claim that dynamic mesh processing also covers.",
+      "description": "Margin, counted in chunks, that dynamic mesh work extends past the edge of each land claim.",
       "restartRequired": true
     },
     {
@@ -1220,7 +1220,7 @@
       "max": 20,
       "unit": "count",
       "group": "Performance",
-      "description": "Number of dynamic mesh items processed in parallel. Higher values use more memory.",
+      "description": "Dynamic mesh jobs the server works on at once. Raising it speeds processing and costs memory.",
       "restartRequired": true
     },
     {
@@ -1246,7 +1246,7 @@
         "property": "GameDifficulty"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: difficulty now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes difficulty mostly from the SandboxCode, so this line has little effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1257,7 +1257,7 @@
         "property": "BlockDamagePlayer"
       },
       "type": "float",
-      "description": "Ignored by this game version since V3: block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes block damage from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1268,7 +1268,7 @@
         "property": "BlockDamageAI"
       },
       "type": "float",
-      "description": "Ignored by this game version since V3: zombie block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes zombie block damage from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1279,7 +1279,7 @@
         "property": "BlockDamageAIBM"
       },
       "type": "float",
-      "description": "Ignored by this game version since V3: blood-moon block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes blood-moon block damage from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1290,7 +1290,7 @@
         "property": "XPMultiplier"
       },
       "type": "float",
-      "description": "Ignored by this game version since V3: experience now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes experience from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1301,7 +1301,7 @@
         "property": "DayNightLength"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: day length now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes day length from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1312,7 +1312,7 @@
         "property": "DayLightLength"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: daylight hours now come from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes daylight hours from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1323,7 +1323,7 @@
         "property": "BiomeProgression"
       },
       "type": "bool",
-      "description": "Ignored by this game version since V3: biome progression moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes biome progression from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1334,7 +1334,7 @@
         "property": "StormFreq"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: storm frequency moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes storm frequency from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1345,7 +1345,7 @@
         "property": "DeathPenalty"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the death penalty moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the death penalty from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1356,7 +1356,7 @@
         "property": "DropOnDeath"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: what drops on death moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the drop-on-death rule from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1367,7 +1367,7 @@
         "property": "DropOnQuit"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: what drops on quit moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the drop-on-quit rule from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1378,7 +1378,7 @@
         "property": "JarRefund"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the jar refund moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the jar refund from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1389,7 +1389,7 @@
         "property": "EnemySpawnMode"
       },
       "type": "bool",
-      "description": "Ignored by this game version since V3: enemy spawning moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes enemy spawning from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1400,7 +1400,7 @@
         "property": "EnemyDifficulty"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: enemy difficulty moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes enemy difficulty mostly from the SandboxCode, so this line has little effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1411,7 +1411,7 @@
         "property": "ZombieFeralSense"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: feral senses moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes feral senses from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1422,7 +1422,7 @@
         "property": "ZombieMove"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: daytime zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes daytime zombie speed from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1433,7 +1433,7 @@
         "property": "ZombieMoveNight"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: night zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes night zombie speed from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1444,7 +1444,7 @@
         "property": "ZombieFeralMove"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: feral zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes feral zombie speed from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1455,7 +1455,7 @@
         "property": "ZombieBMMove"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: blood-moon speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes blood-moon speed from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1466,7 +1466,7 @@
         "property": "AISmellMode"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the smell system moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the smell system from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1477,7 +1477,7 @@
         "property": "BloodMoonFrequency"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: blood-moon frequency moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes blood-moon frequency from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1488,7 +1488,7 @@
         "property": "BloodMoonRange"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the blood-moon day spread moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the blood-moon day spread from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1499,7 +1499,7 @@
         "property": "BloodMoonWarning"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the blood-moon warning hour moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the blood-moon warning hour from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1510,7 +1510,7 @@
         "property": "BloodMoonEnemyCount"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the blood-moon horde size moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the blood-moon horde size from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1521,7 +1521,7 @@
         "property": "LootAbundance"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: loot quantity now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes loot quantity from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1532,7 +1532,7 @@
         "property": "LootRespawnDays"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: loot refills now come from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes loot refills from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1543,7 +1543,7 @@
         "property": "AirDropFrequency"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: supply-drop spacing moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes supply-drop spacing from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1554,7 +1554,7 @@
         "property": "AirDropMarker"
       },
       "type": "bool",
-      "description": "Ignored by this game version since V3: supply-drop markers moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes supply-drop markers from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1565,7 +1565,7 @@
         "property": "QuestProgressionDailyLimit"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: the daily quest cap moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "Since V3 the game takes the daily quest cap from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1576,7 +1576,7 @@
         "property": "LootTimer"
       },
       "type": "int",
-      "description": "Ignored by this game version since V3: a mod-era key some managers still write; V3 reads it from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "description": "A key from older versions that some managers still write. Since V3 the game takes the loot timer from the SandboxCode, so this line has no effect. Editing it changes only this line.",
       "removedIn": "3.0"
     },
     {
@@ -1600,7 +1600,7 @@
       "id": "pre-v3-gamedifficulty",
       "severity": "warning",
       "settings": ["GameDifficulty"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has little effect since V3: the SandboxCode value mostly wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1614,7 +1614,7 @@
       "id": "pre-v3-blockdamageplayer",
       "severity": "warning",
       "settings": ["BlockDamagePlayer"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1628,7 +1628,7 @@
       "id": "pre-v3-blockdamageai",
       "severity": "warning",
       "settings": ["BlockDamageAI"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1642,7 +1642,7 @@
       "id": "pre-v3-blockdamageaibm",
       "severity": "warning",
       "settings": ["BlockDamageAIBM"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1656,7 +1656,7 @@
       "id": "pre-v3-xpmultiplier",
       "severity": "warning",
       "settings": ["XPMultiplier"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1670,7 +1670,7 @@
       "id": "pre-v3-daynightlength",
       "severity": "warning",
       "settings": ["DayNightLength"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1684,7 +1684,7 @@
       "id": "pre-v3-daylightlength",
       "severity": "warning",
       "settings": ["DayLightLength"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1698,7 +1698,7 @@
       "id": "pre-v3-biomeprogression",
       "severity": "warning",
       "settings": ["BiomeProgression"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1712,7 +1712,7 @@
       "id": "pre-v3-stormfreq",
       "severity": "warning",
       "settings": ["StormFreq"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1726,7 +1726,7 @@
       "id": "pre-v3-deathpenalty",
       "severity": "warning",
       "settings": ["DeathPenalty"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1740,7 +1740,7 @@
       "id": "pre-v3-dropondeath",
       "severity": "warning",
       "settings": ["DropOnDeath"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1754,7 +1754,7 @@
       "id": "pre-v3-droponquit",
       "severity": "warning",
       "settings": ["DropOnQuit"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1768,7 +1768,7 @@
       "id": "pre-v3-jarrefund",
       "severity": "warning",
       "settings": ["JarRefund"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1782,7 +1782,7 @@
       "id": "pre-v3-enemyspawnmode",
       "severity": "warning",
       "settings": ["EnemySpawnMode"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1796,7 +1796,7 @@
       "id": "pre-v3-enemydifficulty",
       "severity": "warning",
       "settings": ["EnemyDifficulty"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has little effect since V3: the SandboxCode value mostly wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1810,7 +1810,7 @@
       "id": "pre-v3-zombieferalsense",
       "severity": "warning",
       "settings": ["ZombieFeralSense"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1824,7 +1824,7 @@
       "id": "pre-v3-zombiemove",
       "severity": "warning",
       "settings": ["ZombieMove"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1838,7 +1838,7 @@
       "id": "pre-v3-zombiemovenight",
       "severity": "warning",
       "settings": ["ZombieMoveNight"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1852,7 +1852,7 @@
       "id": "pre-v3-zombieferalmove",
       "severity": "warning",
       "settings": ["ZombieFeralMove"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1866,7 +1866,7 @@
       "id": "pre-v3-zombiebmmove",
       "severity": "warning",
       "settings": ["ZombieBMMove"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1880,7 +1880,7 @@
       "id": "pre-v3-aismellmode",
       "severity": "warning",
       "settings": ["AISmellMode"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1894,7 +1894,7 @@
       "id": "pre-v3-bloodmoonfrequency",
       "severity": "warning",
       "settings": ["BloodMoonFrequency"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1908,7 +1908,7 @@
       "id": "pre-v3-bloodmoonrange",
       "severity": "warning",
       "settings": ["BloodMoonRange"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1922,7 +1922,7 @@
       "id": "pre-v3-bloodmoonwarning",
       "severity": "warning",
       "settings": ["BloodMoonWarning"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1936,7 +1936,7 @@
       "id": "pre-v3-bloodmoonenemycount",
       "severity": "warning",
       "settings": ["BloodMoonEnemyCount"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1950,7 +1950,7 @@
       "id": "pre-v3-lootabundance",
       "severity": "warning",
       "settings": ["LootAbundance"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1964,7 +1964,7 @@
       "id": "pre-v3-lootrespawndays",
       "severity": "warning",
       "settings": ["LootRespawnDays"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1978,7 +1978,7 @@
       "id": "pre-v3-airdropfrequency",
       "severity": "warning",
       "settings": ["AirDropFrequency"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -1992,7 +1992,7 @@
       "id": "pre-v3-airdropmarker",
       "severity": "warning",
       "settings": ["AirDropMarker"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -2006,7 +2006,7 @@
       "id": "pre-v3-questprogressiondailylimit",
       "severity": "warning",
       "settings": ["QuestProgressionDailyLimit"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -2020,7 +2020,7 @@
       "id": "pre-v3-loottimer",
       "severity": "warning",
       "settings": ["LootTimer"],
-      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "message": "Has no effect since V3: the SandboxCode value wins. Editing it changes only this line.",
       "when": {
         "!=": [
           {
@@ -2060,7 +2060,7 @@
       "id": "telnet-disabled-hooks-lost",
       "severity": "warning",
       "settings": ["TelnetEnabled"],
-      "message": "Without the console, the save, announce and clean-stop actions fall back to a process signal.",
+      "message": "Without the console, the save and clean-stop actions fall back to a process signal.",
       "when": {
         "==": [
           {
@@ -2415,7 +2415,6 @@
     "https://github.com/r-pufky/ansible_seven_days_to_die/blob/main/templates/default/serveradmin.xml",
     "https://github.com/benfiola/seven-days-to-die/blob/main/examples/default-serverconfig.xml",
     "https://github.com/GameServerManagers/Game-Server-Configs/blob/main/sdtd/serverconfig.xml",
-    "https://github.com/Kitsune-Den/KitsuneCommand/blob/main/src/KitsuneCommand/Services/ServerConfigFieldDefinitions.cs",
     "https://github.com/Kitsune-Den/Kitsune7Den/blob/main/src/Kitsune7Den/Services/Sandbox/SandboxCodec.cs",
     "https://github.com/waynechen251/7-days-to-die-dedicated-server-plus/blob/main/src/web/lib/sandboxCode.js",
     "https://github.com/ubidzz/Synix-Control-Panel/blob/main/SynixApp/Database/GameDefinitions/7-days-to-die/7-days-to-die.game.json",

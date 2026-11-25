@@ -147,7 +147,7 @@ describe("7 Days to Die pack", () => {
       expect(issues).toContainEqual({
         key,
         severity: "warning",
-        message: expect.stringContaining("ignored by the current game"),
+        message: expect.stringContaining("effect since V3"),
       });
     }
     // The console ships without a password, so the loopback note fires
@@ -165,7 +165,7 @@ describe("7 Days to Die pack", () => {
     }
   });
 
-  it("keeps the pre-V3 lines and never creates them", () => {
+  it("keeps the pre-V3 lines when another setting changes", () => {
     const { adapter, bytes } = fixtureOf(pack, "serverconfig");
     const written = writeFileValues(pack, "serverconfig", bytes, [
       { key: "ServerName", value: "Dialwarden demo" },
