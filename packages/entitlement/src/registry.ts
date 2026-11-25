@@ -92,7 +92,12 @@ export const FEATURES: readonly FeatureDefinition[] = [
     routes: ["GET /api/v1/audit/export.csv"],
   },
   { key: "oidc", label: "Single sign-on (OIDC)", available: true, routes: [] },
-  { key: "apiTokens", label: "API tokens", available: true, routes: [] },
+  {
+    key: "apiTokens",
+    label: "API tokens",
+    available: true,
+    routes: ["POST /api/v1/tokens"],
+  },
   {
     key: "fleet.matrix",
     label: "Fleet settings matrix",
@@ -229,6 +234,9 @@ export const ALWAYS_FREE_ROUTES: readonly string[] = [
   // and verify it; its CSV export is the Paid part (R&D default D5).
   "GET /api/v1/audit",
   "GET /api/v1/audit/verify",
+  // API tokens: making one is Paid; listing and revoking are cleanup.
+  "GET /api/v1/tokens",
+  "DELETE /api/v1/tokens/:id",
 ];
 
 export const FREE_LIMITS: Limits = {

@@ -104,6 +104,9 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "GET /api/v1/audit/export.csv": "admin",
   "GET /api/v1/settings/audit": "admin",
   "PUT /api/v1/settings/audit": "admin",
+  "GET /api/v1/tokens": "user",
+  "POST /api/v1/tokens": "user",
+  "DELETE /api/v1/tokens/:id": "user",
 };
 
 const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
@@ -190,6 +193,7 @@ function concrete(url: string, server: "a" | "b") {
     .replace("/backups/:id", "/backups/20261121-0330")
     .replace("/users/:id", `/users/${fixture.editor.userId}`)
     .replace("/invitations/:id", `/invitations/${randomUUID()}`)
+    .replace("/tokens/:id", `/tokens/${randomUUID()}`)
     .replace("/presets/:id", `/presets/${ids.preset}`)
     .replace("/change-sets/:id", `/change-sets/${changeSet}`)
     .replace("/snapshots/:id", `/snapshots/${snapshot}`);
