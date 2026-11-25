@@ -27,6 +27,7 @@ import type { AppKey } from "../crypto/app-key.js";
 import type { Settings } from "../db/settings.js";
 import type { Store } from "../db/store.js";
 import type { LicenceService } from "../licence/service.js";
+import type { OidcService } from "../oidc/service.js";
 import type { EditableServers } from "../plan/editable.js";
 import type { PresetService } from "../presets/service.js";
 import type { RetentionService } from "../privacy/retention.js";
@@ -95,6 +96,8 @@ export interface AppContext {
   audit: AuditService;
   /** Privacy retention: snapshots, the audit log, the daily job (P8-A). */
   retention: RetentionService;
+  /** OIDC sign-in and its settings (P8-A step 5, Paid). */
+  oidc: OidcService;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */

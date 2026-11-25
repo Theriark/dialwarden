@@ -91,7 +91,12 @@ export const FEATURES: readonly FeatureDefinition[] = [
     available: true,
     routes: ["GET /api/v1/audit/export.csv"],
   },
-  { key: "oidc", label: "Single sign-on (OIDC)", available: true, routes: [] },
+  {
+    key: "oidc",
+    label: "Single sign-on (OIDC)",
+    available: true,
+    routes: ["GET /api/v1/settings/oidc", "PUT /api/v1/settings/oidc"],
+  },
   {
     key: "apiTokens",
     label: "API tokens",
@@ -167,6 +172,11 @@ export const ALWAYS_FREE_ROUTES: readonly string[] = [
   "POST /api/v1/auth/totp/enable",
   "POST /api/v1/auth/totp/disable",
   "POST /api/v1/auth/password-reset",
+  // OIDC sign-in is Paid, but a visitor has no session yet: these routes are
+  // public and answer the C1 402 body from the service (O-30).
+  "GET /api/v1/auth/oidc",
+  "GET /api/v1/auth/oidc/start",
+  "GET /api/v1/auth/oidc/callback",
   "GET /api/v1/openapi.json",
   // Licence, plan and the Free fallback choice.
   "GET /api/v1/entitlement",
