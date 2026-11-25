@@ -200,8 +200,23 @@ describe("endpoints named by discovery, and redirects (O-26)", () => {
     expect(response.json()).toMatchObject({ error: "oidc_url_refused" });
   });
 
-  it("applies the policy again at sign-in", async () => {
-    idp = await new FakeIdp().start();
+  /** The host of every connection the spy saw. */
+  function hostsOf(spy: { mock: { calls: unknown[][] } }): string[] {
+    return spy.mock.calls.map(([first]) => {
+      if (typeof first === "object" && first !== null && "host" in first) {
+        return String(first.host);
+      }
+      return String(first);
+    });
+  }
+
+  /**
+   * Configures the fake provider, then changes one stored endpoint behind
+   * the check (as a later discovery could) and runs a whole sign-in.
+   */
+  async function signInWith(field: "token_endpoint" | "jwks_uri") {
+    const fake = await new FakeIdp().start();
+    idp = fake;
     const { app, owner } = await appWith(loopback);
     const saved = await app.inject({
       method: "PUT",
@@ -209,24 +224,20 @@ describe("endpoints named by discovery, and redirects (O-26)", () => {
       headers: headersOf(owner),
       payload: {
         enabled: true,
-        issuer: idp.issuer,
-        clientId: idp.clientId,
-        clientSecret: idp.clientSecret,
+        issuer: fake.issuer,
+        clientId: fake.clientId,
+        clientSecret: fake.clientSecret,
         roleMapping: { "dw-editors": "editor" },
         allowPrivateNetwork: false,
       },
     });
     expect(saved.statusCode, saved.body).toBe(200);
-    // The stored endpoint is changed behind the check (a later discovery).
     const stored = app.ctx.settings.get("oidc.settings") as {
       metadata: Record<string, unknown>;
     };
     app.ctx.settings.set("oidc.settings", {
       ...stored,
-      metadata: {
-        ...stored.metadata,
-        token_endpoint: "http://169.254.169.254/token",
-      },
+      metadata: { ...stored.metadata, [field]: "http://169.254.169.254/x" },
     });
     const started = await app.inject({
       method: "GET",
@@ -234,15 +245,32 @@ describe("endpoints named by discovery, and redirects (O-26)", () => {
     });
     const location = new URL(String(started.headers.location));
     const cookie = started.cookies.find((item) => item.name === "dw_oidc");
-    const code = idp.code(location);
+    const code = fake.code(location);
     const state = location.searchParams.get("state") ?? "";
+    const connect = vi.spyOn(net.Socket.prototype, "connect");
     const response = await app.inject({
       method: "GET",
       url: `/api/v1/auth/oidc/callback?code=${code}&state=${state}`,
       headers: { cookie: `dw_oidc=${cookie?.value ?? ""}` },
     });
+    return { response, hosts: hostsOf(connect), fake };
+  }
+
+  it("applies the policy to the token endpoint at sign-in", async () => {
+    const { response, hosts, fake } = await signInWith("token_endpoint");
     expect(response.statusCode).toBe(401);
     expect(response.json()).toMatchObject({ error: "oidc_token_invalid" });
-    expect(idp.tokenRequests).toBe(0);
+    // The refusal comes from the policy: no connection was even tried.
+    expect(hosts).toEqual([]);
+    expect(fake.tokenRequests).toBe(0);
+  });
+
+  it("applies the policy to the keys endpoint at sign-in", async () => {
+    const { response, hosts, fake } = await signInWith("jwks_uri");
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ error: "oidc_token_invalid" });
+    // The token request reached the provider; the keys request never left.
+    expect(fake.tokenRequests).toBe(1);
+    expect(hosts).not.toContain("169.254.169.254");
   });
 });
