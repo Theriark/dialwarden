@@ -313,15 +313,16 @@ describe("change sets (contract C5)", () => {
       key: "Difficulty",
       message: "Must be one of the listed choices.",
     });
-    // An out-of-range number is refused the same way, like the editor does.
-    const range = await api.post(url, {
-      edits: [{ settingKey: "ServerPlayerMaxNum", value: 0 }],
+    // Text for a number is refused the same way. A number out of range is
+    // not: it stays a validation error on the draft (the write path tests).
+    const kind = await api.post(url, {
+      edits: [{ settingKey: "ServerPlayerMaxNum", value: "many" }],
     });
-    expect(range.statusCode).toBe(422);
-    expect(range.json()).toEqual({
+    expect(kind.statusCode).toBe(422);
+    expect(kind.json()).toEqual({
       error: "invalid_value",
       key: "ServerPlayerMaxNum",
-      message: "Must be at least 1 players.",
+      message: "Must be a number.",
     });
     // false is still a value of a bool setting: the edit is kept and works.
     const kept = await change(api, slug, { bIsShowJoinLeftMessage: false });

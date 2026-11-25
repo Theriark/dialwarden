@@ -35,6 +35,7 @@ import {
   type Os,
   type Pack,
   type PackFile,
+  type Setting,
   type SettingEdit,
 } from "@dialwarden/packs-schema";
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
@@ -269,6 +270,14 @@ function afterBytes(
   return writeFileValues(pack, fileId, current, edits);
 }
 
+const BOUNDS = new Set(["min", "max", "step"]);
+
+/** A setting without its range and step, so checkValue tests only the kind. */
+function shapeOf(setting: Setting): Setting {
+  const entries = Object.entries(setting).filter(([name]) => !BOUNDS.has(name));
+  return Object.fromEntries(entries) as unknown as Setting;
+}
+
 /**
  * Checks the request body against the pack: known settings and files, one
  * edit per setting, edits or patches but not both. A secret that comes back
@@ -296,12 +305,13 @@ function payloadOf(pack: Pack, input: ChangeInput): Payload {
   // that does not coerce to an enum option used to be dropped silently, with
   // no 422, no chip and no write. checkValue is the same test the editor and
   // validate() apply, so every caller is refused the same way; false stays a
-  // value of a bool setting and null still means removal.
+  // value of a bool setting and null still means removal. Range, step and
+  // length stay with validate(), which reports them as lint on the draft.
   let invalid: { key: string; message: string } | undefined;
   for (const edit of kept) {
     const setting = settings.get(edit.key);
     if (setting === undefined) continue;
-    const problem = checkValue(setting, edit.value);
+    const problem = checkValue(shapeOf(setting), edit.value);
     if (problem !== undefined) {
       invalid = { key: edit.key, message: problem };
       break;
