@@ -9,7 +9,7 @@
 // users limit of C1 is checked only when a user is added.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
-import { and, asc, count, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, count, eq, gt, isNull, or } from "drizzle-orm";
 import type { ActivityService } from "../activity/service.js";
 import { hashPassword } from "../auth/hashing.js";
 import type { LoginLimiter } from "../auth/limiter.js";
@@ -18,6 +18,7 @@ import {
   activityEvents,
   apiTokens,
   auditActors,
+  auditEvents,
   changeSets,
   invitations,
   passwordResets,
@@ -33,6 +34,7 @@ import {
   canManage,
   effectiveRole,
   isRole,
+  seesEveryServer,
   type AssignableRole,
   type GrantLevel,
   type Principal,
@@ -266,11 +268,13 @@ export class TeamService {
     return row === undefined ? null : levelOf(row.level);
   }
 
-  /** Which servers a principal may see: every one for owner and admin. */
+  /**
+   * Which servers a principal may see: every one for an owner or admin
+   * acting as one (not an admin on the Free fallback), see seesEveryServer.
+   */
   visibleServers(principal: Principal | null): (serverId: string) => boolean {
     if (principal === null) return () => false;
-    const stored = principal.storedRole;
-    if (stored === "owner" || stored === "admin") return () => true;
+    if (seesEveryServer(principal)) return () => true;
     const grants = this.grantsOf(principal.userId);
     const granted = new Set(grants.map((grant) => grant.server));
     return (serverId) => granted.has(serverId);
@@ -345,6 +349,7 @@ export class TeamService {
           .where(eq(userGrants.userId, userId))
           .run();
       }
+      this.#dropResets(userId);
     })();
     this.#activity.record("user.changed", {
       actor: actor.userId,
@@ -595,9 +600,41 @@ export class TeamService {
   }
 
   /**
+   * Removes the open reset links a user made and the open links for that
+   * user: a role change, a deletion or an anonymisation ends them (M1).
+   */
+  #dropResets(userId: string): void {
+    this.#store.db
+      .delete(passwordResets)
+      .where(
+        and(
+          isNull(passwordResets.usedAt),
+          or(
+            eq(passwordResets.createdBy, userId),
+            eq(passwordResets.userId, userId),
+          ),
+        ),
+      )
+      .run();
+  }
+
+  /**
+   * The maker of a reset link still exists and may still manage its target
+   * as the target is now (like #inviterAllows for invitations).
+   */
+  #resetAllowed(row: { createdBy: string; userId: string }): boolean {
+    const creator = this.#row(row.createdBy);
+    const target = this.#row(row.userId);
+    if (creator === null || target === null) return false;
+    const role = effectiveRole(creator.role, this.teamRoles);
+    return canManage(role, target.role);
+  }
+
+  /**
    * Sets a new password with a reset link; every session of the user ends.
    * Returns the user, so the route can sign them in (S-05: the reset use
-   * sets the session cookie like a login does).
+   * sets the session cookie like a login does) unless a second factor or
+   * OIDC still applies. The maker of the link is checked again at use.
    */
   async useReset(
     input: { token: string; password: string },
@@ -617,7 +654,8 @@ export class TeamService {
         .where(eq(passwordResets.tokenHash, tokenHash))
         .get();
       if (row === undefined || row.usedAt !== null) return null;
-      return row.expiresAt <= now ? null : row;
+      if (row.expiresAt <= now) return null;
+      return this.#resetAllowed(row) ? row : null;
     };
     if (open() === null) throw resetInvalid();
     const passwordHash = await hashPassword(input.password);
@@ -675,6 +713,12 @@ export class TeamService {
     const label = erasedLabel(target.id);
     const db = this.#store.db;
     db.delete(invitations).where(eq(invitations.email, target.email)).run();
+    this.#dropResets(target.id);
+    // The address sits outside the hash (D9), so clearing it keeps the chain.
+    db.update(auditEvents)
+      .set({ ip: null })
+      .where(eq(auditEvents.actorId, target.id))
+      .run();
     db.insert(auditActors)
       .values({ id: target.id, label, erased: 1 })
       .onConflictDoUpdate({

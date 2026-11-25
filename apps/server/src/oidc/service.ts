@@ -37,6 +37,8 @@ export const CALLBACK_PATH = "/api/v1/auth/oidc/callback";
 /** A sign-in started more than 10 minutes ago is refused (O-05). */
 export const TRANSACTION_TTL_MS = 10 * 60 * 1000;
 const MAX_TRANSACTIONS = 1000;
+/** Open sign-ins one client address may hold (L5). */
+export const MAX_PER_ADDRESS = 10;
 /** Iat may lie at most this far in the future (O-11). */
 const MAX_FUTURE_IAT_S = 60;
 
@@ -98,6 +100,8 @@ interface Transaction {
   verifier: string;
   returnTo: string;
   createdAt: number;
+  /** The client address that started it (the per-address cap). */
+  address: string;
 }
 
 /** A slash, then a plain path character that is not a slash, then more. */
@@ -312,7 +316,12 @@ export class OidcService {
     }
     // The browser goes to the authorization endpoint: https (or the test
     // seam's http) only.
-    const authorization = new URL(metadata.authorization_endpoint);
+    let authorization: URL;
+    try {
+      authorization = new URL(metadata.authorization_endpoint);
+    } catch {
+      throw urlRefused("invalid url");
+    }
     const httpOk = policy.allowHttp && authorization.protocol === "http:";
     if (authorization.protocol !== "https:" && !httpOk) {
       throw urlRefused("https only");
@@ -331,6 +340,14 @@ export class OidcService {
         throw new ApiError(422, "invalid_role_mapping");
       }
     }
+    const before = this.#stored();
+    // Switching off needs no provider: the owner can turn OIDC off while the
+    // provider is down. The stored provider settings stay for a later switch
+    // back on.
+    if (!input.enabled && before !== null) {
+      this.#settings.set(OIDC_SETTING, { ...before, enabled: false });
+      return this.view();
+    }
     if (this.#baseUrl === null) {
       throw new ApiError(409, "base_url_required");
     }
@@ -343,18 +360,19 @@ export class OidcService {
       throw error;
     }
     const { metadata, algorithm } = await this.#discover(input.issuer, policy);
-    const before = this.#stored();
     const sameClient =
       before !== null &&
       before.issuer === input.issuer &&
       before.clientId === input.clientId;
+    // Omitted keeps the stored secret (same issuer and client only); an
+    // empty string clears it (a public client).
     let clientSecretEnc: string | null = null;
     if (input.clientSecret !== undefined && input.clientSecret !== "") {
       clientSecretEnc = this.#aead.encrypt(
         input.clientSecret,
         CLIENT_SECRET_CONTEXT,
       );
-    } else if (sameClient) {
+    } else if (input.clientSecret === undefined && sameClient) {
       clientSecretEnc = before.clientSecretEnc;
     }
     const stored: StoredOidc = {
@@ -414,21 +432,34 @@ export class OidcService {
     return config;
   }
 
-  #forgetOld(now: number): void {
+  /**
+   * Drops expired sign-ins. One client address holds at most
+   * MAX_PER_ADDRESS open sign-ins (its oldest goes first), and a full store
+   * refuses new sign-ins rather than drop anyone else's, so a flood of start
+   * requests never ends a real sign-in (L5).
+   */
+  #makeRoom(now: number, address: string): void {
+    const mine: string[] = [];
     for (const [key, item] of this.#transactions) {
       if (now - item.createdAt >= TRANSACTION_TTL_MS) {
         this.#transactions.delete(key);
+      } else if (item.address === address) {
+        mine.push(key);
       }
     }
+    const oldest = mine.at(0);
+    if (mine.length >= MAX_PER_ADDRESS && oldest !== undefined) {
+      this.#transactions.delete(oldest);
+    }
     if (this.#transactions.size >= MAX_TRANSACTIONS) {
-      const oldest = this.#transactions.keys().next();
-      if (oldest.done !== true) this.#transactions.delete(oldest.value);
+      throw new ApiError(429, "rate_limited", { retryAfter: 60 });
     }
   }
 
   /** Starts a sign-in: the provider URL and the state for the cookie. */
   async start(
     returnTo: string | undefined,
+    address: string,
   ): Promise<{ url: string; state: string }> {
     const stored = this.#requireActive();
     const config = this.#configuration(stored);
@@ -437,12 +468,13 @@ export class OidcService {
     const verifier = client.randomPKCECodeVerifier();
     const challenge = await client.calculatePKCECodeChallenge(verifier);
     const now = this.#now().getTime();
-    this.#forgetOld(now);
+    this.#makeRoom(now, address);
     this.#transactions.set(hashOf(state), {
       nonce,
       verifier,
       returnTo: safeReturnTo(returnTo),
       createdAt: now,
+      address,
     });
     const url = client.buildAuthorizationUrl(config, {
       redirect_uri: this.#redirectUri() ?? "",
@@ -543,8 +575,11 @@ export class OidcService {
       this.#accounts.refused(issuer, subject);
       throw noRole();
     }
+    // An address the provider has not verified is not used (L6): it could
+    // name a colleague or a future invitee.
+    const verified = claims["email_verified"] === true;
     const email =
-      textOf(claims["email"]) ??
+      (verified ? textOf(claims["email"]) : null) ??
       `oidc-${hashOf(`${issuer} ${subject}`).slice(0, 16)}@sso.invalid`;
     const name =
       textOf(claims["name"]) ??
