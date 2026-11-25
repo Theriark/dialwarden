@@ -113,7 +113,7 @@ describe("sessions and CSRF on sign-in (S-01 to S-07)", () => {
       url: "/api/v1/auth/logout",
       headers: headersOf(thrown),
     });
-    expect(gone.statusCode).toBe(200);
+    expect(gone.statusCode).toBe(204);
     const again = await app.inject({
       method: "POST",
       url: LOGIN,
