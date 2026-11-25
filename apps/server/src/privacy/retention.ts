@@ -160,7 +160,7 @@ export class RetentionService {
       const rows = this.#store.db
         .select()
         .from(snapshots)
-        .orderBy(sql`${snapshots.at} desc`)
+        .orderBy(sql`${snapshots.at} desc`, sql`rowid desc`)
         .all();
       const seen = new Map<string, number>();
       for (const row of rows) {
@@ -181,7 +181,10 @@ export class RetentionService {
     return stale;
   }
 
-  /** The newest snapshot of every file, whatever the retention says. */
+  /**
+   * The newest snapshot of every file, whatever the retention says. Rows of
+   * the same time keep their write order (rowid), as in mode versions.
+   */
   #newestOfEveryFile(): Set<string> {
     const rows = this.#store.db
       .select({
@@ -190,7 +193,7 @@ export class RetentionService {
         fileId: snapshots.fileId,
       })
       .from(snapshots)
-      .orderBy(sql`${snapshots.at} desc`, sql`${snapshots.id} desc`)
+      .orderBy(sql`${snapshots.at} desc`, sql`rowid desc`)
       .all();
     const newest = new Set<string>();
     const seen = new Set<string>();
@@ -257,7 +260,7 @@ export class RetentionService {
         "retention pruned",
       );
     }
-    return { auditRows, ...pruned };
+    return { auditRows, snapshots: pruned.rows, blobs: pruned.blobs };
   }
 
   /** Starts the daily job. An invalid schedule falls back to the default. */

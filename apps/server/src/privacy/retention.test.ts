@@ -72,6 +72,8 @@ async function listing(path: string): Promise<string[]> {
 
 interface SnapshotRow {
   id: string;
+  server_id: string;
+  file_id: string;
   sha256: string;
   kind: string;
   at: string;
@@ -81,6 +83,10 @@ const rowsOf = (t: TeamFixture): SnapshotRow[] =>
   t.app.ctx.store.sqlite
     .prepare('SELECT * FROM "snapshots"')
     .all() as SnapshotRow[];
+
+/** The files that hold at least one snapshot, as "server file" keys. */
+const filesOf = (rows: readonly SnapshotRow[]): string[] =>
+  [...new Set(rows.map((row) => `${row.server_id} ${row.file_id}`))].sort();
 
 describe("privacy retention (P-07 to P-11)", () => {
   it("P-07 works on the Free plan", async () => {
@@ -119,21 +125,26 @@ describe("privacy retention (P-07 to P-11)", () => {
     const { app, owner } = t;
     await applyValue(t, 10);
     const before = rowsOf(t);
-    expect(before.length).toBeGreaterThan(0);
-    clock += 31 * DAY_MS;
+    expect(before.length).toBeGreaterThan(filesOf(before).length);
     const url = "/api/v1/settings/snapshots";
     const days = await call(app, owner, "PUT", url, {
       snapshotRetention: { mode: "days", days: 1 },
     });
     expect(days.statusCode).toBe(200);
+    // Every snapshot is a month old now; each file still keeps one. The
+    // clock goes back afterwards, so the session of the owner stays valid.
+    clock += 31 * DAY_MS;
     await t.app.ctx.retention.pruneSnapshots();
-    expect(rowsOf(t)).toEqual(before);
+    expect(filesOf(rowsOf(t))).toEqual(filesOf(before));
+    clock -= 31 * DAY_MS;
     const versions = await call(app, owner, "PUT", url, {
       snapshotRetention: { mode: "versions", versions: 1 },
     });
     expect(versions.statusCode).toBe(200);
     await t.app.ctx.retention.pruneSnapshots();
-    expect(rowsOf(t)).toEqual(before);
+    const kept = rowsOf(t);
+    expect(filesOf(kept)).toEqual(filesOf(before));
+    expect(kept).toHaveLength(filesOf(before).length);
     for (const body of [
       { snapshotRetention: { mode: "days", days: 0 } },
       { snapshotRetention: { mode: "versions", versions: 0 } },
@@ -145,28 +156,21 @@ describe("privacy retention (P-07 to P-11)", () => {
     }
   });
 
-  it("P-09 keeps what is in use and deletes only orphan blobs", async () => {
+  it("P-09 deletes only orphan blobs and never the app backups", async () => {
     let clock = Date.parse("2026-11-25T10:00:00Z");
     const t = await fixture({ now: () => new Date(clock) });
     const { app, owner } = t;
     await applyValue(t, 10);
+    clock += 60_000;
     await applyValue(t, 20);
     const rows = rowsOf(t);
-    const target = rows.find((row) => row.kind === "after");
-    if (target === undefined) throw new Error("no after snapshot");
-    const restore = await call(
-      app,
-      owner,
-      "POST",
-      `/api/v1/snapshots/${target.id}/restore`,
-    );
-    expect(restore.statusCode).toBe(200);
     const backups = join(t.current.dataDir, "backups");
     const backupsBefore = await listing(backups);
-    clock += 31 * DAY_MS;
-    await call(app, owner, "PUT", "/api/v1/settings/snapshots", {
+    const set = await call(app, owner, "PUT", "/api/v1/settings/snapshots", {
       snapshotRetention: { mode: "days", days: 1 },
     });
+    expect(set.statusCode).toBe(200);
+    clock += 31 * DAY_MS;
     const blobs = [...new Set(rows.map((row) => row.sha256))].map(
       (sha256) => ({
         sha256,
@@ -178,11 +182,11 @@ describe("privacy retention (P-07 to P-11)", () => {
     }
     const report = await t.app.ctx.retention.pruneSnapshots();
     expect(report.rows).toBeGreaterThan(0);
-    // The newest snapshot of the file and the draft-restore target stay.
+    // Every file keeps its newest snapshot, and a blob file stays exactly
+    // while a snapshot row still names it.
     const kept = rowsOf(t);
-    expect(kept.map((row) => row.id)).toContain(target.id);
+    expect(filesOf(kept)).toEqual(filesOf(rows));
     const keptHashes = new Set(kept.map((row) => row.sha256));
-    expect(keptHashes.has(target.sha256)).toBe(true);
     for (const blob of blobs) {
       expect(await exists(blob.path), blob.sha256).toBe(
         keptHashes.has(blob.sha256),
