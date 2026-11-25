@@ -507,8 +507,12 @@ test("the history restore follows the role and an ungranted server is not in the
   await page.goto("/servers/palworld-home/history");
   await editorReady(page);
   await expect(page.getByText(/You are signed in as/)).toHaveCount(0);
-  const restores = page.getByRole("button", { name: "Restore this version" });
-  await expect(restores.first()).toBeEnabled();
+  // The newest version is the launch walk's (a shell-read file, off for an
+  // editor); the plain settings versions below it keep their control.
+  const onCount = await page
+    .locator("button:not([disabled])", { hasText: "Restore this version" })
+    .count();
+  expect(onCount).toBeGreaterThan(0);
   const meta = (await (
     await page.request.get("/api/v1/games/palworld/settings-meta")
   ).json()) as { files: { id: string; adapter: string }[] };
