@@ -15,7 +15,7 @@ import {
   type TestApp,
 } from "../../test/helpers.js";
 import { FakeIdp, type IssueOptions } from "../../test/oidc-idp.js";
-import { MAX_PER_ADDRESS } from "./service.js";
+import { MAX_PER_ADDRESS, signInNetwork } from "./service.js";
 import {
   invite,
   inviteAndAccept,
@@ -544,7 +544,9 @@ describe("OIDC plans, local paths and limits (review of PR 29)", () => {
 
   it("F-04 lifts sso_required for a non-owner on Free and restores it on Paid", async () => {
     const admin = await member("admin");
-    expect((await loginOf(admin)).statusCode).toBe(403);
+    const before = await loginOf(admin);
+    expect(before.statusCode).toBe(403);
+    expect(before.json()).toMatchObject({ error: "sso_required" });
     expect(await loginFlag()).toBe(true);
     await toFree(app, owner);
     const free = await loginOf(admin);
@@ -608,6 +610,17 @@ describe("OIDC plans, local paths and limits (review of PR 29)", () => {
     expect(await loginFlag()).toBe(false);
   });
 
+  it("L6 refuses a malformed or non-https authorization endpoint", async () => {
+    for (const value of ["not a url", "ftp://idp.example/authorize"]) {
+      idp.discoveryOverride = { authorization_endpoint: value };
+      const response = await configure();
+      expect(response.statusCode, value).toBe(422);
+      expect(response.json(), value).toMatchObject({
+        error: "oidc_url_refused",
+      });
+    }
+  });
+
   it("L8 an empty client secret clears the stored one", async () => {
     const cleared = await configure({ clientSecret: "" });
     expect(cleared.statusCode, cleared.body).toBe(200);
@@ -643,6 +656,141 @@ describe("OIDC plans, local paths and limits (review of PR 29)", () => {
     );
     expect(stale.statusCode).toBe(401);
     expect(stale.json()).toMatchObject({ error: "oidc_state_invalid" });
+  });
+
+  /** A start from one address: the response, its state and its cookie. */
+  const startFrom = async (remoteAddress: string): Promise<Started> => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/oidc/start",
+      remoteAddress,
+    });
+    expect(response.statusCode, remoteAddress).toBe(302);
+    const location = new URL(String(response.headers.location));
+    const found = response.cookies.find((item) => item.name === "dw_oidc");
+    return {
+      location,
+      state: location.searchParams.get("state") ?? "",
+      cookie: `dw_oidc=${found?.value ?? ""}`,
+    };
+  };
+  const finish = (started: Started) =>
+    callback(
+      { code: idp.code(started.location), state: started.state },
+      started.cookie,
+    );
+
+  it("L5 keeps exactly MAX_PER_ADDRESS open sign-ins per address", async () => {
+    const flood: Started[] = [];
+    for (let n = 0; n < MAX_PER_ADDRESS; n += 1) {
+      flood.push(await startFrom("203.0.113.9"));
+    }
+    const first = flood[0];
+    const second = flood[1];
+    if (first === undefined || second === undefined) throw new Error("none");
+    // One more start drops the oldest only.
+    await startFrom("203.0.113.9");
+    const stale = await finish(first);
+    expect(stale.statusCode).toBe(401);
+    expect(stale.json()).toMatchObject({ error: "oidc_state_invalid" });
+    const kept = await finish(second);
+    expect(kept.statusCode, kept.body).toBe(302);
+  });
+
+  it("B1 counts an IPv6 client by its /48, so one /64 cannot fill the store", async () => {
+    const started = await start();
+    // 150 addresses over many /64s of one /48: more than the store holds
+    // when every address counted alone.
+    const flood: Started[] = [];
+    for (let n = 1; n <= 150; n += 1) {
+      const address = `2001:db8:abcd:${n.toString(16)}::${n.toString(16)}`;
+      flood.push(await startFrom(address));
+    }
+    // Only the last MAX_PER_ADDRESS of the /48 are kept.
+    const oldest = flood[0];
+    const newest = flood.at(-1);
+    if (oldest === undefined || newest === undefined) throw new Error("none");
+    const stale = await finish(oldest);
+    expect(stale.statusCode).toBe(401);
+    expect(stale.json()).toMatchObject({ error: "oidc_state_invalid" });
+    // A sign-in of another network, started before and after, completes.
+    const done = await finish(started);
+    expect(done.statusCode, done.body).toBe(302);
+    const later = await finish(await startFrom("2001:db8:beef::1"));
+    expect(later.statusCode, later.body).toBe(302);
+    const last = await finish(newest);
+    expect(last.statusCode, last.body).toBe(302);
+  });
+
+  it("B1 names the network a start counts against", () => {
+    expect(signInNetwork("2001:db8:abcd:12:3456::9")).toBe("2001:db8:abcd::");
+    expect(signInNetwork("2001:db8:abcd:ffff::1")).toBe("2001:db8:abcd::");
+    expect(signInNetwork("2001:db8:abce::1")).toBe("2001:db8:abce::");
+    expect(signInNetwork("203.0.113.9")).toBe("203.0.113.9");
+    expect(signInNetwork("::ffff:203.0.113.9")).toBe("::ffff:203.0.113.9");
+    expect(signInNetwork("fe80::1%eth0")).toBe("fe80::");
+  });
+
+  /** An OIDC admin with an API token and a reset link it made for an editor. */
+  const ssoAdminWithLinks = async () => {
+    const editor = await member("editor");
+    const first = await signIn({ claims: { groups: ["dw-admins"] } });
+    expect(first.statusCode, first.body).toBe(302);
+    const cookie = sessionOf(first);
+    const session = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/session",
+      headers: { cookie },
+    });
+    const body = session.json<{ csrfToken: string; user: { id: string } }>();
+    const admin = { cookie, csrf: body.csrfToken, userId: body.user.id };
+    const made = await app.inject({
+      method: "POST",
+      url: "/api/v1/tokens",
+      headers: headersOf(admin),
+      payload: { name: "sso-ci", role: "viewer" },
+    });
+    expect(made.statusCode, made.body).toBe(201);
+    const link = await app.inject({
+      method: "POST",
+      url: `/api/v1/users/${editor.userId}/password-reset`,
+      headers: headersOf(admin),
+    });
+    expect(link.statusCode, link.body).toBe(201);
+    return {
+      apiToken: made.json<{ token: string }>().token,
+      resetToken: link.json<{ token: string }>().token,
+    };
+  };
+  const useReset = (token: string) =>
+    app.inject({
+      method: "POST",
+      url: "/api/v1/auth/password-reset",
+      payload: { token, password: randomPassword() },
+    });
+
+  it("L2 and N1 a refused sign-in ends the tokens and reset links of the account", async () => {
+    const { apiToken, resetToken } = await ssoAdminWithLinks();
+    const refused = await signIn({ claims: { groups: ["other"] } });
+    expect(refused.statusCode).toBe(403);
+    const call = await app.inject({
+      method: "GET",
+      url: "/api/v1/servers",
+      headers: { authorization: `Bearer ${apiToken}` },
+    });
+    expect(call.statusCode).toBe(401);
+    const used = await useReset(resetToken);
+    expect(used.statusCode).toBe(410);
+    expect(used.json()).toEqual({ error: "reset_invalid" });
+  });
+
+  it("N1 a role change by the group mapping ends the reset links it made", async () => {
+    const { resetToken } = await ssoAdminWithLinks();
+    const lower = await signIn({ claims: { groups: ["dw-viewers"] } });
+    expect(lower.statusCode).toBe(302);
+    const used = await useReset(resetToken);
+    expect(used.statusCode).toBe(410);
+    expect(used.json()).toEqual({ error: "reset_invalid" });
   });
 
   it("L6 keeps an unverified e-mail claim out of the account", async () => {
