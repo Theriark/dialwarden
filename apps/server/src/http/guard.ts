@@ -17,9 +17,10 @@
 // 7. checks the role the route needs (403 forbidden).
 // A preValidation hook then checks config.server (P8-A, one shared check for
 // every server-scoped route): the route's game server is found from the
-// slug, the change set, the snapshot or the body, and a principal without a
-// grant there gets exactly the answer of a missing object (404), so the API
-// never tells which servers exist. A read grant on a write route is 403.
+// slug, the change set, the snapshot, the schedule (P9-A) or the body, and
+// a principal without a grant there gets exactly the answer of a missing
+// object (404), so the API never tells which servers exist. A read grant on
+// a write route is 403.
 import { timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -28,7 +29,7 @@ import {
   sessionCookieName,
   type NewSession,
 } from "../auth/sessions.js";
-import { changeSets, snapshots } from "../db/schema.js";
+import { changeSets, schedules, snapshots } from "../db/schema.js";
 import { SERVER_ID } from "../plan/editable.js";
 import { atLeast, serverLevel, type Principal } from "../team/roles.js";
 import type { AuthLevel, ServerScope, ServerSource } from "./context.js";
@@ -124,6 +125,7 @@ function routePath(request: FastifyRequest): string {
 function missing(from: ServerSource): ApiError {
   if (from === "changeSet") return new ApiError(404, "change_set_not_found");
   if (from === "snapshot") return new ApiError(404, "snapshot_not_found");
+  if (from === "schedule") return new ApiError(404, "schedule_not_found");
   return new ApiError(404, "server_not_found");
 }
 
@@ -158,6 +160,14 @@ function serverOf(
       .select({ serverId: changeSets.serverId })
       .from(changeSets)
       .where(eq(changeSets.id, id))
+      .get();
+    return row?.serverId ?? null;
+  }
+  if (from === "schedule") {
+    const row = db
+      .select({ serverId: schedules.serverId })
+      .from(schedules)
+      .where(eq(schedules.id, id))
       .get();
     return row?.serverId ?? null;
   }
