@@ -99,6 +99,11 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "GET /api/v1/invitations": "admin",
   "DELETE /api/v1/invitations/:id": "admin",
   "POST /api/v1/invitations/accept": "public",
+  "GET /api/v1/audit": "admin",
+  "GET /api/v1/audit/verify": "admin",
+  "GET /api/v1/audit/export.csv": "admin",
+  "GET /api/v1/settings/audit": "admin",
+  "PUT /api/v1/settings/audit": "admin",
 };
 
 const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
