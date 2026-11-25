@@ -154,6 +154,37 @@ describe("ServerSettingsPage", () => {
     ).toBeNull();
   });
 
+  it("shows the not-in-your-fleet state for a 404 server, without Retry (F3)", async () => {
+    stubViewport(1280);
+    // An editor opens the address of a server not granted to them: the
+    // server answers 404 server_not_found for the server and its settings.
+    const missing = { status: 404, body: { error: "server_not_found" } };
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/auth/session") {
+        return {
+          status: 200,
+          body: { ...OWNER, user: { ...OWNER.user, role: "editor" } },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers/other") {
+        return missing;
+      }
+      if (method === "GET" && path === "/api/v1/servers/other/settings") {
+        return missing;
+      }
+      return undefined;
+    });
+    startRouter("/servers/other/settings");
+    await screen.findByText("This server is not in your fleet");
+    expect(
+      screen.getByText(/It does not exist, or it is not granted to you/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Something went wrong")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    const back = screen.getByRole("link", { name: "Go to the fleet" });
+    expect(back.getAttribute("href")).toBe("/");
+  });
+
   it("lets an editor edit where the plan allows edits", async () => {
     stubViewport(1280);
     stubWorld(([method, path]) =>
