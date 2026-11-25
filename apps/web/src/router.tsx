@@ -16,17 +16,15 @@ import { AppShell } from "./components/layout/app-shell";
 import { SettingsLayout } from "./components/layout/settings-layout";
 import { AboutPage } from "./pages/about";
 import { ActivityPage } from "./pages/activity";
-import {
-  MatrixPage,
-  ReportsPage,
-  SchedulesPage,
-  UsersPage,
-} from "./pages/coming-soon";
+import { AuditPage } from "./pages/audit";
+import { MatrixPage, ReportsPage, SchedulesPage } from "./pages/coming-soon";
+import { InvitePage } from "./pages/invite";
 import { PresetsPage } from "./pages/presets";
 import { LoginPage, type LoginSearch } from "./pages/login";
 import { TwoFactorPage } from "./pages/login-2fa";
 import { NotFoundPage } from "./pages/not-found";
 import { FleetPage } from "./pages/fleet";
+import { ResetPage } from "./pages/reset";
 import { NewServerPage } from "./pages/server-new";
 import { ServerHistoryPage } from "./pages/server-history";
 import { ServerHooksPage } from "./pages/server-hooks";
@@ -34,10 +32,14 @@ import { ServerLaunchPage } from "./pages/server-launch";
 import { ServerRawPage } from "./pages/server-raw";
 import { ServerSettingsPage } from "./pages/server-settings";
 import { SetupPage } from "./pages/setup";
+import { ApiAccessPage } from "./pages/settings/api-access";
 import { BackupPage } from "./pages/settings/backup";
 import { LicencePage } from "./pages/settings/licence";
 import { PlanPage } from "./pages/settings/plan";
+import { PrivacyPage } from "./pages/settings/privacy";
 import { ProfilePage } from "./pages/settings/profile";
+import { SsoPage } from "./pages/settings/sso";
+import { UsersPage } from "./pages/users";
 
 export interface RouterContext {
   queryClient: QueryClient;
@@ -112,6 +114,24 @@ function TwoFactorRoute() {
   const search = twoFactorRoute.useSearch();
   return <TwoFactorPage search={search} />;
 }
+
+// The invitation and reset links are public: the value is the proof, in
+// the fragment. A signed-in visitor is sent to the fleet like on /login.
+const inviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/invite",
+  staticData: { title: "Invitation" },
+  beforeLoad: ({ context }) => requireSignedOut(context),
+  component: InvitePage,
+});
+
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/reset",
+  staticData: { title: "Password reset" },
+  beforeLoad: ({ context }) => requireSignedOut(context),
+  component: ResetPage,
+});
 
 const appRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -225,6 +245,13 @@ const usersRoute = createRoute({
   component: UsersPage,
 });
 
+const auditRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: "/audit",
+  staticData: { title: "Audit log" },
+  component: AuditPage,
+});
+
 const aboutRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/about",
@@ -276,10 +303,33 @@ const backupRoute = createRoute({
   component: BackupPage,
 });
 
+const ssoRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/sso",
+  staticData: { title: "Single sign-on" },
+  component: SsoPage,
+});
+
+const privacyRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/privacy",
+  staticData: { title: "Privacy" },
+  component: PrivacyPage,
+});
+
+const tokensRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/tokens",
+  staticData: { title: "API tokens" },
+  component: ApiAccessPage,
+});
+
 const routeTree = rootRoute.addChildren([
   setupRoute,
   loginRoute,
   twoFactorRoute,
+  inviteRoute,
+  resetRoute,
   appRoute.addChildren([
     fleetRoute,
     presetsRoute,
@@ -296,6 +346,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     activityRoute,
     usersRoute,
+    auditRoute,
     aboutRoute,
     settingsRoute.addChildren([
       settingsIndexRoute,
@@ -303,6 +354,9 @@ const routeTree = rootRoute.addChildren([
       licenceRoute,
       planRoute,
       backupRoute,
+      ssoRoute,
+      privacyRoute,
+      tokensRoute,
     ]),
   ]),
 ]);
