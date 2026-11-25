@@ -8,8 +8,13 @@ loads every pack at start and refuses a broken one with a log line.
 
 | Pack       | Files                                                                 | Settings |
 | ---------- | --------------------------------------------------------------------- | -------- |
+| 7dtd       | serverconfig.xml, raw-only serveradmin.xml, app-managed launch line   | 101      |
+| ark-sa     | GameUserSettings.ini and Game.ini (Unreal INI), app-managed launch line | 135     |
+| enshrouded | enshrouded_server.json                                                | 61      |
 | palworld   | PalWorldSettings.ini (OptionSettings struct), app-managed launch line | 130      |
-| enshrouded | enshrouded_server.json                                                | 61       |
+| pzomboid   | server ini, SandboxVars.lua, app-managed launch line                  | 147      |
+| rust       | server.cfg and users.cfg (console convars), app-managed launch line  | 59       |
+| valheim    | app-managed launch line                                               | 24       |
 
 Rules for every pack (dev-work-plan, Rules for every phase):
 
