@@ -1,0 +1,1231 @@
+{
+  "id": "rust",
+  "version": "1.0.0",
+  "displayName": "Rust",
+  "steamAppId": 258550,
+  "builds": {
+    "from": 0,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "RustDedicated",
+        "os": ["linux"]
+      },
+      {
+        "path": "RustDedicated.exe",
+        "os": ["windows"]
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "servercfg",
+      "paths": {
+        "linux": ["server/rustserver/cfg/server.cfg"],
+        "windows": ["server/rustserver/cfg/server.cfg"]
+      },
+      "adapter": "cfg",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime"
+    },
+    {
+      "id": "userscfg",
+      "paths": {
+        "linux": ["server/rustserver/cfg/users.cfg"],
+        "windows": ["server/rustserver/cfg/users.cfg"]
+      },
+      "adapter": "cfg",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime",
+      "launchSources": [
+        {
+          "kind": "args"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "server.description",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.description"
+      },
+      "type": "string",
+      "default": "",
+      "max": 1024,
+      "group": "Identity",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Longer text shown on the server details screen. A literal backslash-n sequence inside the value becomes a line break there."
+    },
+    {
+      "key": "server.url",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.url"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Identity",
+      "restartRequired": true,
+      "description": "Website link shown on the details screen, for example a community page or an invite to a chat server."
+    },
+    {
+      "key": "server.headerimage",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.headerimage"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Identity",
+      "restartRequired": true,
+      "description": "Direct link to the banner image drawn on the server details screen. Community notes suggest a picture of 512 by 256 pixels."
+    },
+    {
+      "key": "server.logoimage",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.logoimage"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Identity",
+      "restartRequired": true,
+      "description": "Direct link to a small logo that recent game clients show next to the server entry in the browser list."
+    },
+    {
+      "key": "server.tags",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.tags"
+      },
+      "type": "string",
+      "default": "",
+      "max": 128,
+      "group": "Identity",
+      "restartRequired": true,
+      "description": "Comma-separated browser tags such as weekly, vanilla, pve or a region code. Only tag values the game recognises have an effect."
+    },
+    {
+      "key": "server.motd",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.motd"
+      },
+      "type": "string",
+      "default": "",
+      "max": 512,
+      "group": "Identity",
+      "restartRequired": true,
+      "description": "Message of the day text sent to players. How each client build displays it varies."
+    },
+    {
+      "key": "server.gamemode",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.gamemode"
+      },
+      "type": "enum",
+      "default": "vanilla",
+      "enum": [
+        {
+          "value": "vanilla",
+          "label": "Vanilla"
+        },
+        {
+          "value": "softcore",
+          "label": "Softcore"
+        },
+        {
+          "value": "hardcore",
+          "label": "Hardcore"
+        }
+      ],
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Ruleset preset. Its overrides stay saved on the server after the line is removed, so clearing a mode also means clearing those."
+    },
+    {
+      "key": "server.pve",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.pve"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "When on, players cannot damage each other. Suited to building and cooperative communities."
+    },
+    {
+      "key": "server.radiation",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.radiation"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Turns the radiation zones at monuments on or off. Off makes looting those monuments much easier."
+    },
+    {
+      "key": "chat.globalchat",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "chat.globalchat"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Whether chat messages reach every player. Older configurations use the name server.globalchat for the same switch."
+    },
+    {
+      "key": "chat.localchat",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "chat.localchat"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Limits text chat to players within range of each other instead of the whole server."
+    },
+    {
+      "key": "craft.instant",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "craft.instant"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Makes every craft finish immediately. Often used on creative, build or training servers."
+    },
+    {
+      "key": "relationshipmanager.maxteamsize",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "relationshipmanager.maxteamsize"
+      },
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 128,
+      "unit": "players",
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Most members allowed in one in-game team. Common choices are 2, 3 or 4 for group-limit servers."
+    },
+    {
+      "key": "server.corpsedespawn",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.corpsedespawn"
+      },
+      "type": "int",
+      "default": 300,
+      "min": 10,
+      "max": 7200,
+      "unit": "seconds",
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Time before a player corpse disappears. Longer values give more time to recover dropped gear."
+    },
+    {
+      "key": "server.itemdespawn",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.itemdespawn"
+      },
+      "type": "int",
+      "default": 300,
+      "min": 10,
+      "max": 7200,
+      "unit": "seconds",
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Time before items dropped on the ground vanish. Higher values keep more things in the world and add load."
+    },
+    {
+      "key": "spawn.min_rate",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "spawn.min_rate"
+      },
+      "type": "float",
+      "default": 0.5,
+      "min": 0.1,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "World",
+      "restartRequired": true,
+      "description": "Resource and loot respawn speed when the server is nearly empty. Very low values can cause lag."
+    },
+    {
+      "key": "spawn.max_rate",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "spawn.max_rate"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "World",
+      "restartRequired": true,
+      "description": "Resource and loot respawn speed when the server is full; the value is blended with the minimum rate by player count."
+    },
+    {
+      "key": "spawn.min_density",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "spawn.min_density"
+      },
+      "type": "float",
+      "default": 0.5,
+      "min": 0.1,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "World",
+      "restartRequired": true,
+      "description": "How tightly resources pack on a quiet server; paired with the maximum density and blended by population."
+    },
+    {
+      "key": "spawn.max_density",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "spawn.max_density"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0.1,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "World",
+      "restartRequired": true,
+      "description": "How tightly resources pack on a full server. Raising it adds entities, so watch performance."
+    },
+    {
+      "key": "hackablelockedcrate.requiredhackseconds",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "hackablelockedcrate.requiredhackseconds"
+      },
+      "type": "int",
+      "default": 900,
+      "min": 0,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Wait before a hacked locked crate opens. Casual servers often cut it to around 300."
+    },
+    {
+      "key": "server.events",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.events"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Master switch for scheduled world events such as airdrops, helicopters and cargo runs."
+    },
+    {
+      "key": "bradley.enabled",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "bradley.enabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Whether the armoured personnel carrier patrols its monument. Off removes that challenge and its loot."
+    },
+    {
+      "key": "cargoship.event_enabled",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "cargoship.event_enabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Gameplay",
+      "restartRequired": true,
+      "description": "Whether the cargo ship event runs around the coast during normal play."
+    },
+    {
+      "key": "decay.scale",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.scale"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Global multiplier on building decay. Zero stops all building decay, with or without upkeep."
+    },
+    {
+      "key": "decay.upkeep",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.upkeep"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Whether tool cupboard upkeep protects bases. Off removes upkeep costs, but decay still applies."
+    },
+    {
+      "key": "decay.upkeep_period_minutes",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.upkeep_period_minutes"
+      },
+      "type": "int",
+      "default": 1440,
+      "min": 60,
+      "max": 20160,
+      "unit": "minutes",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Length of one upkeep cycle that cupboard resources pay for. Longer periods make upkeep cheaper."
+    },
+    {
+      "key": "decay.upkeep_grief_protection",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.upkeep_grief_protection"
+      },
+      "type": "int",
+      "default": 1440,
+      "min": 0,
+      "max": 20160,
+      "unit": "minutes",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Protection that remains after a cupboard is destroyed, so a raided base does not decay right away."
+    },
+    {
+      "key": "decay.upkeep_heal_scale",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.upkeep_heal_scale"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 10,
+      "unit": "multiplier",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "How fast paid-up structures regain health, relative to the normal decay speed."
+    },
+    {
+      "key": "decay.upkeep_inside_decay_scale",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.upkeep_inside_decay_scale"
+      },
+      "type": "float",
+      "default": 0.1,
+      "min": 0,
+      "max": 1,
+      "unit": "multiplier",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Decay multiplier for blocks counted as inside a building. Lower values keep interior parts safer."
+    },
+    {
+      "key": "decay.duration_twig",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.duration_twig"
+      },
+      "type": "float",
+      "default": 1,
+      "min": 0,
+      "max": 168,
+      "unit": "hours",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Hours an unprotected twig block takes to decay fully."
+    },
+    {
+      "key": "decay.duration_wood",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.duration_wood"
+      },
+      "type": "float",
+      "default": 3,
+      "min": 0,
+      "max": 168,
+      "unit": "hours",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Hours an unprotected wooden block takes to decay fully."
+    },
+    {
+      "key": "decay.duration_stone",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.duration_stone"
+      },
+      "type": "float",
+      "default": 5,
+      "min": 0,
+      "max": 168,
+      "unit": "hours",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Hours an unprotected stone block takes to decay fully."
+    },
+    {
+      "key": "decay.duration_metal",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.duration_metal"
+      },
+      "type": "float",
+      "default": 8,
+      "min": 0,
+      "max": 168,
+      "unit": "hours",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Hours an unprotected sheet metal block takes to decay fully."
+    },
+    {
+      "key": "decay.duration_toptier",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "decay.duration_toptier"
+      },
+      "type": "float",
+      "default": 12,
+      "min": 0,
+      "max": 168,
+      "unit": "hours",
+      "group": "Decay",
+      "restartRequired": true,
+      "description": "Hours an unprotected armoured block takes to decay fully."
+    },
+    {
+      "key": "server.encryption",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.encryption"
+      },
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 2,
+      "unit": "level",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Network encryption level for client traffic. Level 0 is used together with secure off for local testing."
+    },
+    {
+      "key": "server.maxconnectionsperip",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.maxconnectionsperip"
+      },
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 64,
+      "unit": "count",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Caps simultaneous connections from one address. Raise it for LAN events where many players share one address."
+    },
+    {
+      "key": "server.idlekick",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.idlekick"
+      },
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 1440,
+      "unit": "minutes",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Minutes of inactivity before a player is kicked. Zero turns idle kicking off."
+    },
+    {
+      "key": "server.saveinterval",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.saveinterval"
+      },
+      "type": "int",
+      "default": 300,
+      "min": 60,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Saving",
+      "restartRequired": true,
+      "description": "Time between automatic world saves. Shorter loses less on a crash but causes more save hitches."
+    },
+    {
+      "key": "server.savebackupcount",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "server.savebackupcount"
+      },
+      "type": "int",
+      "default": 2,
+      "min": 0,
+      "max": 10,
+      "unit": "count",
+      "group": "Saving",
+      "restartRequired": true,
+      "description": "Number of older save copies kept next to the current save; they help recover from a bad save."
+    },
+    {
+      "key": "fps.limit",
+      "file": "servercfg",
+      "locator": {
+        "kind": "cfg",
+        "command": "fps.limit"
+      },
+      "type": "int",
+      "default": 240,
+      "min": 30,
+      "max": 1000,
+      "unit": "fps",
+      "group": "Performance",
+      "restartRequired": true,
+      "description": "Caps the server frame rate to limit CPU use. Many hosts lower it on shared machines."
+    },
+    {
+      "key": "server.hostname",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.hostname"
+      },
+      "type": "string",
+      "min": 1,
+      "max": 64,
+      "group": "Identity",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Name players see in the server browser. Quote it, because a bare value with spaces keeps only the first word."
+    },
+    {
+      "key": "server.port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.port"
+      },
+      "type": "int",
+      "default": 28015,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "UDP game port clients connect to. It must differ from the query, remote console and companion app ports."
+    },
+    {
+      "key": "server.queryport",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.queryport"
+      },
+      "type": "int",
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "UDP port for server browser queries. Set it explicitly so browser queries do not clash with other instances."
+    },
+    {
+      "key": "server.ip",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.ip"
+      },
+      "type": "string",
+      "default": "0.0.0.0",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Local address the game socket binds to. 0.0.0.0 listens on every interface of the host."
+    },
+    {
+      "key": "app.port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+app.port"
+      },
+      "type": "int",
+      "default": 28082,
+      "min": -1,
+      "max": 65535,
+      "unit": "port",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "TCP port for the companion app. -1 turns it off, but a negative number only works from server.cfg, not from the launch line."
+    },
+    {
+      "key": "app.listenip",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+app.listenip"
+      },
+      "type": "string",
+      "default": "0.0.0.0",
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Local address the companion app listener binds to. Keep it in line with the game address on hosts with several networks."
+    },
+    {
+      "key": "server.maxplayers",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.maxplayers"
+      },
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 1000,
+      "unit": "players",
+      "group": "Network",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Most players allowed at once. Spawn scaling also reads it to work out how full the server is."
+    },
+    {
+      "key": "server.secure",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.secure"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "restartRequired": true,
+      "description": "Enables anti-cheat and Valve checks. Turning it off lets modified or Proton clients join without anti-cheat."
+    },
+    {
+      "key": "server.level",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.level"
+      },
+      "type": "enum",
+      "default": "Procedural Map",
+      "enum": [
+        {
+          "value": "Procedural Map",
+          "label": "Procedural map"
+        },
+        {
+          "value": "Barren",
+          "label": "Barren"
+        },
+        {
+          "value": "HapisIsland",
+          "label": "Hapis Island"
+        },
+        {
+          "value": "SavasIsland",
+          "label": "Savas Island"
+        }
+      ],
+      "group": "World",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Map type; quote it because the procedural name contains spaces. A custom map URL ignores seed and world size."
+    },
+    {
+      "key": "server.seed",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.seed"
+      },
+      "type": "int",
+      "min": 1,
+      "max": 2147483647,
+      "group": "World",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Number that drives procedural generation; changing it starts a new world file. Ignored when a custom map URL is set."
+    },
+    {
+      "key": "server.salt",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.salt"
+      },
+      "type": "int",
+      "min": 0,
+      "max": 2147483647,
+      "group": "World",
+      "restartRequired": true,
+      "description": "Extra generation value that, with seed and size, rebuilds an exact earlier map. Usually left unset."
+    },
+    {
+      "key": "server.worldsize",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.worldsize"
+      },
+      "type": "int",
+      "default": 3000,
+      "min": 1000,
+      "max": 6000,
+      "unit": "metres",
+      "group": "World",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Edge length of the map. Bigger maps cost more memory and CPU, and a change starts a new world file."
+    },
+    {
+      "key": "server.tickrate",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+server.tickrate"
+      },
+      "type": "int",
+      "default": 30,
+      "min": 15,
+      "max": 100,
+      "unit": "Hz",
+      "group": "Performance",
+      "restartRequired": true,
+      "description": "Server simulation updates per second. Higher values cost more CPU and feel more responsive."
+    },
+    {
+      "key": "rcon.port",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+rcon.port"
+      },
+      "type": "int",
+      "default": 28016,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Remote console",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "TCP port for the remote console. Dialwarden uses it for saves, announcements and clean shutdowns."
+    },
+    {
+      "key": "rcon.password",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+rcon.password"
+      },
+      "type": "string",
+      "group": "Remote console",
+      "restartRequired": true,
+      "secret": true,
+      "panelManaged": true,
+      "description": "Secret needed for remote console access. Empty or short values on a public port allow a takeover."
+    },
+    {
+      "key": "rcon.web",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+rcon.web"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Remote console",
+      "restartRequired": true,
+      "description": "Uses the websocket remote console when on, or the older Source-style protocol when off. Dialwarden needs it on."
+    },
+    {
+      "key": "rcon.ip",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "+rcon.ip"
+      },
+      "type": "string",
+      "default": "0.0.0.0",
+      "group": "Remote console",
+      "restartRequired": true,
+      "description": "Local address the remote console binds to. 127.0.0.1 keeps it reachable only from the host."
+    },
+    {
+      "key": "-batchmode",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-batchmode"
+      },
+      "type": "bool",
+      "group": "Launch",
+      "restartRequired": true,
+      "description": "Runs the server headless without a window. Every known start script includes it."
+    },
+    {
+      "key": "-logfile",
+      "file": "launch",
+      "locator": {
+        "kind": "launch",
+        "flag": "-logfile"
+      },
+      "type": "string",
+      "group": "Launch",
+      "restartRequired": true,
+      "description": "File that receives the server log. Without it the output goes to the standard output."
+    }
+  ],
+  "rules": [
+    {
+      "id": "rcon-web-weak-password",
+      "severity": "error",
+      "settings": ["rcon.password"],
+      "message": "Web remote console is on but its password is missing or shorter than 12 characters. Anyone who reaches the port can control the server.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "rcon.web"
+              },
+              true
+            ]
+          },
+          {
+            "<": [
+              {
+                "strlen": [
+                  {
+                    "var": "rcon.password"
+                  }
+                ]
+              },
+              12
+            ]
+          }
+        ]
+      },
+      "serverEvaluated": true
+    },
+    {
+      "id": "port-collision",
+      "severity": "error",
+      "settings": ["server.port", "server.queryport", "rcon.port", "app.port"],
+      "message": "Two services share a port. Game, query, remote console and companion app ports must all differ.",
+      "when": {
+        "or": [
+          {
+            "==": [
+              {
+                "var": "server.port"
+              },
+              {
+                "var": "rcon.port"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "server.port"
+              },
+              {
+                "var": "server.queryport"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "server.port"
+              },
+              {
+                "var": "app.port"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "rcon.port"
+              },
+              {
+                "var": "server.queryport"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "rcon.port"
+              },
+              {
+                "var": "app.port"
+              }
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "server.queryport"
+              },
+              {
+                "var": "app.port"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "worldsize-large",
+      "severity": "warning",
+      "settings": ["server.worldsize"],
+      "message": "Maps above 4500 metres need a lot of memory and CPU on most hosts.",
+      "when": {
+        ">": [
+          {
+            "var": "server.worldsize"
+          },
+          4500
+        ]
+      }
+    },
+    {
+      "id": "negative-on-launch",
+      "severity": "error",
+      "settings": ["app.port"],
+      "message": "Launch arguments cannot carry negative numbers, so -1 becomes 1 here. Put the negative value in server.cfg instead.",
+      "when": {
+        "<": [
+          {
+            "var": "app.port"
+          },
+          0
+        ]
+      }
+    },
+    {
+      "id": "rcon-web-off",
+      "severity": "warning",
+      "settings": ["rcon.web"],
+      "message": "Legacy remote console is selected. The Dialwarden save, announce and clean-stop actions need web remote console.",
+      "when": {
+        "==": [
+          {
+            "var": "rcon.web"
+          },
+          false
+        ]
+      }
+    },
+    {
+      "id": "decay-zero-info",
+      "severity": "info",
+      "settings": ["decay.scale"],
+      "message": "Decay scale 0 stops all building decay, so the upkeep settings have no visible effect.",
+      "when": {
+        "==": [
+          {
+            "var": "decay.scale"
+          },
+          0
+        ]
+      }
+    },
+    {
+      "id": "queryport-unset",
+      "severity": "warning",
+      "settings": ["server.queryport"],
+      "message": "No query port is set. Set one explicitly so browser queries do not clash with other instances.",
+      "when": {
+        "!": {
+          "var": "server.queryport"
+        }
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "vanilla-default",
+      "label": "Vanilla defaults",
+      "description": "The shipped ruleset and economy: normal decay, vanilla mode and the stock spawn rates.",
+      "values": {
+        "server.gamemode": "vanilla",
+        "server.pve": false,
+        "decay.scale": 1,
+        "decay.upkeep": true,
+        "decay.upkeep_period_minutes": 1440,
+        "decay.upkeep_grief_protection": 1440,
+        "craft.instant": false,
+        "relationshipmanager.maxteamsize": 8,
+        "hackablelockedcrate.requiredhackseconds": 900,
+        "spawn.min_rate": 0.5,
+        "spawn.max_rate": 1,
+        "spawn.min_density": 0.5,
+        "spawn.max_density": 1,
+        "server.corpsedespawn": 300,
+        "chat.globalchat": true
+      }
+    },
+    {
+      "id": "casual-low-decay",
+      "label": "Casual, low decay",
+      "description": "Slower decay with longer upkeep cycles, faster respawns and a longer corpse timer for relaxed communities.",
+      "values": {
+        "decay.scale": 0.25,
+        "decay.upkeep": true,
+        "decay.upkeep_period_minutes": 2880,
+        "decay.upkeep_grief_protection": 2880,
+        "decay.duration_twig": 2,
+        "decay.duration_wood": 8,
+        "hackablelockedcrate.requiredhackseconds": 300,
+        "spawn.min_rate": 1,
+        "spawn.min_density": 1,
+        "server.corpsedespawn": 1800,
+        "server.itemdespawn": 600,
+        "craft.instant": false
+      }
+    },
+    {
+      "id": "hardcore",
+      "label": "Hardcore",
+      "description": "Faster decay, smaller teams, no global chat and scarcer loot, closer to the old hardcore rules.",
+      "values": {
+        "server.gamemode": "hardcore",
+        "decay.scale": 1.5,
+        "decay.upkeep_period_minutes": 720,
+        "decay.upkeep_grief_protection": 360,
+        "relationshipmanager.maxteamsize": 3,
+        "chat.globalchat": false,
+        "chat.localchat": true,
+        "spawn.min_rate": 0.5,
+        "spawn.max_rate": 0.8,
+        "server.corpsedespawn": 300,
+        "hackablelockedcrate.requiredhackseconds": 900
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "rustWebRcon",
+      "portSetting": "rcon.port",
+      "passwordSetting": "rcon.password",
+      "host": "127.0.0.1",
+      "allow": ["server.save", "quit"],
+      "saveCommand": "server.save",
+      "stopCommand": "quit"
+    },
+    {
+      "kind": "a2s",
+      "portSetting": "server.queryport",
+      "host": "127.0.0.1",
+      "players": true
+    }
+  ],
+  "hooksSupported": ["save", "stop"],
+  "sources": [
+    "https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/config-default/config-lgsm/rustserver/_default.cfg",
+    "https://github.com/GameServerManagers/Game-Server-Configs/blob/master/rust/server.cfg",
+    "https://github.com/didstopia/rust-server",
+    "https://github.com/physk/rust-dedicated-server-docker/blob/master/docker/fullvars.txt",
+    "https://github.com/OxideMod/Oxide.Docs/blob/main/docs/guides/owners/setup-server.md",
+    "https://github.com/Bad3r/rust-server/blob/main/CLAUDE.md",
+    "https://github.com/RustWipeDay/RustWipeDay/blob/main/server.cfg",
+    "https://github.com/netwarlan/server-configs/blob/main/rust/users.cfg",
+    "https://github.com/Facepunch/webrcon"
+  ]
+}
