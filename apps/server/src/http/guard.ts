@@ -2,6 +2,8 @@
 // 1. reads the session from the signed cookie, except on the web route
 //    (static files only, contract C8), and builds the principal (who acts and
 //    with which role; the role is read from the users row on every request);
+//    without a session, an "Authorization: Bearer" API token (P8-A step 6)
+//    builds it instead, and a token that is not valid answers 401;
 // 2. refuses API calls with 503 while a first-run import runs;
 // 3. checks the CSRF header on every state-changing request with a session;
 // 4. enforces config.auth (authentication first). Every matched route
@@ -11,7 +13,8 @@
 //    reaches the /api/v1/activity handler;
 // 5. answers 402 (contract C1) for a route whose config.entitlement feature
 //    the current plan does not include, before any role check;
-// 6. checks the role the route needs (403 forbidden).
+// 6. refuses an API token on an identity route (403 token_not_allowed, D15);
+// 7. checks the role the route needs (403 forbidden).
 // A preValidation hook then checks config.server (P8-A, one shared check for
 // every server-scoped route): the route's game server is found from the
 // slug, the change set, the snapshot or the body, and a principal without a
@@ -65,6 +68,43 @@ function readSession(app: FastifyInstance, request: FastifyRequest): void {
   if (request.session !== null) {
     request.principal = app.ctx.team.principalOf(request.session.user);
   }
+}
+
+/** An API token from the Authorization header, when there is no session. */
+function readBearer(app: FastifyInstance, request: FastifyRequest): void {
+  const header = request.headers.authorization;
+  if (header === undefined) return;
+  const value = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  if (value === "") throw new ApiError(401, "invalid_token");
+  const principal = app.ctx.tokens.resolve(value, app.ctx.team.teamRoles);
+  if (principal === null) throw new ApiError(401, "invalid_token");
+  request.principal = principal;
+}
+
+/**
+ * Paths no API token reaches, whatever the route says (D15): the account and
+ * its sign-in, setup, the licence, users, invitations, the own-data export,
+ * tokens themselves, the audit settings and the system page.
+ */
+const TOKEN_DENIED_PREFIXES = [
+  "/api/v1/auth/",
+  "/api/v1/setup",
+  "/api/v1/licence",
+  "/api/v1/users",
+  "/api/v1/invitations",
+  "/api/v1/me/",
+  "/api/v1/tokens",
+  "/api/v1/settings/",
+  "/api/v1/system/",
+];
+
+/** Whether an API token may call the matched route. */
+export function tokenAllowed(
+  url: string,
+  tokens: boolean | undefined,
+): boolean {
+  if (tokens === false) return false;
+  return !TOKEN_DENIED_PREFIXES.some((prefix) => url.startsWith(prefix));
 }
 
 function authLevel(request: FastifyRequest): AuthLevel {
@@ -170,6 +210,7 @@ export function registerGuard(
     // and no database lookup.
     if (app.ctx.store.isOpen && request.routeOptions.config.web !== true) {
       readSession(app, request);
+      if (request.session === null) readBearer(app, request);
     }
     const session = request.session;
     if (session !== null && !SAFE_METHODS.has(request.method)) {
@@ -187,6 +228,13 @@ export function registerGuard(
     const feature = request.routeOptions.config.entitlement;
     if (feature !== undefined && !app.ctx.entitlement.can(feature)) {
       throw featureRequired(feature);
+    }
+    const config = request.routeOptions.config;
+    if (
+      principal?.via === "token" &&
+      !tokenAllowed(routePath(request), config.tokens)
+    ) {
+      throw new ApiError(403, "token_not_allowed");
     }
     if (level === "public" || level === "user" || principal === null) {
       return;

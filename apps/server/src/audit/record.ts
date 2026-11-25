@@ -54,6 +54,9 @@ export function registerAuditRecording(app: FastifyInstance): void {
     const params = paramsOf(request);
     const principal = request.principal;
     const id = params.id ?? params.slug ?? null;
+    // A request made with an API token names the token id, never its value.
+    const tokenId = principal?.tokenId ?? null;
+    const via = tokenId === null ? {} : { tokenId };
     try {
       app.ctx.audit.record({
         actorId: principal?.userId ?? "anonymous",
@@ -62,7 +65,7 @@ export function registerAuditRecording(app: FastifyInstance): void {
         targetType: targetTypeOf(url),
         targetId: id,
         serverId: request.serverId,
-        data: { status: reply.statusCode, params },
+        data: { status: reply.statusCode, params, ...via },
         ip: request.ip,
       });
     } catch (error) {

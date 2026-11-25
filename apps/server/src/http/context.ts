@@ -31,6 +31,7 @@ import type { EditableServers } from "../plan/editable.js";
 import type { PresetService } from "../presets/service.js";
 import type { ServerService } from "../servers/service.js";
 import type { SnapshotStore } from "../snapshots/store.js";
+import type { TokenService } from "../team/api-access.js";
 import type { GrantLevel, Principal } from "../team/roles.js";
 import type { TeamService } from "../team/service.js";
 
@@ -87,6 +88,8 @@ export interface AppContext {
   snapshots: SnapshotStore;
   /** Users, roles, grants, invitations and the privacy controls (P8-A). */
   team: TeamService;
+  /** API tokens: hashed values, role-capped principals (P8-A step 6). */
+  tokens: TokenService;
   /** The hash-chained audit log and its settings (P8-A). */
   audit: AuditService;
   /** True while a first-run import replaces the database: the API answers 503. */
