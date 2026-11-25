@@ -1,0 +1,1 @@
+-configfile=serverconfig.xml -quit -batchmode -nographics -dedicated -logfile server.log

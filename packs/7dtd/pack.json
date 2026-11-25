@@ -1,0 +1,2424 @@
+{
+  "id": "7dtd",
+  "version": "1.0.0",
+  "displayName": "7 Days to Die",
+  "steamAppId": 294420,
+  "builds": {
+    "from": 3,
+    "to": null
+  },
+  "os": ["linux", "windows"],
+  "detection": {
+    "markers": [
+      {
+        "path": "7DaysToDieServer.x86_64",
+        "os": ["linux"]
+      },
+      {
+        "path": "7DaysToDieServer.exe",
+        "os": ["windows"]
+      },
+      {
+        "path": "steamapps/appmanifest_294420.acf"
+      }
+    ]
+  },
+  "files": [
+    {
+      "id": "serverconfig",
+      "paths": {
+        "linux": ["serverconfig.xml"],
+        "windows": ["serverconfig.xml"]
+      },
+      "adapter": "xml",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime"
+    },
+    {
+      "id": "serveradmin",
+      "paths": {
+        "linux": ["UserData/Saves/serveradmin.xml"],
+        "windows": ["UserData/Saves/serveradmin.xml"]
+      },
+      "adapter": "xml",
+      "encoding": "utf-8",
+      "applyPolicy": "stopped-only"
+    },
+    {
+      "id": "launch",
+      "paths": {
+        "linux": ["dialwarden-args.txt"],
+        "windows": ["dialwarden-args.txt"]
+      },
+      "adapter": "launch",
+      "encoding": "utf-8",
+      "applyPolicy": "anytime",
+      "launchSources": [
+        {
+          "kind": "args"
+        }
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "ServerName",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerName"
+      },
+      "type": "string",
+      "default": "My Game Host",
+      "min": 1,
+      "max": 64,
+      "group": "Identity",
+      "panelManaged": true,
+      "description": "Name players see for this server in the in-game browser and in query replies.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerDescription",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerDescription"
+      },
+      "type": "string",
+      "default": "A 7 Days to Die server",
+      "max": 256,
+      "group": "Identity",
+      "description": "Longer text shown under the name in the server browser.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerWebsiteURL",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerWebsiteURL"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Identity",
+      "description": "Link the browser shows as clickable for this server, for example a community page or a chat invite.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerPassword",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Identity",
+      "secret": true,
+      "panelManaged": true,
+      "description": "Password needed to join. Empty means an open server; it is stored as plain text in the file.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerLoginConfirmationText",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerLoginConfirmationText"
+      },
+      "type": "string",
+      "default": "",
+      "max": 1000,
+      "group": "Identity",
+      "description": "Rules text each joining player must accept before entering. Empty skips the confirmation dialog.",
+      "restartRequired": true
+    },
+    {
+      "key": "Region",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "Region"
+      },
+      "type": "enum",
+      "default": "NorthAmericaEast",
+      "enum": [
+        {
+          "value": "NorthAmericaEast",
+          "label": "North America East"
+        },
+        {
+          "value": "NorthAmericaWest",
+          "label": "North America West"
+        },
+        {
+          "value": "CentralAmerica",
+          "label": "Central America"
+        },
+        {
+          "value": "SouthAmerica",
+          "label": "South America"
+        },
+        {
+          "value": "Europe",
+          "label": "Europe"
+        },
+        {
+          "value": "Russia",
+          "label": "Russia"
+        },
+        {
+          "value": "Asia",
+          "label": "Asia"
+        },
+        {
+          "value": "MiddleEast",
+          "label": "Middle East"
+        },
+        {
+          "value": "Africa",
+          "label": "Africa"
+        },
+        {
+          "value": "Oceania",
+          "label": "Oceania"
+        }
+      ],
+      "group": "Identity",
+      "description": "Region tag the server browser sorts this server under.",
+      "restartRequired": true
+    },
+    {
+      "key": "Language",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "Language"
+      },
+      "type": "string",
+      "default": "English",
+      "max": 32,
+      "group": "Identity",
+      "description": "Main language of the community, written as its English name (German, not Deutsch), for browser search.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerPort",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerPort"
+      },
+      "type": "int",
+      "default": 26900,
+      "min": 1024,
+      "max": 65533,
+      "unit": "port",
+      "group": "Network",
+      "panelManaged": true,
+      "description": "Base game port. The server also takes the next two UDP ports, so port+1 and port+2 must be free too.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerVisibility",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerVisibility"
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Not listed"
+        },
+        {
+          "value": 1,
+          "label": "Friends only"
+        },
+        {
+          "value": 2,
+          "label": "Public"
+        }
+      ],
+      "group": "Network",
+      "panelManaged": true,
+      "description": "Listing mode: 0 not listed, 1 friends only (rarely useful on a dedicated host), 2 public in the browser.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerDisabledNetworkProtocols",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerDisabledNetworkProtocols"
+      },
+      "type": "string",
+      "default": "SteamNetworking",
+      "max": 64,
+      "group": "Network",
+      "description": "Comma list of transports to switch off: LiteNetLib or SteamNetworking. Port-forwarded hosts usually drop the Steam relay.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerMaxWorldTransferSpeedKiBs",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerMaxWorldTransferSpeedKiBs"
+      },
+      "type": "int",
+      "default": 512,
+      "min": 64,
+      "max": 1300,
+      "unit": "KiB/s",
+      "group": "Network",
+      "description": "Cap on how fast a new client downloads the world on first join. The engine tops out near 1300.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerAllowCrossplay",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerAllowCrossplay"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Network",
+      "description": "Lets console players find and join. Console listing also needs anti-cheat on, sanctions honoured and few slots.",
+      "restartRequired": true
+    },
+    {
+      "key": "EACEnabled",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "EACEnabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Network",
+      "description": "Turns the anti-cheat on or off. Client-side code mods usually need it off; public servers usually keep it on.",
+      "restartRequired": true
+    },
+    {
+      "key": "IgnoreEOSSanctions",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "IgnoreEOSSanctions"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Network",
+      "description": "When true, players under Epic Online Services sanctions may still join, which drops the server from crossplay lists.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerMaxPlayerCount",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerMaxPlayerCount"
+      },
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 64,
+      "unit": "players",
+      "group": "Multiplayer",
+      "panelManaged": true,
+      "description": "Concurrent player slots. More slots cost memory and CPU, and crossplay servers must stay at 8 or fewer.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerReservedSlots",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerReservedSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 64,
+      "unit": "count",
+      "group": "Multiplayer",
+      "description": "Slots, counted inside the player cap, held back for users with a strong enough permission level.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerReservedSlotsPermission",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerReservedSlotsPermission"
+      },
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 1000,
+      "unit": "level",
+      "group": "Multiplayer",
+      "description": "Permission level a player needs to use a reserved slot. Lower numbers mean more privilege.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerAdminSlots",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerAdminSlots"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 16,
+      "unit": "count",
+      "group": "Multiplayer",
+      "description": "Extra slots above the player cap that only admins can take once the server is full.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerAdminSlotsPermission",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerAdminSlotsPermission"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1000,
+      "unit": "level",
+      "group": "Multiplayer",
+      "description": "Permission level a user needs to take one of the extra admin slots above the normal cap.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerKillingMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "PlayerKillingMode"
+      },
+      "type": "enum",
+      "default": 3,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Nobody"
+        },
+        {
+          "value": 1,
+          "label": "Allies only"
+        },
+        {
+          "value": 2,
+          "label": "Strangers only"
+        },
+        {
+          "value": 3,
+          "label": "Everyone"
+        }
+      ],
+      "group": "Multiplayer",
+      "description": "PVP rule: 0 nobody, 1 allies only, 2 strangers only, 3 anyone may damage other players.",
+      "restartRequired": true
+    },
+    {
+      "key": "PartySharedKillRange",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "PartySharedKillRange"
+      },
+      "type": "int",
+      "default": 100,
+      "min": 0,
+      "max": 10000,
+      "unit": "blocks",
+      "group": "Multiplayer",
+      "description": "Distance within which party members share kill experience and quest kill credit.",
+      "restartRequired": true
+    },
+    {
+      "key": "PersistentPlayerProfiles",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "PersistentPlayerProfiles"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Multiplayer",
+      "description": "When true, each player is locked to the character profile they last joined with, which blocks profile swapping.",
+      "restartRequired": true
+    },
+    {
+      "key": "TelnetEnabled",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TelnetEnabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Admin interfaces",
+      "description": "Turns on the plain-text remote console the Dialwarden save, announce and stop actions use.",
+      "restartRequired": true
+    },
+    {
+      "key": "TelnetPort",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TelnetPort"
+      },
+      "type": "int",
+      "default": 8081,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Admin interfaces",
+      "panelManaged": true,
+      "description": "TCP port of the remote console. It must not clash with the game ports or the dashboard port.",
+      "restartRequired": true
+    },
+    {
+      "key": "TelnetPassword",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TelnetPassword"
+      },
+      "type": "string",
+      "default": "",
+      "max": 64,
+      "group": "Admin interfaces",
+      "secret": true,
+      "panelManaged": true,
+      "description": "Console password. Empty keeps the console bound to loopback only; set one before exposing the port.",
+      "restartRequired": true
+    },
+    {
+      "key": "TelnetFailedLoginLimit",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TelnetFailedLoginLimit"
+      },
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 100,
+      "unit": "count",
+      "group": "Admin interfaces",
+      "description": "Wrong-password attempts from one address before that address is temporarily locked out of the console.",
+      "restartRequired": true
+    },
+    {
+      "key": "TelnetFailedLoginsBlocktime",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TelnetFailedLoginsBlocktime"
+      },
+      "type": "int",
+      "default": 10,
+      "min": 1,
+      "max": 3600,
+      "unit": "seconds",
+      "group": "Admin interfaces",
+      "description": "How long a console client stays blocked after reaching the failed-login limit.",
+      "restartRequired": true
+    },
+    {
+      "key": "TerminalWindowEnabled",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TerminalWindowEnabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Admin interfaces",
+      "description": "Opens a separate log and command window on Windows hosts. It has no effect on Linux servers.",
+      "restartRequired": true
+    },
+    {
+      "key": "HideCommandExecutionLog",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "HideCommandExecutionLog"
+      },
+      "type": "enum",
+      "default": 0,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Show everything"
+        },
+        {
+          "value": 1,
+          "label": "Hide from telnet and dashboard"
+        },
+        {
+          "value": 2,
+          "label": "Also hide from clients"
+        },
+        {
+          "value": 3,
+          "label": "Hide everywhere"
+        }
+      ],
+      "group": "Admin interfaces",
+      "description": "How much admin command use is hidden from logs: 0 nothing hidden, up to 3 hidden everywhere.",
+      "restartRequired": true
+    },
+    {
+      "key": "AdminFileName",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "AdminFileName"
+      },
+      "type": "string",
+      "default": "serveradmin.xml",
+      "max": 64,
+      "group": "Admin interfaces",
+      "description": "File name of the admin, whitelist and ban file. It resolves inside the Saves folder of the data directory.",
+      "restartRequired": true
+    },
+    {
+      "key": "UserDataFolder",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "UserDataFolder"
+      },
+      "type": "string",
+      "default": "UserData",
+      "max": 256,
+      "group": "Admin interfaces",
+      "description": "Path that moves saves and generated worlds. The demo sets it inside the server root; empty uses the user profile instead.",
+      "restartRequired": true
+    },
+    {
+      "key": "WebDashboardEnabled",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "WebDashboardEnabled"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Web dashboard",
+      "description": "Turns on the built-in browser admin page. Logins come from the token list of the admin file.",
+      "restartRequired": true
+    },
+    {
+      "key": "WebDashboardPort",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "WebDashboardPort"
+      },
+      "type": "int",
+      "default": 8080,
+      "min": 1024,
+      "max": 65535,
+      "unit": "port",
+      "group": "Web dashboard",
+      "description": "HTTP port of the built-in dashboard. It must differ from the console port and the three game ports.",
+      "restartRequired": true
+    },
+    {
+      "key": "WebDashboardUrl",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "WebDashboardUrl"
+      },
+      "type": "string",
+      "default": "",
+      "max": 256,
+      "group": "Web dashboard",
+      "description": "Public address to advertise when the dashboard sits behind a reverse proxy. Include scheme and port.",
+      "restartRequired": true
+    },
+    {
+      "key": "EnableMapRendering",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "EnableMapRendering"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Web dashboard",
+      "description": "Renders explored map tiles to disk for the dashboard map view. Costs extra CPU and disk space.",
+      "restartRequired": true
+    },
+    {
+      "key": "GameWorld",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "GameWorld"
+      },
+      "type": "string",
+      "default": "Navezgane",
+      "max": 64,
+      "group": "World",
+      "panelManaged": true,
+      "description": "World to load: RWG for a generated map, or a shipped one such as Navezgane, Pregen06k01 or Pregen08k01.",
+      "restartRequired": true
+    },
+    {
+      "key": "WorldGenSeed",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "WorldGenSeed"
+      },
+      "type": "string",
+      "default": "MyGame",
+      "min": 1,
+      "max": 64,
+      "group": "World",
+      "panelManaged": true,
+      "description": "Seed text, used only when the world is RWG. The same seed and size always reproduce the same layout.",
+      "restartRequired": true
+    },
+    {
+      "key": "WorldGenSize",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "WorldGenSize"
+      },
+      "type": "enum",
+      "default": 6144,
+      "enum": [
+        {
+          "value": 6144,
+          "label": "6144 blocks"
+        },
+        {
+          "value": 8192,
+          "label": "8192 blocks"
+        },
+        {
+          "value": 10240,
+          "label": "10240 blocks"
+        }
+      ],
+      "unit": "blocks",
+      "group": "World",
+      "description": "Edge length of a generated RWG world. Crossplay allows 8192 at most.",
+      "restartRequired": true
+    },
+    {
+      "key": "GameName",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "GameName"
+      },
+      "type": "string",
+      "default": "MyGame",
+      "min": 1,
+      "max": 64,
+      "group": "World",
+      "panelManaged": true,
+      "description": "Save slot name, also used to seed decoration. Changing it starts a fresh save.",
+      "restartRequired": true
+    },
+    {
+      "key": "GameMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "GameMode"
+      },
+      "type": "string",
+      "default": "GameModeSurvival",
+      "max": 64,
+      "group": "World",
+      "description": "Game mode identifier; GameModeSurvival is the only value shipped for dedicated servers, so it is normally left alone.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxChunkAge",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "MaxChunkAge"
+      },
+      "type": "int",
+      "default": -1,
+      "min": -1,
+      "max": 9999,
+      "unit": "days",
+      "group": "World",
+      "description": "In-game days after which unvisited, unprotected chunks reset to their original state; -1 means never.",
+      "restartRequired": true
+    },
+    {
+      "key": "SaveDataLimit",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "SaveDataLimit"
+      },
+      "type": "int",
+      "default": -1,
+      "min": -1,
+      "max": 1000000,
+      "unit": "MB",
+      "group": "World",
+      "description": "Disk budget per save. Once reached, old chunks may be reset. Negative values remove the cap.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxUncoveredMapChunksPerPlayer",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "MaxUncoveredMapChunksPerPlayer"
+      },
+      "type": "int",
+      "default": 131072,
+      "min": 0,
+      "max": 1000000,
+      "unit": "count",
+      "group": "World",
+      "description": "Cap on how much map each player can reveal, which bounds the size of the per-player map file.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerSafeZoneLevel",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "PlayerSafeZoneLevel"
+      },
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 100,
+      "unit": "level",
+      "group": "Gameplay",
+      "description": "Players at or below this level get a temporary enemy-free bubble when they spawn.",
+      "restartRequired": true
+    },
+    {
+      "key": "PlayerSafeZoneHours",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "PlayerSafeZoneHours"
+      },
+      "type": "int",
+      "default": 5,
+      "min": 0,
+      "max": 24,
+      "unit": "hours",
+      "group": "Gameplay",
+      "description": "How long the new-player spawn bubble lasts, in in-game hours, before enemies may appear.",
+      "restartRequired": true
+    },
+    {
+      "key": "BuildCreate",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BuildCreate"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "description": "Creative or cheat mode for everyone: free items and no build costs. Keep it off for survival play.",
+      "restartRequired": true
+    },
+    {
+      "key": "BedrollDeadZoneSize",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BedrollDeadZoneSize"
+      },
+      "type": "int",
+      "default": 15,
+      "min": 0,
+      "max": 100,
+      "unit": "blocks",
+      "group": "Gameplay",
+      "description": "Half-width of the no-spawn box around an active bedroll. Cleared sleepers inside it do not come back.",
+      "restartRequired": true
+    },
+    {
+      "key": "BedrollExpiryTime",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BedrollExpiryTime"
+      },
+      "type": "int",
+      "default": 45,
+      "min": 1,
+      "max": 365,
+      "unit": "days",
+      "group": "Gameplay",
+      "description": "Real-world days a bedroll keeps working after its owner was last online.",
+      "restartRequired": true
+    },
+    {
+      "key": "AllowSpawnNearFriend",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "AllowSpawnNearFriend"
+      },
+      "type": "enum",
+      "default": 2,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Off"
+        },
+        {
+          "value": 1,
+          "label": "Anywhere"
+        },
+        {
+          "value": 2,
+          "label": "Forest biome only"
+        }
+      ],
+      "group": "Gameplay",
+      "description": "Option on first join to spawn near an online friend: 0 off, 1 anywhere, 2 forest biome only.",
+      "restartRequired": true
+    },
+    {
+      "key": "CameraRestrictionMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "CameraRestrictionMode"
+      },
+      "type": "enum",
+      "default": 0,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Free choice"
+        },
+        {
+          "value": 1,
+          "label": "First person only"
+        },
+        {
+          "value": 2,
+          "label": "Third person only"
+        }
+      ],
+      "group": "Gameplay",
+      "description": "Camera rule for all players: 0 free choice, 1 first person only, 2 third person only.",
+      "restartRequired": true
+    },
+    {
+      "key": "TwitchServerPermission",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TwitchServerPermission"
+      },
+      "type": "int",
+      "default": 90,
+      "min": 0,
+      "max": 1000,
+      "unit": "level",
+      "group": "Gameplay",
+      "description": "Permission level a streamer needs to use the Twitch integration on this server.",
+      "restartRequired": true
+    },
+    {
+      "key": "TwitchBloodMoonAllowed",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "TwitchBloodMoonAllowed"
+      },
+      "type": "bool",
+      "default": false,
+      "group": "Gameplay",
+      "description": "Allows Twitch viewer actions during blood moons; the extra spawns can add noticeable server load.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimCount",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimCount"
+      },
+      "type": "int",
+      "default": 5,
+      "min": 1,
+      "max": 50,
+      "unit": "count",
+      "group": "Land claims",
+      "description": "How many land claim blocks each player may have placed in the world at the same time.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimSize",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimSize"
+      },
+      "type": "int",
+      "default": 41,
+      "min": 1,
+      "max": 201,
+      "unit": "blocks",
+      "group": "Land claims",
+      "description": "Edge length of the protected cube centred on each land claim block.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimDeadZone",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimDeadZone"
+      },
+      "type": "int",
+      "default": 30,
+      "min": 0,
+      "max": 200,
+      "unit": "blocks",
+      "group": "Land claims",
+      "description": "Minimum distance between claim blocks owned by players who are not friends.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimExpiryTime",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimExpiryTime"
+      },
+      "type": "int",
+      "default": 7,
+      "min": 1,
+      "max": 365,
+      "unit": "days",
+      "group": "Land claims",
+      "description": "Real-world days a player may stay offline before their claims stop protecting anything.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimDecayMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimDecayMode"
+      },
+      "type": "enum",
+      "default": 0,
+      "enum": [
+        {
+          "value": 0,
+          "label": "Linear"
+        },
+        {
+          "value": 1,
+          "label": "Exponential"
+        },
+        {
+          "value": 2,
+          "label": "Full until expiry"
+        }
+      ],
+      "group": "Land claims",
+      "description": "How protection fades while the owner is offline: 0 linear, 1 exponential, 2 full until expiry.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimOnlineDurabilityModifier",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimOnlineDurabilityModifier"
+      },
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Land claims",
+      "description": "Block hardness multiplier inside a claim while the owner is online; 0 makes the blocks unbreakable.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimOfflineDurabilityModifier",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimOfflineDurabilityModifier"
+      },
+      "type": "int",
+      "default": 4,
+      "min": 0,
+      "max": 100,
+      "unit": "multiplier",
+      "group": "Land claims",
+      "description": "Block hardness multiplier inside a claim while the owner is offline; 0 makes the blocks unbreakable.",
+      "restartRequired": true
+    },
+    {
+      "key": "LandClaimOfflineDelay",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LandClaimOfflineDelay"
+      },
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1440,
+      "unit": "minutes",
+      "group": "Land claims",
+      "description": "Minutes after logout before the offline multiplier replaces the online one.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxSpawnedZombies",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "MaxSpawnedZombies"
+      },
+      "type": "int",
+      "default": 64,
+      "min": 1,
+      "max": 200,
+      "unit": "count",
+      "group": "Performance",
+      "description": "World-wide cap on live zombies; the game scales it up for hordes and sleepers. Large CPU impact.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxSpawnedAnimals",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "MaxSpawnedAnimals"
+      },
+      "type": "int",
+      "default": 50,
+      "min": 1,
+      "max": 200,
+      "unit": "count",
+      "group": "Performance",
+      "description": "World-wide cap on live animals. Cheaper than zombies; raise it for busy, spread-out servers.",
+      "restartRequired": true
+    },
+    {
+      "key": "ServerMaxAllowedViewDistance",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ServerMaxAllowedViewDistance"
+      },
+      "type": "int",
+      "default": 12,
+      "min": 6,
+      "max": 12,
+      "unit": "chunks",
+      "group": "Performance",
+      "description": "Largest view distance a client may request. Strong effect on server memory and CPU.",
+      "restartRequired": true
+    },
+    {
+      "key": "MaxQueuedMeshLayers",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "MaxQueuedMeshLayers"
+      },
+      "type": "int",
+      "default": 1000,
+      "min": 100,
+      "max": 10000,
+      "unit": "count",
+      "group": "Performance",
+      "description": "Queue limit for chunk mesh building. Lower saves memory; higher can load chunks faster.",
+      "restartRequired": true
+    },
+    {
+      "key": "DynamicMeshEnabled",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DynamicMeshEnabled"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Performance",
+      "description": "Turns on the dynamic mesh system, which shows player-modified areas correctly at a distance.",
+      "restartRequired": true
+    },
+    {
+      "key": "DynamicMeshLandClaimOnly",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DynamicMeshLandClaimOnly"
+      },
+      "type": "bool",
+      "default": true,
+      "group": "Performance",
+      "description": "Limits dynamic mesh work to areas around land claims, which saves CPU on large worlds.",
+      "restartRequired": true
+    },
+    {
+      "key": "DynamicMeshLandClaimBuffer",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DynamicMeshLandClaimBuffer"
+      },
+      "type": "int",
+      "default": 3,
+      "min": 0,
+      "max": 10,
+      "unit": "chunks",
+      "group": "Performance",
+      "description": "Extra chunk radius around each claim that dynamic mesh processing also covers.",
+      "restartRequired": true
+    },
+    {
+      "key": "DynamicMeshMaxItemCache",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DynamicMeshMaxItemCache"
+      },
+      "type": "int",
+      "default": 3,
+      "min": 1,
+      "max": 20,
+      "unit": "count",
+      "group": "Performance",
+      "description": "Number of dynamic mesh items processed in parallel. Higher values use more memory.",
+      "restartRequired": true
+    },
+    {
+      "key": "SandboxCode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "SandboxCode"
+      },
+      "type": "string",
+      "default": "AAAJABJACJADJARFBNC",
+      "min": 1,
+      "max": 2029,
+      "group": "Sandbox rules",
+      "description": "The packed ruleset of the new-game Sandbox screen: difficulty, experience, zombie speed, loot, blood moons and more. Copy the code from that screen and paste it here; the letters are version-specific, so a code from a different game version may not give the same world.",
+      "restartRequired": true
+    },
+    {
+      "key": "GameDifficulty",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "GameDifficulty"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: difficulty now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BlockDamagePlayer",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BlockDamagePlayer"
+      },
+      "type": "float",
+      "description": "Ignored by this game version since V3: block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BlockDamageAI",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BlockDamageAI"
+      },
+      "type": "float",
+      "description": "Ignored by this game version since V3: zombie block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BlockDamageAIBM",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BlockDamageAIBM"
+      },
+      "type": "float",
+      "description": "Ignored by this game version since V3: blood-moon block damage now lives in the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "XPMultiplier",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "XPMultiplier"
+      },
+      "type": "float",
+      "description": "Ignored by this game version since V3: experience now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "DayNightLength",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DayNightLength"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: day length now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "DayLightLength",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DayLightLength"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: daylight hours now come from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BiomeProgression",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BiomeProgression"
+      },
+      "type": "bool",
+      "description": "Ignored by this game version since V3: biome progression moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "StormFreq",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "StormFreq"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: storm frequency moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "DeathPenalty",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DeathPenalty"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the death penalty moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "DropOnDeath",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DropOnDeath"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: what drops on death moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "DropOnQuit",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "DropOnQuit"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: what drops on quit moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "JarRefund",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "JarRefund"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the jar refund moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "EnemySpawnMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "EnemySpawnMode"
+      },
+      "type": "bool",
+      "description": "Ignored by this game version since V3: enemy spawning moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "EnemyDifficulty",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "EnemyDifficulty"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: enemy difficulty moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "ZombieFeralSense",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ZombieFeralSense"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: feral senses moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "ZombieMove",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ZombieMove"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: daytime zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "ZombieMoveNight",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ZombieMoveNight"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: night zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "ZombieFeralMove",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ZombieFeralMove"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: feral zombie speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "ZombieBMMove",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "ZombieBMMove"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: blood-moon speed moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "AISmellMode",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "AISmellMode"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the smell system moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BloodMoonFrequency",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BloodMoonFrequency"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: blood-moon frequency moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BloodMoonRange",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BloodMoonRange"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the blood-moon day spread moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BloodMoonWarning",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BloodMoonWarning"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the blood-moon warning hour moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "BloodMoonEnemyCount",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "BloodMoonEnemyCount"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the blood-moon horde size moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "LootAbundance",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LootAbundance"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: loot quantity now comes from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "LootRespawnDays",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LootRespawnDays"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: loot refills now come from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "AirDropFrequency",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "AirDropFrequency"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: supply-drop spacing moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "AirDropMarker",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "AirDropMarker"
+      },
+      "type": "bool",
+      "description": "Ignored by this game version since V3: supply-drop markers moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "QuestProgressionDailyLimit",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "QuestProgressionDailyLimit"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: the daily quest cap moved into the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "LootTimer",
+      "file": "serverconfig",
+      "locator": {
+        "kind": "xml",
+        "property": "LootTimer"
+      },
+      "type": "int",
+      "description": "Ignored by this game version since V3: a mod-era key some managers still write; V3 reads it from the SandboxCode ruleset. The line is kept as it is and never written.",
+      "removedIn": "3.0"
+    },
+    {
+      "key": "configfile",
+      "file": "launch",
+      "label": "Config file",
+      "locator": {
+        "kind": "launch",
+        "flag": "-configfile"
+      },
+      "type": "string",
+      "default": "serverconfig.xml",
+      "group": "Launch",
+      "restartRequired": true,
+      "panelManaged": true,
+      "description": "Path of the serverconfig file the game reads at start. Keep one copy outside the install folder so game updates cannot replace it."
+    }
+  ],
+  "rules": [
+    {
+      "id": "pre-v3-gamedifficulty",
+      "severity": "warning",
+      "settings": ["GameDifficulty"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "GameDifficulty"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-blockdamageplayer",
+      "severity": "warning",
+      "settings": ["BlockDamagePlayer"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BlockDamagePlayer"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-blockdamageai",
+      "severity": "warning",
+      "settings": ["BlockDamageAI"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BlockDamageAI"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-blockdamageaibm",
+      "severity": "warning",
+      "settings": ["BlockDamageAIBM"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BlockDamageAIBM"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-xpmultiplier",
+      "severity": "warning",
+      "settings": ["XPMultiplier"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "XPMultiplier"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-daynightlength",
+      "severity": "warning",
+      "settings": ["DayNightLength"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "DayNightLength"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-daylightlength",
+      "severity": "warning",
+      "settings": ["DayLightLength"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "DayLightLength"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-biomeprogression",
+      "severity": "warning",
+      "settings": ["BiomeProgression"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BiomeProgression"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-stormfreq",
+      "severity": "warning",
+      "settings": ["StormFreq"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "StormFreq"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-deathpenalty",
+      "severity": "warning",
+      "settings": ["DeathPenalty"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "DeathPenalty"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-dropondeath",
+      "severity": "warning",
+      "settings": ["DropOnDeath"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "DropOnDeath"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-droponquit",
+      "severity": "warning",
+      "settings": ["DropOnQuit"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "DropOnQuit"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-jarrefund",
+      "severity": "warning",
+      "settings": ["JarRefund"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "JarRefund"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-enemyspawnmode",
+      "severity": "warning",
+      "settings": ["EnemySpawnMode"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "EnemySpawnMode"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-enemydifficulty",
+      "severity": "warning",
+      "settings": ["EnemyDifficulty"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "EnemyDifficulty"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-zombieferalsense",
+      "severity": "warning",
+      "settings": ["ZombieFeralSense"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "ZombieFeralSense"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-zombiemove",
+      "severity": "warning",
+      "settings": ["ZombieMove"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "ZombieMove"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-zombiemovenight",
+      "severity": "warning",
+      "settings": ["ZombieMoveNight"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "ZombieMoveNight"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-zombieferalmove",
+      "severity": "warning",
+      "settings": ["ZombieFeralMove"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "ZombieFeralMove"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-zombiebmmove",
+      "severity": "warning",
+      "settings": ["ZombieBMMove"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "ZombieBMMove"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-aismellmode",
+      "severity": "warning",
+      "settings": ["AISmellMode"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "AISmellMode"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-bloodmoonfrequency",
+      "severity": "warning",
+      "settings": ["BloodMoonFrequency"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BloodMoonFrequency"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-bloodmoonrange",
+      "severity": "warning",
+      "settings": ["BloodMoonRange"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BloodMoonRange"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-bloodmoonwarning",
+      "severity": "warning",
+      "settings": ["BloodMoonWarning"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BloodMoonWarning"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-bloodmoonenemycount",
+      "severity": "warning",
+      "settings": ["BloodMoonEnemyCount"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "BloodMoonEnemyCount"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-lootabundance",
+      "severity": "warning",
+      "settings": ["LootAbundance"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "LootAbundance"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-lootrespawndays",
+      "severity": "warning",
+      "settings": ["LootRespawnDays"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "LootRespawnDays"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-airdropfrequency",
+      "severity": "warning",
+      "settings": ["AirDropFrequency"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "AirDropFrequency"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-airdropmarker",
+      "severity": "warning",
+      "settings": ["AirDropMarker"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "AirDropMarker"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-questprogressiondailylimit",
+      "severity": "warning",
+      "settings": ["QuestProgressionDailyLimit"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "QuestProgressionDailyLimit"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "pre-v3-loottimer",
+      "severity": "warning",
+      "settings": ["LootTimer"],
+      "message": "This property is ignored by the current game version; its value now lives in the SandboxCode ruleset.",
+      "when": {
+        "!=": [
+          {
+            "var": "LootTimer"
+          },
+          null
+        ]
+      }
+    },
+    {
+      "id": "telnet-open-no-password",
+      "severity": "info",
+      "settings": ["TelnetEnabled", "TelnetPassword"],
+      "message": "The console has no password, so it listens on loopback only; local hooks work, a remote Dialwarden cannot connect.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "TelnetEnabled"
+              },
+              true
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "TelnetPassword"
+              },
+              ""
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "telnet-disabled-hooks-lost",
+      "severity": "warning",
+      "settings": ["TelnetEnabled"],
+      "message": "Without the console, the save, announce and clean-stop actions fall back to a process signal.",
+      "when": {
+        "==": [
+          {
+            "var": "TelnetEnabled"
+          },
+          false
+        ]
+      }
+    },
+    {
+      "id": "port-collision",
+      "severity": "error",
+      "settings": ["TelnetPort", "WebDashboardPort", "ServerPort"],
+      "message": "The console or dashboard port overlaps the game ports (port, port+1, port+2) or each other.",
+      "when": {
+        "or": [
+          {
+            "in": [
+              {
+                "var": "TelnetPort"
+              },
+              [
+                {
+                  "var": "ServerPort"
+                },
+                {
+                  "+": [
+                    {
+                      "var": "ServerPort"
+                    },
+                    1
+                  ]
+                },
+                {
+                  "+": [
+                    {
+                      "var": "ServerPort"
+                    },
+                    2
+                  ]
+                }
+              ]
+            ]
+          },
+          {
+            "and": [
+              {
+                "==": [
+                  {
+                    "var": "WebDashboardEnabled"
+                  },
+                  true
+                ]
+              },
+              {
+                "or": [
+                  {
+                    "==": [
+                      {
+                        "var": "WebDashboardPort"
+                      },
+                      {
+                        "var": "TelnetPort"
+                      }
+                    ]
+                  },
+                  {
+                    "in": [
+                      {
+                        "var": "WebDashboardPort"
+                      },
+                      [
+                        {
+                          "var": "ServerPort"
+                        },
+                        {
+                          "+": [
+                            {
+                              "var": "ServerPort"
+                            },
+                            1
+                          ]
+                        },
+                        {
+                          "+": [
+                            {
+                              "var": "ServerPort"
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "rwg-seed-and-size",
+      "severity": "error",
+      "settings": ["GameWorld", "WorldGenSeed"],
+      "message": "A generated world (RWG) needs a seed; set one or choose a shipped map.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "GameWorld"
+              },
+              "RWG"
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "WorldGenSeed"
+              },
+              ""
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "eac-off-public",
+      "severity": "info",
+      "settings": ["EACEnabled", "ServerVisibility"],
+      "message": "The anti-cheat is off on a publicly listed server.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "EACEnabled"
+              },
+              false
+            ]
+          },
+          {
+            "==": [
+              {
+                "var": "ServerVisibility"
+              },
+              2
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "crossplay-rules",
+      "severity": "warning",
+      "settings": [
+        "ServerAllowCrossplay",
+        "EACEnabled",
+        "IgnoreEOSSanctions",
+        "ServerMaxPlayerCount",
+        "ServerVisibility",
+        "WorldGenSize"
+      ],
+      "message": "Console crossplay needs the anti-cheat on, sanctions honoured, at most 8 players, public visibility and a world of 8192 or less.",
+      "when": {
+        "and": [
+          {
+            "==": [
+              {
+                "var": "ServerAllowCrossplay"
+              },
+              true
+            ]
+          },
+          {
+            "or": [
+              {
+                "==": [
+                  {
+                    "var": "EACEnabled"
+                  },
+                  false
+                ]
+              },
+              {
+                "==": [
+                  {
+                    "var": "IgnoreEOSSanctions"
+                  },
+                  true
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "ServerMaxPlayerCount"
+                  },
+                  8
+                ]
+              },
+              {
+                "!=": [
+                  {
+                    "var": "ServerVisibility"
+                  },
+                  2
+                ]
+              },
+              {
+                ">": [
+                  {
+                    "var": "WorldGenSize"
+                  },
+                  8192
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "sandboxcode-missing",
+      "severity": "info",
+      "settings": ["SandboxCode"],
+      "message": "SandboxCode is empty, so the server runs the default ruleset.",
+      "when": {
+        "!": {
+          "var": "SandboxCode"
+        }
+      }
+    },
+    {
+      "id": "sandboxcode-shape",
+      "severity": "warning",
+      "settings": ["SandboxCode"],
+      "message": "SandboxCode does not look valid: it should be a version letter followed by groups of three letters. Copy a fresh code from the game's Sandbox screen.",
+      "when": {
+        "and": [
+          {
+            "!!": {
+              "var": "SandboxCode"
+            }
+          },
+          {
+            "!=": [
+              {
+                "%": [
+                  {
+                    "-": [
+                      {
+                        "strlen": {
+                          "var": "SandboxCode"
+                        }
+                      },
+                      1
+                    ]
+                  },
+                  3
+                ]
+              },
+              0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "presets": [
+    {
+      "id": "stock-v3",
+      "label": "Stock V3",
+      "description": "The shipped V3 values: an open survival server with the default sandbox ruleset.",
+      "values": {
+        "ServerVisibility": 2,
+        "ServerPassword": "",
+        "ServerMaxPlayerCount": 8,
+        "PlayerKillingMode": 3,
+        "EACEnabled": true,
+        "ServerAllowCrossplay": false,
+        "SandboxCode": "AAAJABJACJADJARFBNC"
+      }
+    },
+    {
+      "id": "friends-coop",
+      "label": "Friends co-op",
+      "description": "An unlisted, cooperative server: no player killing, room for a small group and the console on.",
+      "values": {
+        "ServerVisibility": 0,
+        "ServerMaxPlayerCount": 8,
+        "PlayerKillingMode": 0,
+        "EACEnabled": true,
+        "ServerAllowCrossplay": false,
+        "AllowSpawnNearFriend": 1,
+        "LandClaimCount": 5,
+        "LandClaimDecayMode": 2,
+        "LandClaimOfflineDurabilityModifier": 4,
+        "WebDashboardEnabled": false,
+        "PartySharedKillRange": 200
+      }
+    },
+    {
+      "id": "public-pvp",
+      "label": "Public PVP",
+      "description": "A listed PVP server: 16 slots, tighter land claims and hidden admin commands in client logs.",
+      "values": {
+        "ServerVisibility": 2,
+        "ServerPassword": "",
+        "ServerMaxPlayerCount": 16,
+        "PlayerKillingMode": 3,
+        "EACEnabled": true,
+        "IgnoreEOSSanctions": false,
+        "ServerAllowCrossplay": false,
+        "LandClaimCount": 3,
+        "LandClaimDeadZone": 30,
+        "LandClaimOnlineDurabilityModifier": 4,
+        "LandClaimOfflineDurabilityModifier": 4,
+        "LandClaimOfflineDelay": 10,
+        "BedrollDeadZoneSize": 15,
+        "MaxSpawnedZombies": 64,
+        "ServerMaxAllowedViewDistance": 10,
+        "HideCommandExecutionLog": 2,
+        "PersistentPlayerProfiles": true
+      }
+    }
+  ],
+  "probes": [
+    {
+      "kind": "telnet7dtd",
+      "portSetting": "TelnetPort",
+      "passwordSetting": "TelnetPassword",
+      "host": "127.0.0.1",
+      "allow": ["saveworld", "shutdown"],
+      "saveCommand": "saveworld",
+      "stopCommand": "shutdown"
+    },
+    {
+      "kind": "a2s",
+      "portSetting": "ServerPort",
+      "host": "127.0.0.1",
+      "players": true
+    }
+  ],
+  "hooksSupported": ["save", "stop"],
+  "sources": [
+    "https://github.com/RunOnFlux/7dtd-server-flux/blob/main/tests/fixtures/serverconfig.xml",
+    "https://github.com/RunOnFlux/7dtd-server-flux/blob/main/README.md",
+    "https://github.com/RunOnFlux/7dtd-server-flux/blob/main/scripts/flux-serverconfig.py",
+    "https://github.com/b4zyl/Survivor-Forge/blob/main/games/7-days-to-die/defaults/serverconfig.xml",
+    "https://github.com/r-pufky/ansible_seven_days_to_die/blob/main/templates/default/serverconfig.xml",
+    "https://github.com/r-pufky/ansible_seven_days_to_die/blob/main/templates/default/serveradmin.xml",
+    "https://github.com/benfiola/seven-days-to-die/blob/main/examples/default-serverconfig.xml",
+    "https://github.com/GameServerManagers/Game-Server-Configs/blob/main/sdtd/serverconfig.xml",
+    "https://github.com/Kitsune-Den/KitsuneCommand/blob/main/src/KitsuneCommand/Services/ServerConfigFieldDefinitions.cs",
+    "https://github.com/Kitsune-Den/Kitsune7Den/blob/main/src/Kitsune7Den/Services/Sandbox/SandboxCodec.cs",
+    "https://github.com/waynechen251/7-days-to-die-dedicated-server-plus/blob/main/src/web/lib/sandboxCode.js",
+    "https://github.com/ubidzz/Synix-Control-Panel/blob/main/SynixApp/Database/GameDefinitions/7-days-to-die/7-days-to-die.game.json",
+    "https://github.com/GameServerManagers/LinuxGSM/blob/master/lgsm/config-default/config-lgsm/sdtdserver/_default.cfg"
+  ]
+}

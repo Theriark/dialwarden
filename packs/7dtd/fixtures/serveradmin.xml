@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic serveradmin.xml written by Theriark for the Dialwarden demo
+     server and tests. The game owns this file; Dialwarden only shows and
+     raw-edits it, and list changes while the server runs go through the
+     console. -->
+<adminTools>
+	<users>
+		<!-- An admin entry: platform, user id, optional display name and
+		     permission level. These ids are made-up numbers. -->
+		<!-- <user platform="Steam" userID="76561198000000009"
+		     name="DemoAdmin" permission_level="0" /> -->
+	</users>
+	<whitelist>
+		<!-- Any active entry switches the server to whitelist-only joining
+		     for non-admins. -->
+		<!-- <whitelisted platform="Steam"
+		     userID="76561198000000010" /> -->
+	</whitelist>
+	<blacklist>
+		<!-- A ban entry: platform, user id, optional name, unban date and
+		     reason. -->
+		<!-- <blacklisted platform="Steam"
+		     userID="76561198000000011" unban_date=""
+		     reason="synthetic demo entry" /> -->
+	</blacklist>
+	<commands>
+		<!-- Per-command permission overrides; a lower level number means a
+		     more privileged requirement. -->
+		<command permission_level="1000" command="*"/>
+		<command permission_level="0" command="say"/>
+		<command permission_level="0" command="saveworld"/>
+		<command permission_level="1000" command="spawnentity"/>
+		<command permission_level="1000" command="give"/>
+	</commands>
+	<apitokens>
+		<!-- Named token secrets with permission levels, used to sign in to
+		     the web dashboard and its API. -->
+		<!-- <token name="demo-dashboard" token="made-up-token"
+		     permission_level="0" /> -->
+	</apitokens>
+	<webmodules />
+	<webusers />
+</adminTools>
