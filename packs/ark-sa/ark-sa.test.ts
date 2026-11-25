@@ -146,21 +146,21 @@ describe("ARK: Survival Ascended pack", () => {
         code: "launch-order",
         severity: "warning",
         line: 1,
-        column: 116,
-        message: expect.stringContaining(
-          "?Port comes after ?ServerAdminPassword",
-        ),
-        locator: settingOf(pack, "cli.Port").locator,
-      },
-      {
-        code: "launch-order",
-        severity: "warning",
-        line: 1,
         column: 99,
         message: expect.stringContaining(
           "?RCONEnabled comes after ?ServerAdminPassword",
         ),
         locator: settingOf(pack, "cli.RCONEnabled").locator,
+      },
+      {
+        code: "launch-order",
+        severity: "warning",
+        line: 1,
+        column: 116,
+        message: expect.stringContaining(
+          "?Port comes after ?ServerAdminPassword",
+        ),
+        locator: settingOf(pack, "cli.Port").locator,
       },
     ]);
   });
