@@ -515,10 +515,7 @@ export class OidcService {
   }
 
   /** The checked claims as an identity with a role, or the refusal. */
-  #identity(
-    stored: StoredOidc,
-    claims: Record<string, unknown>,
-  ): OidcIdentity {
+  #identity(stored: StoredOidc, claims: Record<string, unknown>): OidcIdentity {
     const issuer = textOf(claims["iss"]);
     const subject = textOf(claims["sub"]);
     if (issuer === null || subject === null || issuer !== stored.issuer) {
