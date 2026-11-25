@@ -158,9 +158,14 @@ export class TokenService {
   /**
    * The principal of a token value, or null for a value that is malformed,
    * unknown or revoked. Throws 402 (feature apiTokens) while the plan has no
-   * API tokens: the token is kept and works again after a switch back.
+   * API tokens: the token is kept and works again after a switch back. The
+   * plan is checked before the value is looked at, so on Free every request
+   * that carries a token answers 402, whatever the value is (T-08, D15).
    */
   resolve(value: string, teamRoles: boolean): Principal | null {
+    if (!this.#entitlement.can("apiTokens")) {
+      throw featureRequired("apiTokens");
+    }
     if (!TOKEN_VALUE.test(value)) return null;
     const found = this.#store.db
       .select({
@@ -176,9 +181,6 @@ export class TokenService {
       .where(eq(apiTokens.tokenHash, hashValue(value)))
       .get();
     if (found === undefined) return null;
-    if (!this.#entitlement.can("apiTokens")) {
-      throw featureRequired("apiTokens");
-    }
     this.#touch(found.id, found.lastUsedAt);
     const storedRole: Role = isRole(found.userRole) ? found.userRole : "viewer";
     const acting = effectiveRole(storedRole, teamRoles);

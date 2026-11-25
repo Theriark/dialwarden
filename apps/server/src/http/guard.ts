@@ -210,7 +210,14 @@ export function registerGuard(
     // and no database lookup.
     if (app.ctx.store.isOpen && request.routeOptions.config.web !== true) {
       readSession(app, request);
-      if (request.session === null) readBearer(app, request);
+      if (request.session === null) {
+        readBearer(app, request);
+      } else if (request.headers.authorization !== undefined) {
+        // A session cookie and an Authorization header together are two
+        // competing credentials; the request is refused before any check
+        // runs, so a token cannot ride on a victim session (T-10, D15).
+        throw new ApiError(400, "ambiguous_credentials");
+      }
     }
     const session = request.session;
     if (session !== null && !SAFE_METHODS.has(request.method)) {

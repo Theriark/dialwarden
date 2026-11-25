@@ -7,8 +7,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { ApiError } from "../http/errors.js";
-import { newPasswordSchema } from "../http/schemas.js";
+import { newPasswordSchema, signedInSchema } from "../http/schemas.js";
 import type { ZodTypeProvider } from "../http/zod.js";
+import { startSession } from "./auth.js";
 import { SERVER_ID } from "../plan/editable.js";
 import { GRANT_LEVELS, ROLES, type Principal } from "../team/roles.js";
 
@@ -193,6 +194,7 @@ export function userRoutes(app: FastifyInstance): void {
   );
 
   // A reset link made by the owner (D21): public, the value is the proof.
+  // The use signs the user in, like a login does (S-05).
   api.post(
     "/api/v1/auth/password-reset",
     {
@@ -203,12 +205,18 @@ export function userRoutes(app: FastifyInstance): void {
           token: z.string().min(1).max(200),
           password: newPasswordSchema,
         }),
-        response: { 200: z.object({ status: z.literal("ok") }) },
+        response: { 200: signedInSchema },
       },
     },
-    async (request) => {
-      await team().useReset(request.body, request.ip);
-      return { status: "ok" as const };
+    async (request, reply) => {
+      const user = await team().useReset(request.body, request.ip);
+      return startSession(app, request, reply, {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        totpEnabled: user.totpSecretEnc !== null,
+      });
     },
   );
 }
