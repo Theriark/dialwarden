@@ -546,7 +546,7 @@ function InviteDialog({
       grants: readonly Grant[];
     }) => createInvitation(input),
     onSuccess: (made) => {
-      void client.invalidateQueries({ queryKey: p8keys.invitations });
+      void client.invalidateQueries({ queryKey: invitationsQuery().queryKey });
       close();
       onRevealed({
         title: "Invitation link",
@@ -668,7 +668,7 @@ function InvitationsCard({
   const revoke = useMutation({
     mutationFn: (id: string) => revokeInvitation(id),
     onSuccess: () => {
-      void client.invalidateQueries({ queryKey: p8keys.invitations });
+      void client.invalidateQueries({ queryKey: invitationsQuery().queryKey });
       setRevoking(null);
       toast.push({ kind: "success", title: "Invitation revoked" });
     },
