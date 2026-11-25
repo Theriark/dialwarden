@@ -13,6 +13,16 @@
 // argument list (no shell). Neither it nor the setup token is ever written to
 // a file or a log; the tool prints only the variable names the task client
 // answers with.
+//
+// With --team (dev-work-plan P8-A step 10) the tool adds the admin, editor and
+// viewer test accounts through the invitation API instead, signed in as the
+// owner from the registered DIALWARDEN_DEV_OWNER_EMAIL and
+// DIALWARDEN_DEV_OWNER_PASSWORD (DIALWARDEN_STAGE_OWNER_* with --env stage,
+// which the operator runs after Gate 2; the crew never does). The editor gets
+// write grants and the viewer read grants on the first four demo servers.
+// Each password is generated here, registered with browser_account (labels
+// admin, editor and viewer) and used once to accept the invitation; the
+// invitation value and the session never leave this process either.
 import { execFile } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -26,7 +36,7 @@ export const DEFAULT_EMAIL = "owner@dialwarden.test";
 export const DEFAULT_REPO = "dialwarden";
 
 const USAGE =
-  "usage: node tools/seed/seed-accounts.mjs --base-url https://stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment)";
+  "usage: node tools/seed/seed-accounts.mjs --base-url https://stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment), or --team instead of the setup token to add admin, editor and viewer";
 const SETUP_TOKEN = /^[0-9a-f]{64}$/;
 const VARIABLE_NAME = /\b[A-Z][A-Z0-9_]*_(?:EMAIL|PASSWORD)\b/g;
 
@@ -81,6 +91,7 @@ export function parseSeedArgs(argv, env = process.env) {
       email: { type: "string" },
       repo: { type: "string" },
       "setup-token": { type: "string" },
+      team: { type: "boolean" },
     },
     strict: true,
     allowPositionals: false,
@@ -92,6 +103,10 @@ export function parseSeedArgs(argv, env = process.env) {
     throw new SeedError("--base-url is required");
   }
   const baseUrl = checkBaseUrl(values["base-url"], values.env);
+  const repo = values.repo ?? DEFAULT_REPO;
+  if (values.team === true) {
+    return { env: values.env, baseUrl, repo, team: true };
+  }
   const given = values["setup-token"] ?? env.DIALWARDEN_SETUP_TOKEN ?? "";
   const setupToken = given.trim();
   if (!SETUP_TOKEN.test(setupToken)) {
@@ -103,8 +118,9 @@ export function parseSeedArgs(argv, env = process.env) {
     env: values.env,
     baseUrl,
     email: values.email ?? DEFAULT_EMAIL,
-    repo: values.repo ?? DEFAULT_REPO,
+    repo,
     setupToken,
+    team: false,
   };
 }
 
@@ -218,6 +234,9 @@ export async function main(argv, deps = {}) {
     stderr.write(`seed: ${error.message}\n${USAGE}\n`);
     return 2;
   }
+  if (options.team) {
+    return seedTeam(options, { ...deps, stdout, stderr, fetch: fetchImpl });
+  }
   const { baseUrl, env, email, repo, setupToken } = options;
   try {
     if (!(await setupOpen(baseUrl, fetchImpl))) {
@@ -237,6 +256,174 @@ export async function main(argv, deps = {}) {
     await createOwner({ baseUrl, email, password, setupToken, fetchImpl });
     const listed = names.length > 0 ? names.join(" ") : "(no names returned)";
     stdout.write(`seed: owner created on ${baseUrl}; registered ${listed}\n`);
+    return 0;
+  } catch (error) {
+    stderr.write(`seed: ${String(error.message).slice(0, 300)}\n`);
+    return 1;
+  }
+}
+
+// The team accounts of P8 (--team) -------------------------------------------
+
+/** The made-up addresses on the reserved test domain, one per role. */
+export const TEAM_ACCOUNTS = [
+  { label: "admin", email: "admin@dialwarden.test", grant: null },
+  { label: "editor", email: "editor@dialwarden.test", grant: "write" },
+  { label: "viewer", email: "viewer@dialwarden.test", grant: "read" },
+];
+
+/** How many demo servers the editor and the viewer get grants on. */
+export const TEAM_GRANT_SERVERS = 4;
+
+/** The variables the owner was registered under (references/test-accounts). */
+export function ownerVariables(env) {
+  const prefix =
+    env === "dev" ? "DIALWARDEN_DEV_OWNER" : "DIALWARDEN_STAGE_OWNER";
+  return { email: `${prefix}_EMAIL`, password: `${prefix}_PASSWORD` };
+}
+
+/** The session cookie pair (name=value) of a sign-in answer. */
+export function sessionPair(response) {
+  const all =
+    typeof response.headers.getSetCookie === "function"
+      ? response.headers.getSetCookie()
+      : [response.headers.get("set-cookie") ?? ""];
+  for (const line of all) {
+    const pair = line.split(";")[0] ?? "";
+    const name = pair.split("=")[0] ?? "";
+    if (name === "dw_session" || name === "__Host-dw_session") return pair;
+  }
+  throw new SeedError("the sign-in answer carried no session cookie");
+}
+
+/** Signs the owner in; the cookie pair and the CSRF value of the session. */
+export async function ownerSession(baseUrl, credentials, fetchImpl) {
+  const response = await fetchImpl(`${baseUrl}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(credentials),
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+  const body = await response.json().catch(() => null);
+  if (response.status !== 200 || body?.status !== "ok") {
+    const code = typeof body?.error === "string" ? body.error : body?.status;
+    throw new SeedError(
+      `the owner sign-in answered ${response.status} (${code ?? "unknown"})`,
+    );
+  }
+  return { cookie: sessionPair(response), csrf: body.csrfToken };
+}
+
+/** The first demo servers by id: the grants of the editor and the viewer. */
+export function demoServers(items, count = TEAM_GRANT_SERVERS) {
+  return items
+    .map((item) => item.id)
+    .filter((id) => typeof id === "string" && id.startsWith("demo-"))
+    .sort()
+    .slice(0, count);
+}
+
+/**
+ * Adds admin, editor and viewer (--team). An account that exists already is
+ * left alone (its password cannot be known again). Exit codes as main.
+ */
+export async function seedTeam(options, deps) {
+  const { baseUrl, env, repo } = options;
+  const { stdout, stderr } = deps;
+  const fetchImpl = deps.fetch;
+  const run = deps.run ?? runTaskClient;
+  const variables = ownerVariables(env);
+  const source = new Map(Object.entries(deps.env ?? process.env));
+  const email = source.get(variables.email) ?? "";
+  const password = source.get(variables.password) ?? "";
+  if (email === "" || password === "") {
+    stderr.write(
+      `seed: ${variables.email} and ${variables.password} are required\n`,
+    );
+    return 2;
+  }
+  try {
+    const session = await ownerSession(baseUrl, { email, password }, fetchImpl);
+    const call = (method, path, payload) =>
+      requestJson(
+        fetchImpl,
+        `${baseUrl}${path}`,
+        {
+          method,
+          headers: {
+            "content-type": "application/json",
+            cookie: session.cookie,
+            "x-csrf-token": session.csrf,
+          },
+          ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
+        },
+        15_000,
+      );
+    const listed = await call("GET", "/api/v1/servers");
+    if (listed.status !== 200) {
+      throw new SeedError(`GET /api/v1/servers answered ${listed.status}`);
+    }
+    const servers = demoServers(listed.body?.items ?? []);
+    const done = [];
+    const names = [];
+    for (const account of TEAM_ACCOUNTS) {
+      const grants =
+        account.grant === null
+          ? []
+          : servers.map((server) => ({ server, level: account.grant }));
+      const invited = await call("POST", "/api/v1/invitations", {
+        email: account.email,
+        role: account.label,
+        grants,
+      });
+      if (invited.status === 409) {
+        stdout.write(`seed: ${account.label} exists already; left alone\n`);
+        continue;
+      }
+      if (invited.status !== 201) {
+        const code = invited.body?.error ?? "unknown";
+        throw new SeedError(
+          `inviting ${account.label} answered ${invited.status} (${code})`,
+        );
+      }
+      const secret = generatePassword();
+      const stored = await registerAccount({
+        env,
+        repo,
+        label: account.label,
+        email: account.email,
+        password: secret,
+        run,
+      });
+      names.push(...stored);
+      const accepted = await requestJson(
+        fetchImpl,
+        `${baseUrl}/api/v1/invitations/accept`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            token: invited.body?.token,
+            name: `${account.label} (seed)`,
+            password: secret,
+          }),
+        },
+        15_000,
+      );
+      if (accepted.status !== 201) {
+        const code = accepted.body?.error ?? "unknown";
+        throw new SeedError(
+          `accepting ${account.label} answered ${accepted.status} (${code})`,
+        );
+      }
+      done.push(account.label);
+    }
+    const made = done.length > 0 ? done.join(", ") : "nobody new";
+    const shown = names.length > 0 ? names.join(" ") : "(no names returned)";
+    stdout.write(
+      `seed: ${made} on ${baseUrl} (grants on ${servers.join(", ")}); registered ${shown}\n`,
+    );
     return 0;
   } catch (error) {
     stderr.write(`seed: ${String(error.message).slice(0, 300)}\n`);
