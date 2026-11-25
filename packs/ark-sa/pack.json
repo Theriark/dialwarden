@@ -617,7 +617,7 @@
       "restartRequired": true
     },
     {
-      "key": "PlayerBaseStatMultipliers[0]",
+      "key": "PlayerBaseStatMultipliers.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1647,7 +1647,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_Player[0]",
+      "key": "PerLevelStatsMultiplier_Player.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1664,7 +1664,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_Player[7]",
+      "key": "PerLevelStatsMultiplier_Player.7",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1681,7 +1681,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_Player[8]",
+      "key": "PerLevelStatsMultiplier_Player.8",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1698,7 +1698,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_DinoWild[0]",
+      "key": "PerLevelStatsMultiplier_DinoWild.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1715,7 +1715,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_DinoTamed[0]",
+      "key": "PerLevelStatsMultiplier_DinoTamed.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1732,7 +1732,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_DinoTamed[8]",
+      "key": "PerLevelStatsMultiplier_DinoTamed.8",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1749,7 +1749,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_DinoTamed_Add[0]",
+      "key": "PerLevelStatsMultiplier_DinoTamed_Add.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -1766,7 +1766,7 @@
       "restartRequired": true
     },
     {
-      "key": "PerLevelStatsMultiplier_DinoTamed_Affinity[0]",
+      "key": "PerLevelStatsMultiplier_DinoTamed_Affinity.0",
       "file": "game",
       "locator": {
         "kind": "ini",
@@ -2370,10 +2370,10 @@
         "HarvestAmountMultiplier": 1,
         "serverPVE": false,
         "DinoHarvestingDamageMultiplier": 3.2,
-        "PerLevelStatsMultiplier_DinoTamed[0]": 0.2,
-        "PerLevelStatsMultiplier_DinoTamed[8]": 0.17,
-        "PerLevelStatsMultiplier_DinoTamed_Add[0]": 0.14,
-        "PerLevelStatsMultiplier_DinoTamed_Affinity[0]": 0.44,
+        "PerLevelStatsMultiplier_DinoTamed.0": 0.2,
+        "PerLevelStatsMultiplier_DinoTamed.8": 0.17,
+        "PerLevelStatsMultiplier_DinoTamed_Add.0": 0.14,
+        "PerLevelStatsMultiplier_DinoTamed_Affinity.0": 0.44,
         "OverrideOfficialDifficulty": 0,
         "DifficultyOffset": 1,
         "DayCycleSpeedScale": 1
