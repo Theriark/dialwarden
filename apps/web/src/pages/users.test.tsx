@@ -5,7 +5,7 @@
 // read-only state of a viewer.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Entitlement, UserView } from "../api/schema";
 import { entitlement, OWNER, paidFromUi } from "../test/fixtures";
 import {
@@ -280,6 +280,10 @@ describe("UsersPage", () => {
       createObjectURL: () => "blob:test",
       revokeObjectURL: () => undefined,
     });
+    // The download anchor's click would navigate, which jsdom refuses.
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
     const calls: string[] = [];
     stubWorld(paidFromUi(), PAID_USERS, OWNER, ([method, path]) => {
       if (method !== "GET" || path === "/api/v1/users/u3/export") {
@@ -323,6 +327,9 @@ describe("UsersPage", () => {
     await screen.findByText("Export started");
     expect(calls.at(-1)).toBe("GET /api/v1/users/u3/export");
     expect(calls.length).toBe(3);
+    // The export handed one file to the browser's download.
+    expect(anchorClick).toHaveBeenCalledTimes(1);
+    anchorClick.mockRestore();
   });
 
   it("makes a reset link for the chosen user and none for an SSO user", async () => {
