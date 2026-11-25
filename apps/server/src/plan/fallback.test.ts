@@ -60,9 +60,7 @@ describe("the Free fallback (F-01 to F-06)", () => {
     // The session shows the effective role; the stored role is unchanged.
     const session = await call(app, editor, "GET", "/api/v1/auth/session");
     expect(session.statusCode).toBe(200);
-    expect(session.json<{ user: { role: string } }>().user.role).toBe(
-      "viewer",
-    );
+    expect(session.json<{ user: { role: string } }>().user.role).toBe("viewer");
     const stored = app.ctx.store.sqlite
       .prepare('SELECT role AS value FROM "users" WHERE id = ?')
       .get(editor.userId) as { value: string };

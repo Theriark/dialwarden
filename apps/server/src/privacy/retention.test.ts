@@ -98,12 +98,7 @@ describe("privacy retention (P-07 to P-11)", () => {
     await toFree(app, owner);
     const codes = [
       await call(app, owner, "DELETE", `/api/v1/users/${editor.userId}`),
-      await call(
-        app,
-        owner,
-        "POST",
-        `/api/v1/users/${other.userId}/anonymise`,
-      ),
+      await call(app, owner, "POST", `/api/v1/users/${other.userId}/anonymise`),
       await call(app, owner, "GET", `/api/v1/users/${other.userId}/export`),
       await call(app, owner, "PUT", "/api/v1/settings/snapshots", {
         snapshotRetention: { mode: "days", days: 30 },
@@ -113,11 +108,7 @@ describe("privacy retention (P-07 to P-11)", () => {
       }),
     ];
     expect(codes.map((response) => response.statusCode)).toEqual([
-      204,
-      200,
-      200,
-      200,
-      200,
+      204, 200, 200, 200, 200,
     ]);
   });
 
@@ -173,12 +164,10 @@ describe("privacy retention (P-07 to P-11)", () => {
     });
     expect(set.statusCode).toBe(200);
     clock += 31 * DAY_MS;
-    const blobs = [...new Set(rows.map((row) => row.sha256))].map(
-      (sha256) => ({
-        sha256,
-        path: t.app.ctx.snapshots.pathOf(sha256),
-      }),
-    );
+    const blobs = [...new Set(rows.map((row) => row.sha256))].map((sha256) => ({
+      sha256,
+      path: t.app.ctx.snapshots.pathOf(sha256),
+    }));
     for (const blob of blobs) {
       expect(await exists(blob.path)).toBe(true);
     }
