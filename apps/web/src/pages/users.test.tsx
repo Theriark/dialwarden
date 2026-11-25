@@ -117,6 +117,18 @@ function stubWorld(
   });
 }
 
+/** Opens the row menu of a user and picks one action. */
+async function chooseAction(
+  userEv: ReturnType<typeof userEvent.setup>,
+  name: string,
+  action: string,
+): Promise<void> {
+  await userEv.click(
+    screen.getByRole("button", { name: `Actions for ${name}` }),
+  );
+  await userEv.click(await screen.findByRole("menuitem", { name: action }));
+}
+
 describe("UsersPage", () => {
   it("knows who may manage whom", () => {
     expect(assignableFor("owner")).toEqual(["admin", "editor", "viewer"]);
@@ -128,6 +140,9 @@ describe("UsersPage", () => {
     const admin = { ...owner, id: "u2", role: "admin" };
     expect(manageable(admin, FREE_USERS[1] as UserView)).toBe(false);
     expect(manageable(admin, FREE_USERS[2] as UserView)).toBe(true);
+    // An admin never manages another admin (the role rule, not the self one).
+    expect(manageable(admin, user("u5", "admin"))).toBe(false);
+    expect(manageable(owner, user("u5", "admin"))).toBe(true);
     expect(inFallback(FREE_USERS[1] as UserView)).toBe(true);
     expect(inFallback(PAID_USERS[1] as UserView)).toBe(false);
   });
@@ -257,6 +272,231 @@ describe("UsersPage", () => {
       "disabled",
       true,
     );
+  });
+
+  it("deletes, anonymises and exports exactly the chosen user", async () => {
+    stubViewport(1280);
+    Object.assign(URL, {
+      createObjectURL: () => "blob:test",
+      revokeObjectURL: () => undefined,
+    });
+    const calls: string[] = [];
+    stubWorld(paidFromUi(), PAID_USERS, OWNER, ([method, path]) => {
+      if (method !== "GET" || path === "/api/v1/users/u3/export") {
+        calls.push(`${method} ${path}`);
+      }
+      if (method === "DELETE" && path === "/api/v1/users/u3") {
+        return { status: 204 };
+      }
+      if (method === "POST" && path === "/api/v1/users/u3/anonymise") {
+        return {
+          status: 200,
+          body: user("u3", "editor", "editor", { name: "Erased user u3" }),
+        };
+      }
+      if (method === "GET" && path === "/api/v1/users/u3/export") {
+        return { status: 200, body: { user: { id: "u3" } } };
+      }
+      return undefined;
+    });
+    startRouter("/users");
+    await screen.findByRole("table", { name: "Users" });
+    const userEv = userEvent.setup();
+
+    await chooseAction(userEv, "u3 person", "Delete");
+    const del = await screen.findByRole("alertdialog", {
+      name: "Delete this user?",
+    });
+    await userEv.click(within(del).getByRole("button", { name: "Delete" }));
+    await screen.findByText("User deleted");
+    expect(calls).toEqual(["DELETE /api/v1/users/u3"]);
+
+    await chooseAction(userEv, "u3 person", "Anonymise");
+    const anon = await screen.findByRole("alertdialog", {
+      name: "Anonymise this user?",
+    });
+    await userEv.click(within(anon).getByRole("button", { name: "Anonymise" }));
+    await screen.findByText("User anonymised");
+    expect(calls.at(-1)).toBe("POST /api/v1/users/u3/anonymise");
+
+    await chooseAction(userEv, "u3 person", "Export data");
+    await screen.findByText("Export started");
+    expect(calls.at(-1)).toBe("GET /api/v1/users/u3/export");
+    expect(calls.length).toBe(3);
+  });
+
+  it("makes a reset link for the chosen user and none for an SSO user", async () => {
+    stubViewport(1280);
+    const calls: string[] = [];
+    const users = [
+      ...PAID_USERS,
+      user("u4", "viewer", "viewer", { sso: true, localPassword: false }),
+    ];
+    stubWorld(paidFromUi(), users, OWNER, ([method, path]) => {
+      if (method === "POST" && path.endsWith("/password-reset")) {
+        calls.push(`${method} ${path}`);
+        return {
+          status: 201,
+          body: {
+            token: "reset-value",
+            link: "https://dw.example.test/reset#reset-value",
+            expiresAt: "2026-11-26T10:00:00Z",
+          },
+        };
+      }
+      return undefined;
+    });
+    const { client } = startRouter("/users");
+    await screen.findByRole("table", { name: "Users" });
+    const userEv = userEvent.setup();
+
+    await userEv.click(
+      screen.getByRole("button", { name: "Actions for u4 person" }),
+    );
+    const ssoItem = await screen.findByRole("menuitem", {
+      name: "Password reset link",
+    });
+    expect(ssoItem.getAttribute("aria-disabled")).toBe("true");
+    await userEv.keyboard("{Escape}");
+
+    await chooseAction(userEv, "u3 person", "Password reset link");
+    const confirm = await screen.findByRole("alertdialog", {
+      name: "Make a password reset link?",
+    });
+    await userEv.click(
+      within(confirm).getByRole("button", { name: "Make the link" }),
+    );
+    const reveal = await screen.findByRole("dialog", {
+      name: "Password reset link",
+    });
+    expect(within(reveal).getByLabelText("Reset link").textContent).toBe(
+      "https://dw.example.test/reset#reset-value",
+    );
+    expect(calls).toEqual(["POST /api/v1/users/u3/password-reset"]);
+    // Only the dialog holds the link: no mutation in the cache keeps it.
+    await waitFor(() => {
+      const held = client
+        .getMutationCache()
+        .getAll()
+        .map((mutation) => mutation.state.data);
+      expect(JSON.stringify(held)).not.toContain("reset-value");
+    });
+  });
+
+  it("changes a role on Paid, with the button off until the role differs", async () => {
+    stubViewport(1280);
+    const bodies: unknown[] = [];
+    stubWorld(paidFromUi(), PAID_USERS, OWNER, ([method, path], init) => {
+      if (method === "PUT" && path === "/api/v1/users/u3/role") {
+        bodies.push(bodyOf(init));
+        return { status: 200, body: user("u3", "viewer") };
+      }
+      return undefined;
+    });
+    startRouter("/users");
+    await screen.findByRole("table", { name: "Users" });
+    const userEv = userEvent.setup();
+    await chooseAction(userEv, "u3 person", "Change role");
+    const dialog = await screen.findByRole("dialog", {
+      name: "Change the role",
+    });
+    const submit = within(dialog).getByRole("button", { name: "Change role" });
+    expect(submit).toHaveProperty("disabled", true);
+    await userEv.selectOptions(within(dialog).getByLabelText("Role"), "viewer");
+    expect(submit).toHaveProperty("disabled", false);
+    await userEv.click(submit);
+    await screen.findByText("Role changed");
+    expect(bodies).toEqual([{ role: "viewer" }]);
+  });
+
+  it("sends no grants for an admin and read grants after a switch to viewer", async () => {
+    stubViewport(1280);
+    const bodies: unknown[] = [];
+    stubWorld(paidFromUi(), PAID_USERS, OWNER, ([method, path], init) => {
+      if (method === "POST" && path === "/api/v1/invitations") {
+        bodies.push(bodyOf(init));
+        return { status: 422, body: { error: "validation" } };
+      }
+      return undefined;
+    });
+    startRouter("/users");
+    await screen.findByRole("table", { name: "Users" });
+    const userEv = userEvent.setup();
+    await userEv.click(screen.getByRole("button", { name: "Invite" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: "Invite a teammate",
+    });
+    await userEv.type(
+      within(dialog).getByLabelText("E-mail address"),
+      "new@example.test",
+    );
+    const role = within(dialog).getByLabelText("Role");
+    const create = within(dialog).getByRole("button", {
+      name: "Create the link",
+    });
+    // Editor with write on Home, then viewer: the grant drops to read.
+    await userEv.selectOptions(role, "editor");
+    const home = await within(dialog).findByRole("radiogroup", {
+      name: "Home",
+    });
+    fireEvent.click(within(home).getByRole("radio", { name: "Write" }));
+    await userEv.selectOptions(role, "viewer");
+    await userEv.click(create);
+    // Admin: every server, so no grants are sent.
+    await userEv.selectOptions(role, "admin");
+    await userEv.click(create);
+    await waitFor(() => {
+      expect(bodies.length).toBe(2);
+    });
+    expect(bodies).toEqual([
+      {
+        email: "new@example.test",
+        role: "viewer",
+        grants: [{ server: "home", level: "read" }],
+      },
+      { email: "new@example.test", role: "admin", grants: [] },
+    ]);
+  });
+
+  it("names the inviter and revokes the chosen invitation", async () => {
+    stubViewport(1280);
+    const calls: string[] = [];
+    stubWorld(paidFromUi(), PAID_USERS, OWNER, ([method, path]) => {
+      if (method === "GET" && path === "/api/v1/invitations") {
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                id: "i7",
+                email: "guest@example.test",
+                role: "viewer",
+                grants: [],
+                invitedBy: "u1",
+                createdAt: "2026-11-25T10:00:00Z",
+                expiresAt: "2026-11-28T10:00:00Z",
+              },
+            ],
+          },
+        };
+      }
+      if (method === "DELETE") {
+        calls.push(`${method} ${path}`);
+        return { status: 204 };
+      }
+      return undefined;
+    });
+    startRouter("/users");
+    await screen.findByText("guest@example.test");
+    expect(screen.getByText("by u1 person")).toBeDefined();
+    const userEv = userEvent.setup();
+    await userEv.click(screen.getByRole("button", { name: "Revoke" }));
+    const confirm = await screen.findByRole("alertdialog", {
+      name: "Revoke this invitation?",
+    });
+    await userEv.click(within(confirm).getByRole("button", { name: "Revoke" }));
+    await screen.findByText("Invitation revoked");
+    expect(calls).toEqual(["DELETE /api/v1/invitations/i7"]);
   });
 
   it("shows a viewer the read-only state", async () => {

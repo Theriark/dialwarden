@@ -143,7 +143,9 @@ function SignInFacts({ user }: { user: UserView }) {
 }
 
 function AccessWords({ user }: { user: UserView }) {
-  if (user.role === "owner" || user.role === "admin") {
+  // The acting role decides the reach: a stored admin acting as a viewer on
+  // the Free fallback sees only its grants, as the server answers.
+  if (user.effectiveRole === "owner" || user.effectiveRole === "admin") {
     return <span className="text-fg">Every server</span>;
   }
   return <span className="text-fg">{describeGrants(user.grants)}</span>;
@@ -545,6 +547,9 @@ function InviteDialog({
       role: AssignableRole;
       grants: readonly Grant[];
     }) => createInvitation(input),
+    // The link lives only in the reveal dialog; close() resets the observer
+    // and gcTime 0 drops the finished mutation from the cache at once.
+    gcTime: 0,
     onSuccess: (made) => {
       void client.invalidateQueries({ queryKey: invitationsQuery().queryKey });
       close();
@@ -663,6 +668,9 @@ function InvitationsCard({
   const client = useQueryClient();
   const toast = useToast();
   const invitations = useQuery(invitationsQuery());
+  const users = useQuery(usersQuery());
+  const nameOf = (id: string) =>
+    users.data?.items.find((item) => item.id === id)?.name ?? "a former user";
   const [inviteOpen, setInviteOpen] = useState(false);
   const [revoking, setRevoking] = useState<InvitationView | null>(null);
   const revoke = useMutation({
@@ -740,7 +748,7 @@ function InvitationsCard({
                     {formatDateTime(item.expiresAt)}
                   </time>
                 </span>
-                <span>by {item.invitedBy}</span>
+                <span>by {nameOf(item.invitedBy)}</span>
               </div>
             </div>
             <Button
@@ -853,6 +861,9 @@ function UsersAdmin({ actor }: { actor: User }) {
 
   const reset = useMutation({
     mutationFn: (id: string) => createResetLink(id),
+    // The link lives only in the reveal dialog: the finished mutation is
+    // dropped from the cache at once instead of after the default gcTime.
+    gcTime: 0,
     onSuccess: (link, id) => {
       const target = users.data?.items.find((item) => item.id === id);
       setResetUser(null);
@@ -863,6 +874,7 @@ function UsersAdmin({ actor }: { actor: User }) {
         value: link.link,
         note: "Every session of the account ends when the link is used.",
       });
+      reset.reset();
     },
     onError: failed("The reset link was not made"),
   });
