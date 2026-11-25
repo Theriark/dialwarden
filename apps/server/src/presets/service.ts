@@ -10,12 +10,22 @@
 // unlimited. The values come from the settings read, which masks secrets,
 // and the write path drops a masked secret, so a preset never carries a real
 // secret. The built-in pack presets of P3 stay in the pack data, not here.
+//
+// P9-A adds the bulk apply of the Paid plan (presets.bulk): drafts for many
+// servers first, each with its own diff, then one apply per server with a
+// report that keeps going past a failed server.
 import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import type { JsonValue, Pack, SettingEdit } from "@dialwarden/packs-schema";
 import { eq } from "drizzle-orm";
 import type { ChangeSetService } from "../changes/service.js";
-import type { ChangeSetView } from "../changes/types.js";
+import type {
+  ChangeSetStatus,
+  ChangeSetView,
+  RunHooks,
+} from "../changes/types.js";
+import { ConnectorError } from "../connectors/types.js";
+import { ControlError } from "../control/types.js";
 import { presets } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { ApiError, limitReached } from "../http/errors.js";
@@ -163,4 +173,139 @@ export class PresetService {
     }));
     return this.#changes.create(server, { edits }, author, "preset");
   }
+
+  /**
+   * POST /api/v1/presets/ID/bulk-drafts (Paid, presets.bulk): the per-server
+   * diff first. Each server gets its own draft change set of cause preset,
+   * made on its own files, exactly as a single apply makes it; a server the
+   * caller may not write, or that does not exist, answers server_not_found
+   * in its item, so the answer never tells which servers exist.
+   */
+  async bulkDrafts(
+    id: string,
+    serverIds: readonly string[],
+    author: string,
+    canWrite: (serverId: string) => boolean,
+  ): Promise<BulkDraft[]> {
+    this.#require(id);
+    const items: BulkDraft[] = [];
+    for (const server of new Set(serverIds)) {
+      if (!this.#servers.exists(server) || !canWrite(server)) {
+        items.push({ server, changeSet: null, error: notFound() });
+        continue;
+      }
+      try {
+        const changeSet = await this.apply(id, server, author);
+        items.push({ server, changeSet, error: null });
+      } catch (error) {
+        items.push({ server, changeSet: null, error: failureOf(error) });
+      }
+    }
+    return items;
+  }
+
+  /**
+   * POST /api/v1/presets/bulk-apply (Paid, presets.bulk): applies the drafts
+   * the caller reviewed, one server after the other, each with the hook mode
+   * of contract C5, and reports every one: a failure on one server never
+   * stops the others. Only draft change sets of cause preset on servers the
+   * caller may write are applied; any other id answers change_set_not_found
+   * in its item.
+   */
+  async bulkApply(
+    changeSetIds: readonly string[],
+    author: string,
+    runHooks: RunHooks,
+    canWrite: (serverId: string) => boolean,
+  ): Promise<BulkReport> {
+    const items: BulkApplied[] = [];
+    for (const id of new Set(changeSetIds)) {
+      let found: ChangeSetView;
+      try {
+        found = this.#changes.get(id);
+      } catch {
+        items.push(refused(id, null, { code: "change_set_not_found" }));
+        continue;
+      }
+      if (!canWrite(found.serverId)) {
+        items.push(refused(id, null, { code: "change_set_not_found" }));
+        continue;
+      }
+      if (found.cause !== "preset" || found.status !== "draft") {
+        const error = { code: "not_a_preset_draft", status: found.status };
+        items.push(refused(id, found.serverId, error));
+        continue;
+      }
+      try {
+        const done = await this.#changes.apply(id, author, runHooks);
+        items.push({
+          changeSetId: id,
+          server: done.serverId,
+          status: done.status,
+          error: done.error === null ? null : { ...done.error },
+        });
+      } catch (error) {
+        items.push(refused(id, found.serverId, failureOf(error)));
+      }
+    }
+    const count = (status: string) =>
+      items.filter((item) => item.status === status).length;
+    return {
+      items,
+      applied: count("applied"),
+      pending: count("pending"),
+      failed: items.length - count("applied") - count("pending"),
+    };
+  }
+}
+
+/** Why one server of a bulk action did not get its change. */
+export interface BulkFailure {
+  readonly code: string;
+  readonly [detail: string]: unknown;
+}
+
+export interface BulkDraft {
+  readonly server: string;
+  readonly changeSet: ChangeSetView | null;
+  readonly error: BulkFailure | null;
+}
+
+export interface BulkApplied {
+  readonly changeSetId: string;
+  readonly server: string | null;
+  /** The change set's status after the apply, or refused. */
+  readonly status: ChangeSetStatus | "refused";
+  readonly error: BulkFailure | null;
+}
+
+/** The partial-failure report of a bulk apply. */
+export interface BulkReport {
+  readonly items: BulkApplied[];
+  readonly applied: number;
+  readonly pending: number;
+  /** Everything neither applied nor pending: refused, failed or conflict. */
+  readonly failed: number;
+}
+
+const notFound = (): BulkFailure => ({ code: "server_not_found" });
+
+function refused(
+  changeSetId: string,
+  server: string | null,
+  error: BulkFailure,
+): BulkApplied {
+  return { changeSetId, server, status: "refused", error };
+}
+
+/**
+ * The answer of an API, connector or control failure as an item's error:
+ * its code and the details the single call would have answered.
+ */
+function failureOf(error: unknown): BulkFailure {
+  if (error instanceof ApiError) return { code: error.code, ...error.details };
+  if (error instanceof ConnectorError || error instanceof ControlError) {
+    return { code: error.code, message: error.message };
+  }
+  throw error;
 }
