@@ -214,8 +214,8 @@ ALTER TABLE change_sets ADD COLUMN run_hooks TEXT;
 // token values are stored only as their SHA-256. The audit chain hashes ids,
 // never names or e-mail addresses: names live in audit_actors and the client
 // address sits outside the hash, so erasure and the IP setting never break
-// the chain. The other tables keep naming the acting user by e-mail address
-// (contracts C5 and C6); erasing a user rewrites those values.
+// the chain. The other tables still named the acting user by e-mail address
+// here; migration 0008 moves them to user ids (D7).
 const team = `
 ALTER TABLE users ADD COLUMN oidc_issuer TEXT;
 ALTER TABLE users ADD COLUMN oidc_subject TEXT;
@@ -289,6 +289,48 @@ CREATE INDEX audit_events_actor ON audit_events (actor_id, id);
 CREATE INDEX audit_events_server ON audit_events (server_id, id);
 `;
 
+// The actor columns hold user ids, not e-mail addresses (R&D decision Q4,
+// D7). Old rows that name the acting user by e-mail are rewritten once, here:
+// a value that matches a user becomes that user's id, every other e-mail
+// becomes the one "unknown" actor, and values that are no e-mail ("system",
+// the outside-edit author) stay as they are. Nothing is deleted, so the
+// audit chain and the history keep verifying.
+const actorIds = `
+INSERT INTO audit_actors (id, label, erased)
+  VALUES ('unknown', 'Unknown user', 0)
+  ON CONFLICT (id) DO UPDATE SET label = 'Unknown user';
+
+UPDATE activity_events
+  SET actor = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = activity_events.actor),
+    'unknown')
+  WHERE actor LIKE '%@%';
+
+UPDATE change_sets
+  SET author = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = change_sets.author),
+    'unknown')
+  WHERE author LIKE '%@%';
+
+UPDATE licence
+  SET updated_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = licence.updated_by),
+    'unknown')
+  WHERE updated_by LIKE '%@%';
+
+UPDATE known_hosts
+  SET confirmed_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = known_hosts.confirmed_by),
+    'unknown')
+  WHERE confirmed_by LIKE '%@%';
+
+UPDATE server_hooks
+  SET updated_by = coalesce(
+    (SELECT u.id FROM users u WHERE u.email = server_hooks.updated_by),
+    'unknown')
+  WHERE updated_by LIKE '%@%';
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
@@ -297,6 +339,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: "0005_presets", sql: presets },
   { id: "0006_server_hooks", sql: serverHooks },
   { id: "0007_team", sql: team },
+  { id: "0008_actor_ids", sql: actorIds },
 ];
 
 /** The id of the newest migration this build knows. */
