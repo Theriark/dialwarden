@@ -1,12 +1,21 @@
-// tools/seed (dev-work-plan P1-A step 9). The owner is created against a real
-// app (in-process, through inject); the task client is a stand-in that
-// records its arguments.
+// tools/seed (dev-work-plan P1-A step 9, P8-A step 10). The owner, and with
+// --team the admin, editor and viewer, are created against a real app
+// (in-process, through inject); the task client is a stand-in that records
+// its arguments.
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  headersOf,
   setupOwner,
   setupTokenOf,
+  tempDir,
   testApp,
 } from "../../../apps/server/test/helpers.ts";
+import {
+  addServer,
+  apiOf,
+  palworldFolder,
+} from "../../../apps/server/test/servers.ts";
+import { paidApp } from "../../../apps/server/test/team.ts";
 import {
   checkBaseUrl,
   generatePassword,
@@ -40,10 +49,11 @@ function fetchFor(app, requests = []) {
       payload: init.body,
     });
     const type = res.headers["content-type"] ?? "application/json";
-    return new Response(res.body, {
-      status: res.statusCode,
-      headers: { "content-type": String(type) },
-    });
+    const headers = new Headers({ "content-type": String(type) });
+    for (const cookie of [res.headers["set-cookie"] ?? []].flat()) {
+      headers.append("set-cookie", String(cookie));
+    }
+    return new Response(res.body, { status: res.statusCode, headers });
   };
 }
 
@@ -172,6 +182,75 @@ describe("seed-accounts", () => {
       seen.add(password);
     }
     expect(seen.size).toBe(200);
+  });
+
+  it("adds admin, editor and viewer as the owner and prints no password", async () => {
+    current = await paidApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const api = apiOf(app, owner);
+    const base = await tempDir("dialwarden-seed-");
+    const servers = [];
+    for (const name of ["demo-e", "demo-d", "demo-c", "demo-b", "demo-a"]) {
+      servers.push(
+        await addServer(api, name, await palworldFolder(base, name)),
+      );
+    }
+    const { calls, deps, text } = harness(app);
+    deps.env = {
+      DIALWARDEN_DEV_OWNER_EMAIL: owner.email,
+      DIALWARDEN_DEV_OWNER_PASSWORD: owner.password,
+    };
+    const args = ["--base-url", DEV_URL, "--env", "dev", "--team"];
+    const code = await main(args, deps);
+    expect(code, text()).toBe(0);
+    const labels = calls.map((sent) => valueOf(sent, "--label"));
+    expect(labels).toEqual(["admin", "editor", "viewer"]);
+    expect(text()).not.toContain(owner.password);
+    for (const sent of calls) {
+      const password = valueOf(sent, "--password");
+      expect(password).toHaveLength(24);
+      expect(text()).not.toContain(password);
+      expect(valueOf(sent, "--email")).toMatch(/@dialwarden\.test$/);
+      const login = await app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        payload: { email: valueOf(sent, "--email"), password },
+      });
+      expect(login.statusCode).toBe(200);
+      expect(login.json().user.role).toBe(valueOf(sent, "--label"));
+    }
+    const users = await app.inject({
+      method: "GET",
+      url: "/api/v1/users",
+      headers: headersOf(owner),
+    });
+    const grantsOf = (role) =>
+      users.json().items.find((user) => user.role === role).grants;
+    const four = [...servers].sort().slice(0, 4);
+    expect(grantsOf("editor")).toEqual(
+      four.map((server) => ({ server, level: "write" })),
+    );
+    expect(grantsOf("viewer")).toEqual(
+      four.map((server) => ({ server, level: "read" })),
+    );
+    expect(grantsOf("admin")).toEqual([]);
+
+    // A second run leaves the accounts alone and registers nothing.
+    const again = harness(app);
+    again.deps.env = deps.env;
+    expect(await main(args, again.deps)).toBe(0);
+    expect(again.calls).toHaveLength(0);
+    expect(again.text()).toContain("exists already");
+  });
+
+  it("needs the registered owner variables for --team", async () => {
+    const { calls, deps, requests, text } = harness(null);
+    const args = ["--base-url", DEV_URL, "--env", "dev", "--team"];
+    expect(await main(args, deps)).toBe(2);
+    expect(text()).toContain("DIALWARDEN_DEV_OWNER_EMAIL");
+    expect(requests).toHaveLength(0);
+    expect(calls).toHaveLength(0);
   });
 
   it("keeps only variable names from the task client answer", () => {
