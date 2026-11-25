@@ -1959,7 +1959,6 @@
         "flag": "-WinLiveMaxPlayers"
       },
       "type": "int",
-      "default": 70,
       "min": 1,
       "max": 255,
       "unit": "players",
