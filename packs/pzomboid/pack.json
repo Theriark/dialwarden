@@ -1031,7 +1031,7 @@
       "unit": "tiles",
       "group": "Chat",
       "liveReloadable": true,
-      "description": "Shortest tile distance over which the built-in voice chat can be heard."
+      "description": "Nearest range, in tiles, at which voice chat starts to fade with distance."
     },
     {
       "key": "VoiceMaxDistance",
@@ -1048,7 +1048,7 @@
       "unit": "tiles",
       "group": "Chat",
       "liveReloadable": true,
-      "description": "Longest tile distance over which the built-in voice chat can be heard."
+      "description": "Range in tiles beyond which other players' voice chat goes silent."
     },
     {
       "key": "SaveWorldEveryMinutes",
@@ -1793,7 +1793,7 @@
       "default": "",
       "max": 512,
       "group": "Loot",
-      "description": "Comma list of item types that never spawn as ordinary loot."
+      "description": "Item types, separated by commas, that the loot tables leave out of ordinary containers."
     },
     {
       "key": "SandboxVars.HoursForLootRespawn",
@@ -1808,7 +1808,7 @@
       "max": 8760,
       "unit": "hours",
       "group": "Loot",
-      "description": "Game hours after which looted town containers refill; zero turns refills off."
+      "description": "Game hours after which emptied town containers fill up again; 0 turns refilling off."
     },
     {
       "key": "SandboxVars.MaxItemsForLootRespawn",
@@ -3216,7 +3216,7 @@
       "id": "rcon-password-empty",
       "severity": "error",
       "settings": ["RCONPassword"],
-      "message": "The remote console has no password, so it stays off and the save, announce and reload hooks cannot reach the server.",
+      "message": "The remote console has no password, so it stays off and the save and stop hooks cannot reach the server.",
       "when": {
         "==": [
           {
