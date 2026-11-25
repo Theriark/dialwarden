@@ -6,7 +6,8 @@
 // what the settings name; the audit service moves its own chain start forward
 // with a checkpoint, and this service never removes a snapshot a pending
 // change set or a draft restore still refers to, nor a blob another kept
-// snapshot shares. The app backup folder is never touched.
+// snapshot shares or an open change set merges against. The app backup
+// folder is never touched.
 import { unlink } from "node:fs/promises";
 import { Cron } from "croner";
 import { eq, inArray, isNull, lt, sql } from "drizzle-orm";
@@ -19,6 +20,12 @@ import type { SnapshotStore } from "../snapshots/store.js";
 
 const DAY_MS = 86_400_000;
 const SNAPSHOT_KEY = "snapshots.retention";
+
+/** Change sets that can still be applied, or wait for a stopped server. */
+const OPEN_STATUSES = ["draft", "failed", "pending"];
+
+/** The base column of a change set: the SHA-256 of each file it was made on. */
+type BaseFiles = Record<string, { sha256: string | null }>;
 
 export const RETENTION_MODES = ["all", "days", "versions"] as const;
 export type RetentionMode = (typeof RETENTION_MODES)[number];
@@ -221,7 +228,31 @@ export class RetentionService {
     return { rows: removed.changes, blobs };
   }
 
-  /** Blob files (and meter rows) no snapshot names any more. */
+  /**
+   * The blobs an open change set merges against when the file changed
+   * outside the app since it was made (its base). A draft keeps its base
+   * only as a blob, with no snapshot row, so these are kept explicitly.
+   */
+  #baseBlobs(): Set<string> {
+    const rows = this.#store.db
+      .select({ base: changeSets.base })
+      .from(changeSets)
+      .where(inArray(changeSets.status, OPEN_STATUSES))
+      .all();
+    const kept = new Set<string>();
+    for (const row of rows) {
+      const files = JSON.parse(row.base) as BaseFiles;
+      for (const file of Object.values(files)) {
+        if (file.sha256 !== null) kept.add(file.sha256);
+      }
+    }
+    return kept;
+  }
+
+  /**
+   * Blob files (and meter rows) no snapshot names any more and no open
+   * change set merges against.
+   */
   async #forgetBlobs(): Promise<number> {
     const db = this.#store.db;
     const orphans = db
@@ -230,8 +261,12 @@ export class RetentionService {
       .leftJoin(snapshots, eq(snapshots.sha256, snapshotBlobs.sha256))
       .where(isNull(snapshots.sha256))
       .all();
-    if (orphans.length === 0) return 0;
-    const names = orphans.map((row) => row.sha256);
+    const needed = this.#baseBlobs();
+    const names: string[] = [];
+    for (const row of orphans) {
+      if (!needed.has(row.sha256)) names.push(row.sha256);
+    }
+    if (names.length === 0) return 0;
     const gone = inArray(snapshotBlobs.sha256, names);
     db.delete(snapshotBlobs).where(gone).run();
     let removed = 0;

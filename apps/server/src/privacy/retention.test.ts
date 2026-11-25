@@ -192,6 +192,40 @@ describe("privacy retention (P-07 to P-11)", () => {
     expect(await listing(backups)).toEqual(backupsBefore);
   });
 
+  it("P-09 keeps the base blob an open draft merges against", async () => {
+    let clock = Date.parse("2026-11-25T10:00:00Z");
+    const t = await fixture({ now: () => new Date(clock) });
+    const { app, owner } = t;
+    await applyValue(t, 10);
+    const draft = await call(app, owner, "POST", changesUrl(t), {
+      edits: [{ settingKey: INT_SETTING, value: 20 }],
+    });
+    expect(draft.statusCode).toBe(201);
+    const draftId = draft.json<{ id: string }>().id;
+    const stored = t.app.ctx.store.sqlite
+      .prepare('SELECT base FROM "change_sets" WHERE id = ?')
+      .get(draftId) as { base: string };
+    const base = JSON.parse(stored.base) as Record<string, { sha256: string }>;
+    const hashes = Object.values(base).map((file) => file.sha256);
+    expect(hashes.length).toBeGreaterThan(0);
+    // A later change makes the base of the draft an older version.
+    clock += 60_000;
+    await applyValue(t, 30);
+    const set = await call(app, owner, "PUT", "/api/v1/settings/snapshots", {
+      snapshotRetention: { mode: "days", days: 1 },
+    });
+    expect(set.statusCode).toBe(200);
+    clock += 31 * DAY_MS;
+    const report = await t.app.ctx.retention.pruneSnapshots();
+    expect(report.rows).toBeGreaterThan(0);
+    // No snapshot row names the base any more; the draft still needs it.
+    const kept = new Set(rowsOf(t).map((row) => row.sha256));
+    for (const sha256 of hashes) {
+      expect(kept.has(sha256)).toBe(false);
+      expect(await exists(t.app.ctx.snapshots.pathOf(sha256))).toBe(true);
+    }
+  });
+
   it("P-10 keeps the retention settings to the owner and admins", async () => {
     const t = await fixture();
     const body = { snapshotRetention: { mode: "days", days: 30 } };
