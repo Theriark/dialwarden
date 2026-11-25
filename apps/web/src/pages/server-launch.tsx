@@ -47,6 +47,10 @@ import type { ChangeSet } from "../api/schema";
 import { PageHeader } from "../components/layout/page-header";
 import { LaunchSnippetPanel } from "../components/launch-snippets";
 import { SaveDialog } from "../components/save-dialog";
+import {
+  isServerMissing,
+  ServerMissingState,
+} from "../components/server-missing";
 import { ServerTabs } from "../components/server-tabs";
 import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
@@ -281,6 +285,10 @@ export function ServerLaunchPage() {
         <RowsSkeleton rows={5} />
       </>
     );
+  }
+
+  if (isServerMissing(server.error) || isServerMissing(settings.error)) {
+    return <ServerMissingState />;
   }
 
   if (server.isError || settings.isError || meta.isError) {
