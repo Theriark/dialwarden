@@ -15,6 +15,7 @@ import { errorMessage } from "../../api/errors";
 import {
   editableServersQuery,
   entitlementQuery,
+  invalidatePlanDependent,
   keys,
   registryQuery,
 } from "../../api/queries";
@@ -77,12 +78,15 @@ const UI_OVERRIDES =
 
 /**
  * A licence change answers the new entitlement; the plan badge of About
- * (/healthz) and the editable servers of the Free hint follow it.
+ * (/healthz), the editable servers of the Free hint, and the P8 answers
+ * that depend on the plan (users, invitations, audit export, tokens, single
+ * sign-on) follow it without a reload.
  */
 function applyEntitlement(client: QueryClient, data: Entitlement): void {
   client.setQueryData(keys.entitlement, data);
   void client.invalidateQueries({ queryKey: keys.health });
   void client.invalidateQueries({ queryKey: keys.editable });
+  invalidatePlanDependent(client);
 }
 
 function kindLabel(kind: "customer" | "internal-dev" | null): string {

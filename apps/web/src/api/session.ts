@@ -72,6 +72,46 @@ export function useCanRunHooks(): boolean {
 }
 
 /**
+ * The roles that manage users, read the audit log and set the privacy
+ * controls (routes/users.ts, audit.ts, retention.ts). The session carries
+ * the effective role, so on the Free fallback a stored admin acts as a
+ * viewer here too, as the server does.
+ */
+export const USER_MANAGER_ROLES: readonly string[] = ["owner", "admin"];
+
+export function useCanManageUsers(): boolean {
+  const user = useSessionUser();
+  return user !== null && USER_MANAGER_ROLES.includes(user.role);
+}
+
+/**
+ * Whether an actor may change the role, grants or account of a user with
+ * the target role (team/roles.ts canManage): the owner manages everyone but
+ * the owner, an admin only editors and viewers.
+ */
+export function canManageRole(actor: string, target: string): boolean {
+  if (target === "owner") return false;
+  if (actor === "owner") return true;
+  if (actor === "admin") return target === "editor" || target === "viewer";
+  return false;
+}
+
+/** The roles a user may give to a token or an invitation: at most their own. */
+export function rolesBelow(
+  actor: string,
+): readonly ("admin" | "editor" | "viewer")[] {
+  switch (actor) {
+    case "owner":
+    case "admin":
+      return ["admin", "editor", "viewer"];
+    case "editor":
+      return ["editor", "viewer"];
+    default:
+      return ["viewer"];
+  }
+}
+
+/**
  * The second sign-in step challenge, kept in memory only (never in the URL).
  * Reading never clears it, because the page reads it in a state initialiser
  * that StrictMode calls twice; the page clears it when the step ends, expires

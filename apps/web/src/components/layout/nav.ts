@@ -1,10 +1,12 @@
-// The eight navigation entries (dev-work-plan P1-B) and the phone tab bar.
+// The navigation entries (the eight of dev-work-plan P1-B plus the audit
+// log of P8) and the phone tab bar.
 import {
   Activity,
   CalendarClock,
   FileText,
   Layers,
   LayoutGrid,
+  ScrollText,
   Server,
   Settings,
   Users,
@@ -18,6 +20,7 @@ export type NavPath =
   | "/matrix"
   | "/reports"
   | "/activity"
+  | "/audit"
   | "/users"
   | "/settings";
 
@@ -34,6 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/matrix", label: "Matrix", icon: LayoutGrid },
   { to: "/reports", label: "Reports", icon: FileText },
   { to: "/activity", label: "Activity", icon: Activity },
+  { to: "/audit", label: "Audit", icon: ScrollText },
   { to: "/users", label: "Users", icon: Users },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

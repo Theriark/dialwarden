@@ -30,6 +30,35 @@ const MESSAGES = new Map<string, string>([
   ["invalid_state", "This change set was already applied or closed."],
   ["control_error", "The game server could not be reached."],
   ["connector_error", "The server files could not be reached."],
+  ["user_not_found", "This user no longer exists."],
+  ["cannot_change_own_role", "You cannot change your own role."],
+  ["cannot_change_owner", "The owner cannot be changed or removed."],
+  ["role_too_high", "Your role does not reach that high."],
+  ["owner_required", "The owner account cannot be removed."],
+  ["unknown_server", "One of the servers does not exist."],
+  ["user_exists", "A user with this e-mail address exists already."],
+  ["oidc_active", "No invitations while single sign-on is on."],
+  ["sso_required", "This account signs in through single sign-on."],
+  ["invitation_not_found", "This invitation no longer exists."],
+  ["invitation_invalid", "This invitation is no longer valid."],
+  ["reset_invalid", "This reset link is no longer valid."],
+  ["token_limit", "You hold the most API tokens an account may have."],
+  ["token_not_found", "This token no longer exists."],
+  ["invalid_role_mapping", "A group maps to a role that cannot be given."],
+  ["base_url_required", "Set BASE_URL on the server first."],
+  ["oidc_url_refused", "The provider address is not allowed."],
+  ["oidc_discovery_failed", "The provider's discovery document failed."],
+  ["oidc_issuer_mismatch", "The provider names another issuer."],
+  [
+    "oidc_unsupported_algorithm",
+    "The provider signs with no supported algorithm.",
+  ],
+  ["oidc_disabled", "Single sign-on is off."],
+  ["oidc_no_role", "No group of this account maps to a role."],
+  [
+    "oidc_email_conflict",
+    "The provider's e-mail address belongs to another account.",
+  ],
 ]);
 
 /** The fields the P1 screens send, as the subject of a sentence. */
@@ -46,6 +75,13 @@ const FIELD_WORDS = new Map<string, string>([
   ["code", "The code"],
   ["recoveryCode", "The recovery code"],
   ["challenge", "The sign-in step"],
+  ["role", "The role"],
+  ["issuer", "The discovery URL"],
+  ["clientId", "The client id"],
+  ["clientSecret", "The client secret"],
+  ["scope", "The scope"],
+  ["groupsClaim", "The groups claim"],
+  ["retentionDays", "The retention"],
 ]);
 
 export interface ValidationIssue {

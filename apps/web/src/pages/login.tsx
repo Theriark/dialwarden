@@ -1,16 +1,21 @@
 // Sign-in (POST /api/v1/auth/login). A totp_required answer sends the user to
-// the second step with the challenge kept in memory.
-import { useQueryClient } from "@tanstack/react-query";
+// the second step with the challenge kept in memory. While single sign-on
+// is on (GET /api/v1/auth/oidc) the page offers the provider first; the
+// password form stays for the owner, who always keeps the local sign-in.
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useRouter } from "@tanstack/react-router";
+import { KeyRound } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api } from "../api/client";
 import { errorMessage } from "../api/errors";
+import { oidcStatusQuery } from "../api/queries";
 import type { LoginResponse } from "../api/schema";
 import {
   rememberSession,
   safeRedirect,
   setPendingChallenge,
 } from "../api/session";
+import { oidcStartUrl } from "../api/team";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { PasswordField, TextField } from "../components/ui/field";
@@ -24,6 +29,8 @@ export function LoginPage({ search }: { search: LoginSearch }) {
   const client = useQueryClient();
   const router = useRouter();
   const navigate = useNavigate();
+  const sso = useQuery(oidcStatusQuery());
+  const ssoOn = sso.data?.enabled === true;
   const [email, setEmail] = useState("");
   const [phrase, setPhrase] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,8 +61,26 @@ export function LoginPage({ search }: { search: LoginSearch }) {
   return (
     <AuthFrame
       title="Sign in"
-      description="Use the owner account of this Dialwarden instance."
+      description={
+        ssoOn
+          ? "Sign in through your organisation. The owner signs in with the password below."
+          : "Use your account on this Dialwarden instance."
+      }
     >
+      {ssoOn ? (
+        <div className="flex flex-col gap-3">
+          <a
+            href={oidcStartUrl(safeRedirect(search.redirect))}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-control border border-transparent bg-primary px-4 text-base font-medium text-primary-fg no-underline hover:opacity-90"
+          >
+            <KeyRound className="size-4" aria-hidden="true" />
+            Sign in with single sign-on
+          </a>
+          <p className="text-center text-xs text-fg-muted">
+            Owner of this instance? Use the password form below.
+          </p>
+        </div>
+      ) : null}
       <form
         className="flex flex-col gap-4"
         onSubmit={(event) => {

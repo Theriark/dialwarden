@@ -1,10 +1,14 @@
 // TanStack Query definitions for the P1-B screens. Keys are grouped so a
 // sign-in or a licence change can invalidate what depends on it.
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, setCsrf } from "./client";
 import type {
   ActivityPage,
   ActivityType,
+  AuditFilters,
+  AuditPage,
+  AuditSettings,
+  AuditVerify,
   BackupList,
   ChangeSet,
   EditableServers,
@@ -14,6 +18,9 @@ import type {
   History,
   HooksView,
   InstanceKey,
+  InvitationList,
+  OidcStatus,
+  OidcView,
   PendingList,
   RawFile,
   Registry,
@@ -24,8 +31,12 @@ import type {
   SettingsMeta,
   SetupStatus,
   SignedIn,
+  SnapshotSettings,
   SystemStatus,
+  TokenList,
+  UserList,
   UserPresetList,
+  UserView,
 } from "./schema";
 
 export const keys = {
@@ -257,3 +268,141 @@ export function fetchActivityPage(params: {
   }
   return api<ActivityPage>(`/api/v1/activity?${search.toString()}`);
 }
+
+// ---- P8: users, invitations, audit, tokens, OIDC and privacy (C1) ----
+// Every key sits under a prefix of its own so the plan switch (licence page)
+// can refresh what the entitlement changes without a reload.
+
+export const p8keys = {
+  users: ["users"] as const,
+  user: (id: string) => ["users", id] as const,
+  invitations: ["invitations"] as const,
+  audit: (filters: AuditFilters) => ["audit", "list", filters] as const,
+  auditVerify: ["audit", "verify"] as const,
+  auditSettings: ["audit", "settings"] as const,
+  tokens: ["tokens"] as const,
+  oidc: ["oidc", "settings"] as const,
+  oidcStatus: ["oidc", "status"] as const,
+  snapshots: ["privacy", "snapshots"] as const,
+};
+
+/** The query prefixes whose answers depend on the plan (contract C1). */
+export const PLAN_DEPENDENT_KEYS: readonly (readonly string[])[] = [
+  p8keys.users,
+  p8keys.invitations,
+  ["audit"],
+  p8keys.tokens,
+  ["oidc"],
+  ["servers"],
+];
+
+/**
+ * After a licence change: the users list (effective roles), the invitations
+ * (402 on Free), the audit export, the tokens and the OIDC settings all
+ * answer differently, so they are fetched again, without a reload.
+ */
+export function invalidatePlanDependent(client: QueryClient): void {
+  for (const queryKey of PLAN_DEPENDENT_KEYS) {
+    void client.invalidateQueries({ queryKey });
+  }
+}
+
+/** The users with their stored and effective roles (owner and admins). */
+export const usersQuery = () =>
+  queryOptions({
+    queryKey: p8keys.users,
+    queryFn: () => api<UserList>("/api/v1/users"),
+    staleTime: 15_000,
+  });
+
+export const userQuery = (id: string) =>
+  queryOptions({
+    queryKey: p8keys.user(id),
+    queryFn: () => api<UserView>(`/api/v1/users/${id}`),
+    staleTime: 15_000,
+  });
+
+/** Open invitations; Paid (team.users), so Free answers 402 (no retry). */
+export const invitationsQuery = () =>
+  queryOptions({
+    queryKey: p8keys.invitations,
+    queryFn: () => api<InvitationList>("/api/v1/invitations"),
+    staleTime: 15_000,
+    retry: false,
+  });
+
+export function auditSearch(
+  filters: AuditFilters,
+  before: number | null,
+  limit: number,
+): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (typeof value === "string" && value !== "") {
+      search.set(key, value);
+    }
+  }
+  if (before !== null) {
+    search.set("before", String(before));
+  }
+  search.set("limit", String(limit));
+  return search.toString();
+}
+
+/** One page of the audit log; the Audit page chains them. */
+export function fetchAuditPage(params: {
+  readonly filters: AuditFilters;
+  readonly before: number | null;
+  readonly limit: number;
+}): Promise<AuditPage> {
+  const search = auditSearch(params.filters, params.before, params.limit);
+  return api<AuditPage>(`/api/v1/audit?${search}`);
+}
+
+/** The whole chain checked: valid, or broken at the first bad row. */
+export const auditVerifyQuery = () =>
+  queryOptions({
+    queryKey: p8keys.auditVerify,
+    queryFn: () => api<AuditVerify>("/api/v1/audit/verify"),
+    staleTime: 10_000,
+  });
+
+export const auditSettingsQuery = () =>
+  queryOptions({
+    queryKey: p8keys.auditSettings,
+    queryFn: () => api<AuditSettings>("/api/v1/settings/audit"),
+    staleTime: 30_000,
+  });
+
+export const snapshotSettingsQuery = () =>
+  queryOptions({
+    queryKey: p8keys.snapshots,
+    queryFn: () => api<SnapshotSettings>("/api/v1/settings/snapshots"),
+    staleTime: 30_000,
+  });
+
+/** The signed-in user's own API tokens (every plan). */
+export const tokensQuery = () =>
+  queryOptions({
+    queryKey: p8keys.tokens,
+    queryFn: () => api<TokenList>("/api/v1/tokens"),
+    staleTime: 15_000,
+  });
+
+/** The OIDC settings; Paid (oidc), so Free answers 402 (no retry). */
+export const oidcSettingsQuery = () =>
+  queryOptions({
+    queryKey: p8keys.oidc,
+    queryFn: () => api<OidcView>("/api/v1/settings/oidc"),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+/** Whether the sign-in page offers single sign-on (public). */
+export const oidcStatusQuery = () =>
+  queryOptions({
+    queryKey: p8keys.oidcStatus,
+    queryFn: () => api<OidcStatus>("/api/v1/auth/oidc"),
+    staleTime: 60_000,
+    retry: false,
+  });

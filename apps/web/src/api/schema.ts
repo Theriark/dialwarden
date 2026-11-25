@@ -646,3 +646,212 @@ export interface ActivityPage {
   readonly items: readonly ActivityEvent[];
   readonly nextBefore: number | null;
 }
+
+// ---- P8: users, roles and grants, invitations, audit, OIDC, API tokens ----
+// ---- and privacy. The shapes the P8-A server declares in apps/server/ ----
+// ---- src/routes/users.ts, invitations.ts, audit.ts, api-access.ts,    ----
+// ---- oidc.ts and retention.ts at b3a19ef. Field names are exact.      ----
+
+export const ROLES = ["owner", "admin", "editor", "viewer"] as const;
+
+export type Role = (typeof ROLES)[number];
+
+/** The roles an invitation, a role change or an API token may carry. */
+export const ASSIGNABLE_ROLES = ["admin", "editor", "viewer"] as const;
+
+export type AssignableRole = (typeof ASSIGNABLE_ROLES)[number];
+
+export const GRANT_LEVELS = ["read", "write"] as const;
+
+export type GrantLevel = (typeof GRANT_LEVELS)[number];
+
+/** One per-server grant of an editor or a viewer. */
+export interface Grant {
+  readonly server: string;
+  readonly level: GrantLevel;
+}
+
+/** GET /api/v1/users items and the answer of every user write. */
+export interface UserView {
+  readonly id: string;
+  readonly email: string;
+  readonly name: string;
+  /** The stored role. */
+  readonly role: Role;
+  /** The role the user acts with now: viewer on the Free fallback. */
+  readonly effectiveRole: Role;
+  readonly totpEnabled: boolean;
+  /** True for a user who signs in through the identity provider. */
+  readonly sso: boolean;
+  /** False when the account has no usable local password. */
+  readonly localPassword: boolean;
+  readonly createdAt: string;
+  readonly grants: readonly Grant[];
+}
+
+export interface UserList {
+  readonly items: readonly UserView[];
+}
+
+/** POST /api/v1/users/:id/password-reset (201): the link, shown once. */
+export interface NewLink {
+  readonly token: string;
+  readonly link: string;
+  readonly expiresAt: string;
+}
+
+export interface InvitationView {
+  readonly id: string;
+  readonly email: string;
+  readonly role: AssignableRole;
+  readonly grants: readonly Grant[];
+  readonly invitedBy: string;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+export interface InvitationList {
+  readonly items: readonly InvitationView[];
+}
+
+/** POST /api/v1/invitations (201): the invitation plus its link, once. */
+export interface NewInvitation extends InvitationView {
+  readonly token: string;
+  readonly link: string;
+}
+
+export interface InvitationInput {
+  readonly email: string;
+  readonly role: AssignableRole;
+  readonly grants: readonly Grant[];
+}
+
+/** POST /api/v1/invitations/accept and /api/v1/auth/password-reset. */
+export interface AcceptInvitationBody {
+  readonly token: string;
+  readonly name: string;
+  readonly password: string;
+}
+
+export interface PasswordResetBody {
+  readonly token: string;
+  readonly password: string;
+}
+
+/** GET /api/v1/tokens items; the value is in the POST answer only. */
+export interface TokenView {
+  readonly id: string;
+  readonly name: string;
+  readonly role: AssignableRole;
+  readonly prefix: string;
+  readonly createdAt: string;
+  readonly lastUsedAt: string | null;
+}
+
+export interface TokenList {
+  readonly items: readonly TokenView[];
+}
+
+export interface NewToken extends TokenView {
+  readonly token: string;
+}
+
+export interface AuditActor {
+  readonly id: string;
+  readonly label: string;
+  readonly erased: boolean;
+}
+
+/** One row of GET /api/v1/audit. */
+export interface AuditEntry {
+  readonly id: number;
+  readonly at: string;
+  readonly actor: AuditActor;
+  /** The method and route pattern, such as PUT /api/v1/users/:id/role. */
+  readonly action: string;
+  readonly targetType: string | null;
+  readonly targetId: string | null;
+  readonly serverId: string | null;
+  readonly data: Readonly<Record<string, unknown>>;
+  readonly ip: string | null;
+}
+
+export interface AuditPage {
+  readonly items: readonly AuditEntry[];
+  readonly nextBefore: number | null;
+}
+
+/** The filters of GET /api/v1/audit and of the CSV export. */
+export interface AuditFilters {
+  readonly actorId?: string;
+  readonly action?: string;
+  readonly serverId?: string;
+  readonly from?: string;
+  readonly to?: string;
+}
+
+/** GET /api/v1/audit/verify: the whole chain checked. */
+export type AuditVerify =
+  | { readonly valid: true; readonly count: number; readonly headHash: string }
+  | {
+      readonly valid: false;
+      readonly firstBrokenId: number | null;
+      readonly reason: string;
+    };
+
+export const IP_MODES = ["full", "truncated", "none"] as const;
+
+export type IpMode = (typeof IP_MODES)[number];
+
+/** GET and PUT /api/v1/settings/audit (every plan). */
+export interface AuditSettings {
+  readonly ipMode: IpMode;
+  /** Rows older than this are removed by the daily job; null keeps all. */
+  readonly retentionDays: number | null;
+}
+
+export const RETENTION_MODES = ["all", "days", "versions"] as const;
+
+export type RetentionMode = (typeof RETENTION_MODES)[number];
+
+export interface SnapshotRetention {
+  readonly mode: RetentionMode;
+  readonly days: number | null;
+  readonly versions: number | null;
+}
+
+/** GET and PUT /api/v1/settings/snapshots (every plan). */
+export interface SnapshotSettings {
+  readonly snapshotRetention: SnapshotRetention;
+}
+
+/** GET /api/v1/settings/oidc (owner, Paid). */
+export interface OidcView {
+  readonly configured: boolean;
+  readonly enabled: boolean;
+  readonly issuer: string | null;
+  readonly clientId: string | null;
+  readonly hasClientSecret: boolean;
+  readonly scope: string;
+  readonly groupsClaim: string;
+  readonly roleMapping: Readonly<Record<string, string>>;
+  readonly allowPrivateNetwork: boolean;
+  readonly redirectUri: string | null;
+}
+
+/** PUT /api/v1/settings/oidc: clientSecret left out keeps the stored one. */
+export interface OidcInput {
+  readonly enabled: boolean;
+  readonly issuer: string;
+  readonly clientId: string;
+  readonly clientSecret?: string;
+  readonly scope?: string;
+  readonly groupsClaim?: string;
+  readonly roleMapping: Readonly<Record<string, AssignableRole>>;
+  readonly allowPrivateNetwork: boolean;
+}
+
+/** GET /api/v1/auth/oidc (public): whether the sign-in page offers it. */
+export interface OidcStatus {
+  readonly enabled: boolean;
+}
