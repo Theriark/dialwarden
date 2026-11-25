@@ -66,9 +66,17 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(digits)} ${unit}`;
 }
 
-/** Initials for the avatar: first letters of the first two words. */
+/**
+ * Initials for the avatar: the first letter or digit of the first two words
+ * that hold one. Brackets and other punctuation never count, so "admin (seed)"
+ * gives "AS" and "(seed)" alone gives "S".
+ */
 export function initials(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
+  const words = name
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter((word) => word !== "");
   const letters = words.slice(0, 2).map((word) => word.charAt(0));
   return letters.join("").toUpperCase() || "?";
 }

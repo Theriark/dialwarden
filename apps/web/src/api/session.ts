@@ -72,6 +72,21 @@ export function useCanRunHooks(): boolean {
 }
 
 /**
+ * The roles that may restore a version (routes/changes.ts, a write on the
+ * snapshot's server): a viewer holds read grants only and just looks. An
+ * editor restores plain files; a shell-read file (launch line, shell
+ * variables) is owner and admin only (rnd-decision-p8a Q2).
+ */
+export const RESTORE_ROLES: readonly string[] = ["owner", "admin", "editor"];
+
+export const SHELL_RESTORE_ROLES: readonly string[] = ["owner", "admin"];
+
+export function useCanRestore(): boolean {
+  const user = useSessionUser();
+  return user !== null && RESTORE_ROLES.includes(user.role);
+}
+
+/**
  * The roles that manage users, read the audit log and set the privacy
  * controls (routes/users.ts, audit.ts, retention.ts). The session carries
  * the effective role, so on the Free fallback a stored admin acts as a

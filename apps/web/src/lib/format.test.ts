@@ -50,6 +50,12 @@ describe("format helpers", () => {
     expect(initials("Ada Lovelace")).toBe("AL");
     expect(initials("owner")).toBe("O");
     expect(initials("  ")).toBe("?");
+    // Letters and digits only (live check F5): a bracket never shows.
+    expect(initials("admin (seed)")).toBe("AS");
+    expect(initials("(seed)")).toBe("S");
+    expect(initials("Player 2")).toBe("P2");
+    expect(initials("Éva Ørsted")).toBe("ÉØ");
+    expect(initials("***")).toBe("?");
     expect(describeSchedule("30 3 * * *", "Europe/Lisbon")).toBe(
       "Every day at 03:30 (Europe/Lisbon)",
     );
