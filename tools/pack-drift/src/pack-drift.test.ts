@@ -27,13 +27,13 @@ afterEach(async () => {
 });
 
 /** The value text the fixture style writes for one default. */
-function valueOf(default: unknown): string {
-  if (default === true) return "true";
-  if (default === false) return "false";
-  if (typeof default === "string" && (default === "" || default.includes(" "))) {
-    return `"${default}"`;
+function valueOf(value: unknown): string {
+  if (value === true) return "true";
+  if (value === false) return "false";
+  if (typeof value === "string" && (value === "" || value.includes(" "))) {
+    return `"${value}"`;
   }
-  return String(default);
+  return String(value);
 }
 
 describe("pack drift report", () => {
