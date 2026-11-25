@@ -2,6 +2,7 @@
 // config.entitlement answers 402 with its feature name on Free, is never
 // public, and works on Paid; every Paid route the registry lists declares its
 // feature. P1 has no Paid route yet, so a probe route stands in for them.
+import { randomUUID } from "node:crypto";
 import {
   ALWAYS_FREE_ROUTES,
   FEATURES,
@@ -12,10 +13,16 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   headersOf,
+  randomPassword,
+  sessionCookie,
   setupOwner,
   testApp,
+  type SignedIn,
   type TestApp,
 } from "../../test/helpers.js";
+import { call, paidApp, toFree, toPaid } from "../../test/team.js";
+import { hashPassword } from "../auth/hashing.js";
+import { users } from "../db/schema.js";
 import type { RouteInfo } from "./context.js";
 
 const PROBE_URL = "/api/v1/test/paid-probe";
@@ -166,4 +173,97 @@ describe("feature registry on the server (contract C1)", () => {
       expect(listed.get(key), key).toBe(route.entitlement);
     }
   });
+
+  it("E-04 answers 402 before the role check, and 401 first", async () => {
+    current = await paidApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const viewer = await plainUser(app, "viewer");
+    await toFree(app, owner);
+    const body = { email: "e04@dialwarden.test", role: "viewer" };
+    // A viewer would answer 403 forbidden were the role checked first; the
+    // entitlement comes before the role, so Free answers 402.
+    const byViewer = await call(
+      app,
+      viewer,
+      "POST",
+      "/api/v1/invitations",
+      body,
+    );
+    expect(byViewer.statusCode).toBe(402);
+    expect(byViewer.json()).toEqual({
+      error: "payment_required",
+      plan: "free",
+      feature: "team.users",
+    });
+    const anonymous = await app.inject({
+      method: "POST",
+      url: "/api/v1/invitations",
+      payload: body,
+    });
+    expect(anonymous.statusCode).toBe(401);
+  });
+
+  it("E-06 reads the plan of the moment, never a cached one", async () => {
+    current = await paidApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const token = await call(app, owner, "POST", "/api/v1/tokens", {
+      name: "cached",
+      role: "viewer",
+    });
+    expect(token.statusCode).toBe(201);
+    const value = token.json<{ token: string }>().token;
+    const bearer = () =>
+      app.inject({
+        method: "GET",
+        url: "/api/v1/servers",
+        headers: { authorization: `Bearer ${value}` },
+      });
+    const session = () => call(app, owner, "GET", "/api/v1/tokens");
+    await toFree(app, owner);
+    expect((await bearer()).statusCode).toBe(402);
+    expect((await session()).statusCode).toBe(200);
+    await toPaid(app, owner);
+    expect((await bearer()).statusCode).toBe(200);
+    await toFree(app, owner);
+    expect((await bearer()).statusCode).toBe(402);
+  });
 });
+
+/** A signed-in user of the given role, made directly for the order checks. */
+async function plainUser(
+  app: FastifyInstance,
+  role: string,
+): Promise<SignedIn> {
+  const id = randomUUID();
+  const password = randomPassword();
+  const at = new Date().toISOString();
+  const hash = await hashPassword(password);
+  app.ctx.store.db
+    .insert(users)
+    .values({
+      id,
+      email: `${role}-${id.slice(0, 8)}@dialwarden.test`,
+      name: role,
+      role,
+      passwordHash: hash,
+      createdAt: at,
+      updatedAt: at,
+    })
+    .run();
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/login",
+    payload: { email: `${role}-${id.slice(0, 8)}@dialwarden.test`, password },
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(`login: ${response.statusCode} ${response.body}`);
+  }
+  const body = response.json<{ csrfToken: string }>();
+  return {
+    cookie: sessionCookie(response),
+    csrf: body.csrfToken,
+    userId: id,
+  };
+}

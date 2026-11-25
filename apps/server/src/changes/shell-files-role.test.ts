@@ -143,4 +143,53 @@ describe("raw patches and shell-read files (H-01 to H-04)", () => {
     });
     expect(response.statusCode).toBe(201);
   });
+
+  it("H-05 shows the raw text of a file to admins only (D14)", async () => {
+    const t = await fixture();
+    const url = `/api/v1/servers/${t.servers.a}/files/settings`;
+    for (const user of [t.editor, t.viewer]) {
+      const response = await call(t.app, user, "GET", url);
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ error: "forbidden" });
+    }
+    const asAdmin = await call(t.app, t.admin, "GET", url);
+    expect(asAdmin.statusCode).toBe(200);
+  });
+
+  it("H-06 hides the hook command and the server settings below admin", async () => {
+    const t = await fixture();
+    const hooksUrl = `/api/v1/servers/${t.servers.a}/hooks`;
+    const serverUrl = `/api/v1/servers/${t.servers.a}`;
+    // The owner sets a docker proxy hook (the local demo server has no SSH
+    // access, so the command kind is refused for it); an editor may neither
+    // change the hook nor the server's own settings (D20).
+    const proxy = {
+      kind: "dockerProxy",
+      url: "http://127.0.0.1:2375",
+      containerLabel: "com.example.game=dialwarden",
+    };
+    const set = await call(t.app, t.owner, "PUT", hooksUrl, { hook: proxy });
+    expect(set.statusCode).toBe(200);
+    const byEditor = await call(t.app, t.editor, "PUT", hooksUrl, {
+      hook: { ...proxy, containerLabel: "com.example.game=pwn" },
+    });
+    expect(byEditor.statusCode).toBe(403);
+    expect(byEditor.json()).toEqual({ error: "forbidden" });
+    const patch = await call(t.app, t.editor, "PATCH", serverUrl, {
+      name: "renamed",
+    });
+    expect(patch.statusCode).toBe(403);
+    // Editors and viewers see the hook kind, never the proxy URL; an admin
+    // sees it in full.
+    for (const user of [t.editor, t.viewer]) {
+      const view = await call(t.app, user, "GET", hooksUrl);
+      expect(view.statusCode).toBe(200);
+      const body = view.json<{ hook: { kind: string; url: string } }>();
+      expect(body.hook.kind).toBe("dockerProxy");
+      expect(body.hook.url).not.toBe(proxy.url);
+    }
+    const full = await call(t.app, t.admin, "GET", hooksUrl);
+    expect(full.statusCode).toBe(200);
+    expect(full.json<{ hook: { url: string } }>().hook.url).toBe(proxy.url);
+  });
 });
