@@ -8,7 +8,6 @@ import type { TestApp } from "../../test/helpers.js";
 import {
   call,
   INT_SETTING,
-  inviteAndAccept,
   teamFixture,
   toFree,
   toPaid,

@@ -10,6 +10,7 @@ import {
   headersOf,
   ownerCredentials,
   setupHeaders,
+  type SignedIn,
   type TestApp,
 } from "../../test/helpers.js";
 import {
@@ -37,7 +38,7 @@ async function fixture(): Promise<TeamFixture> {
 /** The owner of an https app: its cookie is named with the __Host- prefix. */
 async function httpsOwner(
   app: FastifyInstance,
-): Promise<{ cookie: string; csrf: string; email: string; password: string }> {
+): Promise<SignedIn & { email: string; password: string }> {
   const credentials = ownerCredentials();
   const response = await app.inject({
     method: "POST",
@@ -54,11 +55,12 @@ async function httpsOwner(
   if (found === undefined) {
     throw new Error("no __Host cookie in the setup response");
   }
-  const body = response.json<{ csrfToken: string }>();
+  const body = response.json<{ csrfToken: string; user: { id: string } }>();
   return {
     ...credentials,
     cookie: `__Host-dw_session=${found.value}`,
     csrf: body.csrfToken,
+    userId: body.user.id,
   };
 }
 
