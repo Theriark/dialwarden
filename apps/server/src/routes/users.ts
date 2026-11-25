@@ -208,7 +208,7 @@ export function userRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const user = await team().useReset(request.body, request.ip);
       if (user.totpSecretEnc !== null || app.ctx.oidc.active()) {
-        return reply.code(204).send();
+        return reply.code(204).send(null);
       }
       return startSession(app, request, reply, {
         id: user.id,
