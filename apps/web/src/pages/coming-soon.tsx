@@ -6,7 +6,6 @@ import {
   Layers,
   LayoutGrid,
   Server,
-  Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { PageHeader } from "../components/layout/page-header";
@@ -90,17 +89,6 @@ export function ReportsPage() {
       description="Change reports you can print, copy or post."
       icon={<FileText className={ICON} aria-hidden="true" />}
       phase="phase P9"
-    />
-  );
-}
-
-export function UsersPage() {
-  return (
-    <ComingSoon
-      title="Users"
-      description="Teammates, roles and per-server grants."
-      icon={<Users className={ICON} aria-hidden="true" />}
-      phase="phase P8"
     />
   );
 }

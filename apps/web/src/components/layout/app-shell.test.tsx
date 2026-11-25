@@ -55,7 +55,7 @@ describe("AppShell", () => {
     expect(within(nav).getAllByRole("link").length).toBe(4);
     await userEvent.setup().click(screen.getByRole("button", { name: "More" }));
     const sheet = await screen.findByRole("dialog", { name: "More" });
-    for (const label of ["Schedules", "Matrix", "Reports", "Users"]) {
+    for (const label of ["Schedules", "Matrix", "Reports", "Audit", "Users"]) {
       expect(within(sheet).getByText(label)).toBeDefined();
     }
     await waitFor(() => {
@@ -76,6 +76,7 @@ describe("AppShell", () => {
       "Matrix",
       "Reports",
       "Activity",
+      "Audit",
       "Users",
       "Settings",
     ]);
