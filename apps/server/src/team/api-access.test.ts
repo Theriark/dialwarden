@@ -56,8 +56,12 @@ function create(
   return call(fixture.app, user, "POST", "/api/v1/tokens", { name, role });
 }
 
-async function makeToken(user: SignedIn, role: string): Promise<MadeToken> {
-  const response = await create(user, role);
+async function makeToken(
+  user: SignedIn,
+  role: string,
+  name = role,
+): Promise<MadeToken> {
+  const response = await create(user, role, name);
   if (response.statusCode !== 201) {
     throw new Error(`token: ${response.statusCode} ${response.body}`);
   }
@@ -420,11 +424,12 @@ describe("API tokens", () => {
   });
 
   it("T-13 gives every token the product prefix and random bytes", async () => {
-    const { app, owner, loner } = fixture;
-    // A fresh editor: the fixture editor holds tokens of the tests before.
-    const fresh = await inviteAndAccept(app, owner, "editor");
+    const { app, owner } = fixture;
+    // Fresh editors: the fixture users hold tokens of the other tests.
+    const first = await inviteAndAccept(app, owner, "editor");
+    const second = await inviteAndAccept(app, owner, "editor");
     const values = new Set<string>();
-    for (const user of [fresh, loner]) {
+    for (const user of [first, second]) {
       for (let index = 0; index < MAX_TOKENS_PER_USER; index += 1) {
         const made = await makeToken(user, "viewer", `many-${index}`);
         expect(made.token).toMatch(TOKEN_VALUE);
@@ -432,7 +437,7 @@ describe("API tokens", () => {
       }
     }
     expect(values.size).toBe(2 * MAX_TOKENS_PER_USER);
-    const limit = await create(fresh, "viewer", "over");
+    const limit = await create(first, "viewer", "over");
     expect(limit.statusCode).toBe(409);
   });
 
