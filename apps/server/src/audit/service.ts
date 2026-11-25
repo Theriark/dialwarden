@@ -127,6 +127,12 @@ function sorted(value: unknown): unknown {
   return Object.fromEntries(entries.map(([key, item]) => [key, sorted(item)]));
 }
 
+/** A time in the stored form; a value Date cannot read stays as given. */
+function isoTime(value: string): string {
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? value : time.toISOString();
+}
+
 function sameHex(a: string, b: string): boolean {
   const left = Buffer.from(a, "hex");
   const right = Buffer.from(b, "hex");
@@ -217,21 +223,36 @@ export class AuditService {
     return auditAddress(ip ?? undefined, this.settingsOf().ipMode);
   }
 
-  /** Appends one row to the chain, in one transaction with the head read. */
+  /**
+   * Appends one row to the chain, in one transaction with the head read. The
+   * row follows the signed head, not the newest row in the table, so rows
+   * deleted from the tail show as a gap after the next record. When the head
+   * is missing or invalid while rows exist, or a row already sits past it,
+   * the row follows the newest one and the head is left alone, so verify
+   * keeps answering head_mismatch.
+   */
   record(input: AuditInput): number {
     const ip = this.address(input.ip);
     const at = this.#now().toISOString();
     const data = JSON.stringify(sorted(input.data ?? {}));
     return this.#store.sqlite.transaction((): number => {
       const db = this.#store.db;
-      const head = db
+      const newest = db
         .select({ id: auditEvents.id, hash: auditEvents.hash })
         .from(auditEvents)
         .orderBy(desc(auditEvents.id))
         .limit(1)
         .get();
-      const base = this.#link(BASE_KEY);
-      const prev = head ?? base ?? { id: 0, hash: GENESIS };
+      const anchor = this.#link(HEAD_KEY);
+      const signed =
+        anchor !== null && this.#linkValid(HEAD_KEY, anchor) ? anchor : null;
+      const trusted =
+        signed === null
+          ? newest === undefined
+          : newest === undefined || newest.id <= signed.id;
+      const prev = trusted
+        ? (signed ?? this.#link(BASE_KEY) ?? { id: 0, hash: GENESIS })
+        : (newest ?? { id: 0, hash: GENESIS });
       const unhashed = {
         id: prev.id + 1,
         at,
@@ -247,7 +268,7 @@ export class AuditService {
       db.insert(auditEvents)
         .values({ ...unhashed, ip, hash })
         .run();
-      this.#setLink(HEAD_KEY, unhashed.id, hash);
+      if (trusted) this.#setLink(HEAD_KEY, unhashed.id, hash);
       if (input.actorLabel !== undefined) {
         this.#actor(input.actorId, input.actorLabel);
       }
@@ -284,11 +305,13 @@ export class AuditService {
     if (query.serverId !== undefined) {
       conditions.push(eq(auditEvents.serverId, query.serverId));
     }
+    // Stored times carry milliseconds (toISOString), so the bounds are
+    // compared in the same form.
     if (query.from !== undefined) {
-      conditions.push(gte(auditEvents.at, query.from));
+      conditions.push(gte(auditEvents.at, isoTime(query.from)));
     }
     if (query.to !== undefined) {
-      conditions.push(lte(auditEvents.at, query.to));
+      conditions.push(lte(auditEvents.at, isoTime(query.to)));
     }
     return conditions;
   }

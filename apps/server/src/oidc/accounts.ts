@@ -9,7 +9,7 @@ import type { EntitlementGate } from "@dialwarden/entitlement";
 import { and, count, eq } from "drizzle-orm";
 import type { ActivityService } from "../activity/service.js";
 import type { SessionService } from "../auth/sessions.js";
-import { userGrants, users } from "../db/schema.js";
+import { apiTokens, userGrants, users } from "../db/schema.js";
 import type { Store } from "../db/store.js";
 import { ApiError, limitReached } from "../http/errors.js";
 import type { AssignableRole } from "../team/roles.js";
@@ -73,7 +73,10 @@ export class OidcAccounts {
    */
   refused(issuer: string, subject: string): void {
     const row = this.#linked(issuer, subject);
-    if (row !== null) this.#sessions.destroyForUser(row.id);
+    if (row === null) return;
+    this.#sessions.destroyForUser(row.id);
+    // The API tokens end with the sessions: no mapped group, no access (L2).
+    this.#store.db.delete(apiTokens).where(eq(apiTokens.userId, row.id)).run();
   }
 
   /** The account of a login: found by issuer and subject, or made. */

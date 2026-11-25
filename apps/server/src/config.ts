@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { isIP } from "node:net";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import ipaddr from "ipaddr.js";
 import { z } from "zod";
 
 export interface AppConfig {
@@ -77,9 +78,22 @@ const hex64 = (name: string, value: string | undefined): string | null => {
 };
 
 /**
+ * An IPv6 range that lies inside ::/80 (the IPv4-mapped ::ffff:0:0/96 and
+ * the old IPv4-compatible ::/96 included). The proxy check compares an IPv4
+ * peer with an IPv6 range in its mapped form, so such a range is an IPv4
+ * range in disguise.
+ */
+function insideLow80(address: string): boolean {
+  const bytes = ipaddr.IPv6.parse(address).toByteArray();
+  return bytes.slice(0, 10).every((byte) => byte === 0);
+}
+
+/**
  * An IP address or CIDR range. A wide range trusts nearly everyone, like a
  * wildcard: IPv4 ranges need at least /8 and IPv6 ranges at least /32 (D22),
- * so 0.0.0.0/0 and pairs such as 0.0.0.0/1 plus 128.0.0.0/1 are refused.
+ * so 0.0.0.0/0 and pairs such as 0.0.0.0/1 plus 128.0.0.0/1 are refused. An
+ * IPv6 range inside ::/80 holds IPv4 peers, so it needs at least /104 (an
+ * IPv4 /8): ::ffff:0:0/96 or ::/32 would trust every IPv4 client.
  */
 function proxyEntry(entry: string): boolean {
   if (!PROXY_ENTRY.test(entry)) return false;
@@ -88,7 +102,9 @@ function proxyEntry(entry: string): boolean {
   if (kind === 0) return false;
   if (prefix === undefined) return true;
   const bits = Number(prefix);
-  return kind === 4 ? bits >= 8 && bits <= 32 : bits >= 32 && bits <= 128;
+  if (kind === 4) return bits >= 8 && bits <= 32;
+  const least = insideLow80(address) ? 104 : 32;
+  return bits >= least && bits <= 128;
 }
 
 /** IP addresses and CIDR ranges only; a wildcard is refused. */

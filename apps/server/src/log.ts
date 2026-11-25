@@ -3,7 +3,7 @@
 // Request bodies are never logged; the redaction also covers objects the code
 // logs on purpose, up to three levels deep. Logged errors keep their name,
 // code and stack, but database query parameters are cut from the message.
-import type { FastifyServerOptions } from "fastify";
+import type { FastifyRequest, FastifyServerOptions } from "fastify";
 
 const SECRET_FIELDS = [
   "authorization",
@@ -89,6 +89,38 @@ export function serializeError(error: unknown, depth = 0): SerializedError {
   return out;
 }
 
+/** The OIDC callback carries the code and state in its query (L9). */
+const QUERY_HIDDEN = ["/api/v1/auth/oidc/callback"];
+
+/** A request URL as logged: no query on the paths that carry a secret. */
+export function loggedUrl(url: string): string {
+  const mark = url.indexOf("?");
+  if (mark < 0) return url;
+  const path = url.slice(0, mark);
+  return QUERY_HIDDEN.includes(path) ? `${path}?[redacted]` : url;
+}
+
+interface RequestLine {
+  method: string;
+  url: string;
+  host: string;
+  remoteAddress: string;
+  remotePort?: number;
+}
+
+/** Fastify's default req serializer, with the URL of loggedUrl. */
+export function serializeRequest(request: FastifyRequest): RequestLine {
+  const line: RequestLine = {
+    method: request.method,
+    url: loggedUrl(request.url),
+    host: request.host,
+    remoteAddress: request.ip,
+  };
+  const port = request.socket.remotePort;
+  if (port !== undefined) line.remotePort = port;
+  return line;
+}
+
 /** Logger options; stream is for tests that read the log lines. */
 export function loggerOptions(
   level: string,
@@ -103,6 +135,7 @@ export function loggerOptions(
         const out = serializeError(error);
         return { ...out, stack: out.stack ?? "" };
       },
+      req: serializeRequest,
     },
     ...(stream === undefined ? {} : { stream }),
   };

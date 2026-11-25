@@ -7,6 +7,7 @@
 // contract C1 is checked at the accept, when the user is added.
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { ApiError } from "../http/errors.js";
 import {
   emailSchema,
   newPasswordSchema,
@@ -54,6 +55,8 @@ export function invitationRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      // While OIDC is on, people join through the provider (L1, O-28).
+      if (app.ctx.oidc.active()) throw new ApiError(409, "oidc_active");
       const made = team().invite(principalOf(request), request.body);
       void reply.code(201);
       return made;
@@ -99,6 +102,9 @@ export function invitationRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
+      // Only the owner signs in with a password while OIDC is on (O-28); an
+      // invitation made before stays open for after OIDC is turned off.
+      if (app.ctx.oidc.active()) throw new ApiError(403, "sso_required");
       const user = await team().accept(request.body, request.ip);
       void reply.code(201);
       return startSession(app, request, reply, {

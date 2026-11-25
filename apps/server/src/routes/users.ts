@@ -167,16 +167,11 @@ export function userRoutes(app: FastifyInstance): void {
   api.get(
     "/api/v1/users/:id/export",
     {
-      config: admin,
+      config: { auth: "owner", tokens: false },
       schema: { tags: ["users", "privacy"], params: idParams },
     },
     async (request, reply) => {
-      const actor = principalOf(request);
       const target = team().require(request.params.id);
-      if (target.role === "owner" && actor.storedRole !== "owner") {
-        throw new ApiError(403, "cannot_change_owner");
-      }
-      if (actor.role !== "owner") throw new ApiError(403, "forbidden");
       return sendExport(reply, team().exportOf(target.id));
     },
   );
@@ -194,7 +189,9 @@ export function userRoutes(app: FastifyInstance): void {
   );
 
   // A reset link made by the owner (D21): public, the value is the proof.
-  // The use signs the user in, like a login does (S-05).
+  // The use signs the user in, like a login does (S-05), unless a second
+  // factor is on or OIDC is on: then the password is set and the answer is
+  // 204 without a session, so TOTP and the provider still apply (M1, L1).
   api.post(
     "/api/v1/auth/password-reset",
     {
@@ -205,11 +202,14 @@ export function userRoutes(app: FastifyInstance): void {
           token: z.string().min(1).max(200),
           password: newPasswordSchema,
         }),
-        response: { 200: signedInSchema },
+        response: { 200: signedInSchema, 204: z.null() },
       },
     },
     async (request, reply) => {
       const user = await team().useReset(request.body, request.ip);
+      if (user.totpSecretEnc !== null || app.ctx.oidc.active()) {
+        return reply.code(204).send();
+      }
       return startSession(app, request, reply, {
         id: user.id,
         email: user.email,

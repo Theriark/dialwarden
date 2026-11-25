@@ -77,9 +77,18 @@ export interface Principal {
   tokenId: string | null;
 }
 
-/** True when the principal sees every server (owner and admin users). */
+/**
+ * True when the principal sees every server: an owner or admin user acting
+ * with that role. On the Free fallback a stored admin acts as a viewer and
+ * sees only their granted servers. A token works only on Paid (T-08), where
+ * its creator acts with the stored role; its scope caps what it may do on a
+ * server (serverLevel), not which servers its creator sees, so a read-only
+ * token of the owner still reads every server.
+ */
 export function seesEveryServer(principal: Principal): boolean {
-  return principal.storedRole === "owner" || principal.storedRole === "admin";
+  const acting =
+    principal.via === "token" ? principal.storedRole : principal.role;
+  return atLeast(acting, "admin");
 }
 
 /**

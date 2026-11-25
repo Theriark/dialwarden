@@ -105,7 +105,10 @@ export function oidcRoutes(app: FastifyInstance): void {
       },
     },
     async (request, reply) => {
-      const { url, state } = await app.ctx.oidc.start(request.query.returnTo);
+      const { url, state } = await app.ctx.oidc.start(
+        request.query.returnTo,
+        request.ip,
+      );
       setTransactionCookie(app, reply, state);
       return reply.redirect(url, 302);
     },
