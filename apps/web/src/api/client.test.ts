@@ -108,6 +108,20 @@ describe("api client", () => {
     );
   });
 
+  it("names the role rule behind each 403 of a write (live check F2)", () => {
+    // Since P8 every role may write something: forbidden is the role, not
+    // the owner; the raw and shell-file rules name the admin.
+    expect(errorMessage(new ApiError(403, { error: "forbidden" }))).toBe(
+      "Your role does not allow this.",
+    );
+    expect(
+      errorMessage(new ApiError(403, { error: "raw_requires_admin" })),
+    ).toBe("Raw text edits need the owner or an admin.");
+    expect(
+      errorMessage(new ApiError(403, { error: "shell_file_requires_admin" })),
+    ).toBe("Restoring a launch or shell file needs the owner or an admin.");
+  });
+
   it("says in plain words that a preset changes nothing", () => {
     // A preset whose values the server already holds answers 422
     // no_change (live check F11).

@@ -6,7 +6,12 @@ const MESSAGES = new Map<string, string>([
   ["network", "The server could not be reached. Check the connection."],
   ["invalid_credentials", "The e-mail address or password is wrong."],
   ["unauthenticated", "Sign in to continue."],
-  ["forbidden", "Only the owner can do this."],
+  ["forbidden", "Your role does not allow this."],
+  ["raw_requires_admin", "Raw text edits need the owner or an admin."],
+  [
+    "shell_file_requires_admin",
+    "Restoring a launch or shell file needs the owner or an admin.",
+  ],
   ["csrf", "The page is out of date. Reload it and try again."],
   ["challenge_expired", "The sign-in step expired. Start again."],
   ["invalid_code", "The code is wrong or was already used."],

@@ -10,7 +10,6 @@ import { useParams } from "@tanstack/react-router";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   ChevronDown,
-  Eye,
   EyeOff,
   FileWarning,
   Search,
@@ -34,7 +33,12 @@ import {
 } from "../api/queries";
 import { PageHeader } from "../components/layout/page-header";
 import { SettingField } from "../components/editor/setting-field";
+import { ReadOnlyNotice } from "../components/read-only-notice";
 import { SaveDialog } from "../components/save-dialog";
+import {
+  isServerMissing,
+  ServerMissingState,
+} from "../components/server-missing";
 import { ServerTabs } from "../components/server-tabs";
 import { UpgradeHint } from "../components/upgrade-hint";
 import { Alert } from "../components/ui/alert";
@@ -53,7 +57,6 @@ import { issuesOf, packOf, settingsByKey } from "../lib/pack";
 import { cn } from "../lib/cn";
 import type { ChangeSet } from "../api/schema";
 import { useSessionUser } from "../api/session";
-import { roleWord } from "../components/role-badge";
 import { useMediaQuery } from "../lib/use-media-query";
 
 /**
@@ -316,6 +319,10 @@ export function ServerSettingsPage() {
     );
   }
 
+  if (isServerMissing(settings.error) || isServerMissing(server.error)) {
+    return <ServerMissingState />;
+  }
+
   if (settings.isError || server.isError || meta.isError) {
     return (
       <ErrorState
@@ -381,15 +388,12 @@ export function ServerSettingsPage() {
       />
       <ServerTabs slug={slug} current="settings" />
       {canWrite ? null : (
-        <Alert kind="info" className="mb-4">
-          <span className="flex items-center gap-2">
-            <Eye className="size-4 shrink-0" aria-hidden="true" />
-            You are signed in as{" "}
-            {roleWord(user?.role ?? "viewer").toLowerCase()}: you read these
-            settings. The owner, an admin or an editor with write access changes
-            them.
-          </span>
-        </Alert>
+        <ReadOnlyNotice
+          role={user?.role ?? "viewer"}
+          reads="these settings"
+          writes="changes them"
+          className="mb-4"
+        />
       )}
       {planEditable ? null : (
         <div className="mb-4 flex flex-col gap-2">

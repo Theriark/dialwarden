@@ -142,13 +142,26 @@ function SignInFacts({ user }: { user: UserView }) {
   );
 }
 
+/**
+ * The grants as the acting role reads them: a viewer reads at most, so a
+ * stored editor acting as a viewer on the Free fallback holds its write
+ * grants but reads those servers until a licence returns the role.
+ */
+export function actingGrants(user: UserView): Grant[] {
+  if (user.effectiveRole !== "viewer") {
+    return [...user.grants];
+  }
+  return user.grants.map((grant) => ({ ...grant, level: "read" }));
+}
+
 function AccessWords({ user }: { user: UserView }) {
   // The acting role decides the reach: a stored admin acting as a viewer on
-  // the Free fallback sees only its grants, as the server answers.
+  // the Free fallback sees only its grants, as the server answers, and a
+  // stored editor reads them (live check F4).
   if (user.effectiveRole === "owner" || user.effectiveRole === "admin") {
     return <span className="text-fg">Every server</span>;
   }
-  return <span className="text-fg">{describeGrants(user.grants)}</span>;
+  return <span className="text-fg">{describeGrants(actingGrants(user))}</span>;
 }
 
 interface RowActions {

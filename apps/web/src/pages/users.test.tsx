@@ -16,7 +16,7 @@ import {
   type Handler,
 } from "../test/render";
 import { startRouter } from "../test/start";
-import { assignableFor, inFallback, manageable } from "./users";
+import { actingGrants, assignableFor, inFallback, manageable } from "./users";
 
 afterEach(resetAfterEach);
 
@@ -145,6 +145,14 @@ describe("UsersPage", () => {
     expect(manageable(owner, user("u5", "admin"))).toBe(true);
     expect(inFallback(FREE_USERS[1] as UserView)).toBe(true);
     expect(inFallback(PAID_USERS[1] as UserView)).toBe(false);
+    // The access follows the acting role (live check F4): a stored editor
+    // acting as a viewer reads its write grants; on Paid they stay writes.
+    expect(actingGrants(FREE_USERS[2] as UserView)).toEqual([
+      { server: "home", level: "read" },
+    ]);
+    expect(actingGrants(PAID_USERS[2] as UserView)).toEqual([
+      { server: "home", level: "write" },
+    ]);
   });
 
   it("shows the Free fallback: acting-as-viewer badges, the reason and the hints", async () => {
@@ -172,6 +180,15 @@ describe("UsersPage", () => {
     expect(
       screen.getByText("Stored roles paused on the Free plan"),
     ).toBeDefined();
+    // The Access column of the editor follows the acting role (F4): its
+    // write grant on Home reads as read while the role is paused.
+    const table = screen.getByRole("table", { name: "Users" });
+    const editorRow = within(table).getByText("u3 person").closest("tr");
+    expect(editorRow).not.toBeNull();
+    expect(
+      within(editorRow as HTMLElement).getByText("1 server, read only"),
+    ).toBeDefined();
+    expect(screen.queryByText("1 server, 1 for writing")).toBeNull();
   });
 
   it("refuses a role change on Free with the hint inside the dialog", async () => {
@@ -236,6 +253,8 @@ describe("UsersPage", () => {
     startRouter("/users");
     await screen.findByRole("table", { name: "Users" });
     expect(screen.queryByText("Acts as viewer on Free")).toBeNull();
+    // On Paid the editor's write grant reads as a write (F4).
+    expect(screen.getByText("1 server, 1 for writing")).toBeDefined();
     expect(screen.getByText(/No open invitation/)).toBeDefined();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Invite" }));
