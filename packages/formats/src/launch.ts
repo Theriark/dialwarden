@@ -546,7 +546,9 @@ function insertArg(
       );
       const ahead = chainArgs.find((arg) => wanted.has(arg.name.toLowerCase()));
       const char =
-        ahead === undefined ? undefined : chain.chars[ahead.option!.start];
+        ahead?.option === undefined
+          ? undefined
+          : chain.chars[ahead.option.start];
       if (ahead !== undefined && char !== undefined) {
         // Same rule as the chain end below: inside the word the option is
         // written raw when the chain is unquoted, escaped inside quotes.

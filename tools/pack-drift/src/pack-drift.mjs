@@ -152,7 +152,7 @@ export function packDrift(packDir, defaultsDir) {
       .sort();
     const removed = [];
     const changed = [];
-    for (const [key, setting] of own) {
+    for (const setting of own.values()) {
       // A key the pack itself says this game version ignores never counts
       // as drift.
       if (setting.removedIn !== undefined) continue;
