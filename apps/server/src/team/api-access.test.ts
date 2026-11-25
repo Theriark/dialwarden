@@ -1,25 +1,32 @@
-// API tokens (dev-work-plan P8-A step 6 and its token scope test): the value
-// is shown once and only its hash is stored, a token acts with a role no
-// higher than its creator's (now, not only when it was made), it never
+// API tokens (dev-work-plan P8-A step 6; p8-threat-specs T-01 to T-13): the
+// value is shown once and only its hash is stored, a token acts with a role
+// no higher than its creator's (now, not only when it was made), it never
 // reaches an identity route (D15), a bad, revoked or erased token answers
 // 401, and on the Free fallback tokens stop and come back after a switch to
 // Paid. The tests share one fixture and run in order.
 import { createHash, randomUUID } from "node:crypto";
+import { Writable } from "node:stream";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { apiTokens, auditEvents } from "../db/schema.js";
 import type { RouteInfo } from "../http/context.js";
 import { tokenAllowed } from "../http/guard.js";
-import type { SignedIn } from "../../test/helpers.js";
+import { setupOwner, type SignedIn } from "../../test/helpers.js";
 import {
   call,
   INT_SETTING,
+  inviteAndAccept,
+  paidApp,
   teamFixture,
   toFree,
   toPaid,
   type TeamFixture,
 } from "../../test/team.js";
-import { TOKEN_VALUE } from "./api-access.js";
+import {
+  MAX_TOKENS_PER_USER,
+  TOKEN_PREFIX,
+  TOKEN_VALUE,
+} from "./api-access.js";
 
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -86,6 +93,21 @@ const deniedRoute = (route: RouteInfo): boolean =>
   !tokenAllowed(route.url, route.tokens);
 
 describe("API tokens", () => {
+  it("T-02 stores the token in no text column of any table", async () => {
+    const made = await makeToken(fixture.owner, "viewer");
+    const sqlite = fixture.app.ctx.store.sqlite;
+    const tables = sqlite
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as { name: string }[];
+    expect(tables.length).toBeGreaterThan(5);
+    for (const { name } of tables) {
+      const rows = sqlite.prepare(`SELECT * FROM "${name}"`).all();
+      expect(JSON.stringify(rows), name).not.toContain(made.token);
+      expect(JSON.stringify(rows), name).not.toContain(
+        made.token.slice(TOKEN_PREFIX.length),
+      );
+    }
+  });
   it("shows the value once and stores only its SHA-256", async () => {
     const response = await create(fixture.owner, "admin", "ci");
     expect(response.statusCode).toBe(201);
@@ -216,6 +238,10 @@ describe("API tokens", () => {
     expect(ofOwner.statusCode).toBe(404);
     const byAdmin = await call(app, admin, "DELETE", tokenUrl(mine.id));
     expect(byAdmin.statusCode).toBe(204);
+    // T-05: the owner may revoke any token.
+    const ofEditor = await makeToken(editor, "editor");
+    const byOwner = await call(app, owner, "DELETE", tokenUrl(ofEditor.id));
+    expect(byOwner.statusCode).toBe(204);
   });
 
   it("names the token id in the audit log, never the value", async () => {
@@ -275,5 +301,195 @@ describe("API tokens", () => {
     expect((await bearer(made.token, "GET", onB)).statusCode).toBe(404);
     const refused = await bearer(made.token, "GET", audit);
     expect(refused.statusCode).toBe(403);
+  });
+
+  it("T-06 follows the creator's grants down on every request", async () => {
+    const { app, owner, servers } = fixture;
+    // A fresh admin: the fixture admin was demoted by the test before.
+    const admin = await inviteAndAccept(app, owner, "admin");
+    const made = await makeToken(admin, "admin");
+    const hooks = `/api/v1/servers/${servers.a}/hooks`;
+    const urlA = changeSetsOf(servers.a);
+    const urlB = changeSetsOf(servers.b);
+    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(200);
+    const written = await bearer(made.token, "POST", urlA, editsOf(21));
+    expect(written.statusCode).toBe(201);
+    const grants = `/api/v1/users/${admin.userId}/grants`;
+    const roleUrl = `/api/v1/users/${admin.userId}/role`;
+    expect(
+      (await call(app, owner, "PUT", roleUrl, { role: "editor" })).statusCode,
+    ).toBe(200);
+    expect(
+      (await call(app, owner, "PUT", grants, { servers: [] })).statusCode,
+    ).toBe(200);
+    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(403);
+    const onB = await bearer(made.token, "POST", urlB, editsOf(22));
+    expect(onB.statusCode).toBe(404);
+    expect(onB.json()).toMatchObject({ error: "server_not_found" });
+    const grant = { servers: [{ server: servers.a, level: "write" }] };
+    expect((await call(app, owner, "PUT", grants, grant)).statusCode).toBe(200);
+    const again = await bearer(made.token, "POST", urlA, editsOf(23));
+    expect(again.statusCode).toBe(201);
+    expect(
+      (await call(app, owner, "PUT", roleUrl, { role: "viewer" })).statusCode,
+    ).toBe(200);
+    const last = await bearer(made.token, "POST", urlA, editsOf(24));
+    expect(last.statusCode).toBe(403);
+  });
+
+  it("T-08 answers 402 on Free before any lookup, for any value", async () => {
+    const { app, editor } = fixture;
+    const made = await makeToken(editor, "viewer");
+    await toFree(app, fixture.owner);
+    const refused = await bearer(made.token, "GET", "/api/v1/servers");
+    expect(refused.statusCode).toBe(402);
+    expect(refused.json()).toEqual({
+      error: "payment_required",
+      plan: "free",
+      feature: "apiTokens",
+    });
+    const random = await bearer(
+      `dw_${"z".repeat(43)}`,
+      "GET",
+      "/api/v1/servers",
+    );
+    expect(random.statusCode).toBe(402);
+    expect(random.json()).toEqual({
+      error: "payment_required",
+      plan: "free",
+      feature: "apiTokens",
+    });
+    await toPaid(app, fixture.owner);
+  });
+
+  it("T-10 refuses a token together with a session cookie", async () => {
+    const made = await makeToken(fixture.editor, "editor");
+    const headers = {
+      authorization: `Bearer ${made.token}`,
+      cookie: fixture.editor.cookie,
+      "x-csrf-token": fixture.editor.csrf,
+    };
+    const response = await fixture.app.inject({
+      method: "POST",
+      url: changeSetsOf(fixture.servers.a),
+      headers,
+      payload: editsOf(25),
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "ambiguous_credentials" });
+    const alone = await bearer(
+      made.token,
+      "POST",
+      changeSetsOf(fixture.servers.a),
+      editsOf(26),
+    );
+    expect(alone.statusCode).toBe(201);
+  });
+
+  it("T-11 never reads a token from the query string", async () => {
+    const made = await makeToken(fixture.editor, "viewer");
+    const response = await fixture.app.inject({
+      method: "GET",
+      url: `/api/v1/servers?token=${made.token}&access_token=${made.token}`,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it("T-12 answers 401 for a malformed Authorization header", async () => {
+    const { app } = fixture;
+    const url = "/api/v1/servers";
+    const headers = [
+      { authorization: "Bearer" },
+      { authorization: "Bearer " },
+      { authorization: `Bearer  ${"a".repeat(41)}` },
+      { authorization: "Basic dXNlcjpwYXNz" },
+      { authorization: `Bearer ${"a".repeat(10 * 1024)}` },
+    ];
+    for (const header of headers) {
+      const response = await app.inject({
+        method: "GET",
+        url,
+        headers: header,
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({ error: "invalid_token" });
+    }
+  });
+
+  it("T-13 gives every token the product prefix and random bytes", async () => {
+    const { editor, loner } = fixture;
+    const values = new Set<string>();
+    for (const user of [editor, loner]) {
+      for (let index = 0; index < MAX_TOKENS_PER_USER; index += 1) {
+        const made = await makeToken(user, "viewer", `many-${index}`);
+        expect(made.token).toMatch(TOKEN_VALUE);
+        values.add(made.token);
+      }
+    }
+    expect(values.size).toBe(2 * MAX_TOKENS_PER_USER);
+    const limit = await create(fixture.editor, "viewer", "over");
+    expect(limit.statusCode).toBe(409);
+  });
+
+  it("T-07 ends with a deleted creator", async () => {
+    const { app, owner, loner } = fixture;
+    const made = await makeToken(loner, "viewer");
+    const url = `/api/v1/users/${loner.userId}`;
+    expect((await call(app, owner, "DELETE", url)).statusCode).toBe(204);
+    expect(
+      (await bearer(made.token, "GET", "/api/v1/servers")).statusCode,
+    ).toBe(401);
+  });
+
+  it("T-03 never writes the token to the log stream", async () => {
+    const lines: string[] = [];
+    const current = await paidApp({
+      logStream: new Writable({
+        write(chunk: unknown, _encoding: BufferEncoding, done: () => void) {
+          lines.push(String(chunk));
+          done();
+        },
+      }),
+      extraEnv: { LOG_LEVEL: "info" },
+      extend: (app) => {
+        app.get("/api/v1/test/boom", { config: { auth: "user" } }, async () => {
+          throw new Error("boom");
+        });
+      },
+    });
+    try {
+      const owner = await setupOwner(current.app);
+      const response = await call(
+        current.app,
+        owner,
+        "POST",
+        "/api/v1/tokens",
+        { name: "logged", role: "viewer" },
+      );
+      expect(response.statusCode).toBe(201);
+      const { token } = response.json<{ token: string }>();
+      const get = (value: string, url: string) =>
+        current.app.inject({
+          method: "GET",
+          url,
+          headers: { authorization: `Bearer ${value}` },
+        });
+      const codes = [
+        await get(token, "/api/v1/servers"),
+        await get("dw_broken", "/api/v1/servers"),
+        await get(token, "/api/v1/test/boom"),
+      ];
+      expect(codes.map((item) => item.statusCode)).toEqual([200, 401, 500]);
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) {
+        expect(line).not.toContain(token);
+      }
+      const audit = current.app.ctx.store.sqlite
+        .prepare('SELECT * FROM "audit_events"')
+        .all();
+      expect(JSON.stringify(audit)).not.toContain(token);
+    } finally {
+      await current.close();
+    }
   });
 });
