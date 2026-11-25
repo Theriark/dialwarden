@@ -196,7 +196,7 @@ describe("seed-accounts", () => {
         await addServer(api, name, await palworldFolder(base, name)),
       );
     }
-    const { calls, deps, text } = harness(app);
+    const { calls, deps, requests, text } = harness(app);
     deps.env = {
       DIALWARDEN_DEV_OWNER_EMAIL: owner.email,
       DIALWARDEN_DEV_OWNER_PASSWORD: owner.password,
@@ -204,6 +204,16 @@ describe("seed-accounts", () => {
     const args = ["--base-url", DEV_URL, "--env", "dev", "--team"];
     const code = await main(args, deps);
     expect(code, text()).toBe(0);
+    // L10: the owner session the tool opened ends with the run.
+    const last = requests.at(-1);
+    expect(last?.method).toBe("POST");
+    expect(last?.pathname).toBe("/api/v1/auth/logout");
+    const ended = await app.inject({
+      method: "GET",
+      url: "/api/v1/auth/session",
+      headers: { cookie: last?.init.headers.cookie },
+    });
+    expect(ended.statusCode).toBe(401);
     const labels = calls.map((sent) => valueOf(sent, "--label"));
     expect(labels).toEqual(["admin", "editor", "viewer"]);
     expect(text()).not.toContain(owner.password);

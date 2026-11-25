@@ -343,8 +343,9 @@ export async function seedTeam(options, deps) {
     );
     return 2;
   }
+  let session = null;
   try {
-    const session = await ownerSession(baseUrl, { email, password }, fetchImpl);
+    session = await ownerSession(baseUrl, { email, password }, fetchImpl);
     const call = (method, path, payload) =>
       requestJson(
         fetchImpl,
@@ -377,7 +378,7 @@ export async function seedTeam(options, deps) {
         role: account.label,
         grants,
       });
-      if (invited.status === 409) {
+      if (invited.status === 409 && invited.body?.error === "user_exists") {
         stdout.write(`seed: ${account.label} exists already; left alone\n`);
         continue;
       }
@@ -428,5 +429,18 @@ export async function seedTeam(options, deps) {
   } catch (error) {
     stderr.write(`seed: ${String(error.message).slice(0, 300)}\n`);
     return 1;
+  } finally {
+    // The owner session the tool opened ends with the run.
+    if (session !== null) {
+      await requestJson(
+        fetchImpl,
+        `${baseUrl}/api/v1/auth/logout`,
+        {
+          method: "POST",
+          headers: { cookie: session.cookie, "x-csrf-token": session.csrf },
+        },
+        15_000,
+      ).catch(() => undefined);
+    }
   }
 }
