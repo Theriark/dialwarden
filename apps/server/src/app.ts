@@ -20,6 +20,7 @@ import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
 import { bootstrapOwner, openFirstRunSetup } from "./auth/bootstrap.js";
 import { SetupToken } from "./auth/first-run.js";
+import { LoginLimiter } from "./auth/limiter.js";
 import { AuthService } from "./auth/service.js";
 import { SessionService } from "./auth/sessions.js";
 import { BackupService } from "./backup/service.js";
@@ -53,13 +54,16 @@ import { connectorRoutes } from "./routes/connectors.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { hookRoutes } from "./routes/hooks.js";
+import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
 import { presetRoutes } from "./routes/presets.js";
 import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
+import { userRoutes } from "./routes/users.js";
 import { seedDemoServers } from "./servers/demo.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
+import { TeamService } from "./team/service.js";
 import { VERSION } from "./version.js";
 
 export { VERSION };
@@ -82,6 +86,11 @@ export interface BuildOptions {
   buildInfoFile?: string;
   /** Where the first-run setup line goes (default standard output). */
   out?: NodeJS.WritableStream;
+  /**
+   * Tests only, never read from the environment: requests that carry the
+   * role-matrix header answer 299 once every access check passed.
+   */
+  authProbe?: boolean;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -237,6 +246,19 @@ export async function buildApp(
     entitlement,
     now,
   });
+  // One login limiter for sign-in, invitation accepts and reset links, so
+  // failed attempts of every kind count against the same client address.
+  const limiter = new LoginLimiter(() => now().getTime());
+  const sessions = new SessionService(store, now);
+  const team = new TeamService({
+    store,
+    activity,
+    entitlement,
+    sessions,
+    limiter,
+    baseUrl: config.baseUrl,
+    now,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -249,8 +271,8 @@ export async function buildApp(
     licences,
     entitlement,
     editable,
-    sessions: new SessionService(store, now),
-    auth: new AuthService({ store, aead, activity, now }),
+    sessions,
+    auth: new AuthService({ store, aead, activity, now, limiter }),
     setupToken: new SetupToken(config.dataDir),
     backups: new BackupService({
       store,
@@ -269,6 +291,7 @@ export async function buildApp(
     changes,
     presets,
     snapshots,
+    team,
     maintenance: false,
     importing: false,
     routes: [],
@@ -287,6 +310,8 @@ export async function buildApp(
         url: route.url,
         auth: route.config?.auth ?? null,
         entitlement: route.config?.entitlement ?? null,
+        server: route.config?.server ?? null,
+        tokens: route.config?.tokens ?? true,
       });
     }
   });
@@ -317,7 +342,7 @@ export async function buildApp(
     },
     transform: openApiTransform,
   });
-  registerGuard(app);
+  registerGuard(app, { authProbe: options.authProbe === true });
   // Contract C8: the built web app (none in tests and API-only runs) and the
   // security headers of every response.
   const web = loadWebDist(config.webDist, app.log);
@@ -334,6 +359,8 @@ export async function buildApp(
   changeRoutes(app);
   presetRoutes(app);
   hookRoutes(app);
+  userRoutes(app);
+  invitationRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
