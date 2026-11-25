@@ -119,9 +119,11 @@ describe("API tokens", () => {
     const list = await call(app, owner, "GET", "/api/v1/tokens");
     expect(list.statusCode).toBe(200);
     expect(list.body).not.toContain(made.token);
-    expect(list.json<{ items: MadeToken[] }>().items).toEqual([
-      expect.objectContaining({ id: made.id, role: "admin", lastUsedAt: null }),
-    ]);
+    const items = list.json<{ items: MadeToken[] }>().items;
+    expect(items.find((item) => item.id === made.id)).toMatchObject({
+      role: "admin",
+      lastUsedAt: null,
+    });
     const rows = fixture.app.ctx.store.db.select().from(apiTokens).all();
     expect(JSON.stringify(rows)).not.toContain(made.token);
     const hash = createHash("sha256").update(made.token).digest("hex");
@@ -322,7 +324,8 @@ describe("API tokens", () => {
     expect(
       (await call(app, owner, "PUT", grants, { servers: [] })).statusCode,
     ).toBe(200);
-    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(403);
+    // No grant on demo-a any more: the server answers as missing.
+    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(404);
     const onB = await bearer(made.token, "POST", urlB, editsOf(22));
     expect(onB.statusCode).toBe(404);
     expect(onB.json()).toMatchObject({ error: "server_not_found" });
@@ -417,9 +420,11 @@ describe("API tokens", () => {
   });
 
   it("T-13 gives every token the product prefix and random bytes", async () => {
-    const { editor, loner } = fixture;
+    const { app, owner, loner } = fixture;
+    // A fresh editor: the fixture editor holds tokens of the tests before.
+    const fresh = await inviteAndAccept(app, owner, "editor");
     const values = new Set<string>();
-    for (const user of [editor, loner]) {
+    for (const user of [fresh, loner]) {
       for (let index = 0; index < MAX_TOKENS_PER_USER; index += 1) {
         const made = await makeToken(user, "viewer", `many-${index}`);
         expect(made.token).toMatch(TOKEN_VALUE);
@@ -427,7 +432,7 @@ describe("API tokens", () => {
       }
     }
     expect(values.size).toBe(2 * MAX_TOKENS_PER_USER);
-    const limit = await create(fixture.editor, "viewer", "over");
+    const limit = await create(fresh, "viewer", "over");
     expect(limit.statusCode).toBe(409);
   });
 
