@@ -50,6 +50,7 @@ import { loggerOptions } from "./log.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
 import { activityRoutes } from "./routes/activity.js";
+import { apiAccessRoutes } from "./routes/api-access.js";
 import { auditRoutes } from "./routes/audit.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
@@ -66,6 +67,7 @@ import { userRoutes } from "./routes/users.js";
 import { seedDemoServers } from "./servers/demo.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
+import { TokenService } from "./team/api-access.js";
 import { TeamService } from "./team/service.js";
 import { VERSION } from "./version.js";
 
@@ -296,6 +298,7 @@ export async function buildApp(
     presets,
     snapshots,
     team,
+    tokens: new TokenService({ store, entitlement, now }),
     audit,
     maintenance: false,
     importing: false,
@@ -366,6 +369,7 @@ export async function buildApp(
   presetRoutes(app);
   hookRoutes(app);
   userRoutes(app);
+  apiAccessRoutes(app);
   invitationRoutes(app);
   auditRoutes(app);
   app.get(
