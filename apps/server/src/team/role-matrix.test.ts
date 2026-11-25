@@ -109,7 +109,7 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "DELETE /api/v1/users/:id": "admin",
   "POST /api/v1/users/:id/anonymise": "admin",
   "POST /api/v1/users/:id/password-reset": "admin",
-  "GET /api/v1/users/:id/export": "admin",
+  "GET /api/v1/users/:id/export": "owner",
   "GET /api/v1/me/export": "user",
   "POST /api/v1/invitations": "admin",
   "GET /api/v1/invitations": "admin",
