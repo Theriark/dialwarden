@@ -79,18 +79,14 @@ describe.each(PACKS)("%s pack", (id) => {
   });
 
   it("covers every file of the pack", () => {
-    const rawOnly = new Set(RAW_ONLY[pack.id] ?? []);
-    const withSettings = pack.settings
-      .map((setting) => setting.file)
-      .filter((fileId) => !rawOnly.has(fileId));
-    expect([...new Set(withSettings)].sort()).toEqual(
-      pack.files
-        .map((file) => file.id)
-        .filter((fileId) => !rawOnly.has(fileId))
-        .sort(),
-    );
-    for (const fileId of rawOnly) {
-      expect(pack.files.map((file) => file.id), fileId).toContain(fileId);
+    const rawOnly: readonly string[] = RAW_ONLY[pack.id] ?? [];
+    const fileIds = pack.files.map((file) => file.id);
+    const addressed = new Set(pack.settings.map((setting) => setting.file));
+    for (const fileId of fileIds) {
+      expect(addressed.has(fileId), fileId).toBe(!rawOnly.includes(fileId));
+    }
+    for (const fileId of [...addressed, ...rawOnly]) {
+      expect(fileIds, fileId).toContain(fileId);
     }
   });
 });

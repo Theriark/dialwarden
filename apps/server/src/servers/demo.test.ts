@@ -103,21 +103,19 @@ describe("demo seed", () => {
     // On Free the first three servers are editable: enshrouded, the third,
     // gets the app's change; palworld, the fourth, only the import and the
     // outside edit.
-    const expected = {
-      "demo-enshrouded": ["external", "app", "import"],
-      "demo-palworld": ["external", "import"],
-    };
-    for (const [slug, causes] of Object.entries(expected)) {
+    for (const slug of ["demo-enshrouded", "demo-palworld"]) {
       const past = await history(api, slug);
-      expect(past.entries.map((entry) => entry.cause), slug).toEqual(causes);
+      const causes = past.entries.map((entry) => entry.cause);
+      const app = slug === "demo-enshrouded" ? ["app"] : [];
+      expect(causes, slug).toEqual(["external", ...app, "import"]);
       const statuses = new Set(past.entries.map((entry) => entry.status));
       expect([...statuses], slug).toEqual(["applied"]);
       const [outside] = past.entries;
       expect(outside?.author).toBe("outside the app");
       expect(outside?.chips.length, slug).toBe(1);
     }
-    const made = (await history(api, "demo-enshrouded")).entries.at(1);
-    expect(made?.author).toBe("Dialwarden demo");
+    const enshrouded = await history(api, "demo-enshrouded");
+    expect(enshrouded.entries.at(1)?.author).toBe("Dialwarden demo");
   });
 
   it("adds missing demo servers next to a server that already exists", async () => {
@@ -134,14 +132,12 @@ describe("demo seed", () => {
 
   it("does not touch demo servers that already exist", async () => {
     const first = await start(true);
-    const before = first.ctx.changes.history(
-      first.ctx.servers.require("demo-enshrouded"),
-    );
+    const seeded = first.ctx.servers.require("demo-enshrouded");
+    const before = first.ctx.changes.history(seeded);
     const again = await start(true);
     expect(again.ctx.servers.count()).toBe(7);
-    const after = again.ctx.changes.history(
-      again.ctx.servers.require("demo-enshrouded"),
-    );
+    const kept = again.ctx.servers.require("demo-enshrouded");
+    const after = again.ctx.changes.history(kept);
     expect(after.entries).toHaveLength(before.entries.length);
     expect(after.entries.map((entry) => entry.cause)).toEqual([
       "external",
