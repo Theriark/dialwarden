@@ -1566,7 +1566,10 @@ export class ChangeSetService {
     const visible = limit === null ? rows : rows.slice(0, limit);
     const kept = this.#snapshots.ofChangeSets(visible.map((row) => row.id));
     // The author ids of the visible entries as their display labels (D7).
-    const labels = actorLabels(this.#store, visible.map((row) => row.author));
+    const labels = actorLabels(
+      this.#store,
+      visible.map((row) => row.author),
+    );
     const entries = visible.map((row) => ({
       changeSetId: row.id,
       at: row.appliedAt ?? row.updatedAt,
