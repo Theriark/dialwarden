@@ -136,7 +136,7 @@ export async function checkUrl(
 }
 
 /** A lookup that answers the checked addresses only (no second DNS query). */
-function pinnedLookup(addresses: readonly string[]): LookupFunction {
+export function pinnedLookup(addresses: readonly string[]): LookupFunction {
   const entries = addresses.map((address) => ({
     address,
     family: isIP(address) === 6 ? 6 : 4,
