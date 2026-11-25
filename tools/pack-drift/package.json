@@ -1,0 +1,12 @@
+{
+  "name": "@dialwarden/tools-pack-drift",
+  "version": "27.0.0",
+  "private": true,
+  "description": "Pack drift report (P7): compares a folder of default config files an engineer provides against a pack and writes a Markdown report of new keys, removed keys and changed defaults. Downloads nothing and opens nothing. Never part of the image.",
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pack-drift": "node src/pack-drift.mjs"
+  }
+}
