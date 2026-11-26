@@ -199,10 +199,12 @@ export function hookRoutes(app: FastifyInstance): void {
     },
   );
 
+  // No API token sets a hook (P10-A I4): the SSH command runs on the game
+  // host, so a leaked admin token must not be able to change it.
   api.put(
     "/api/v1/servers/:slug/hooks",
     {
-      config: onSlug("admin"),
+      config: { ...onSlug("admin"), tokens: false },
       schema: {
         tags: ["hooks"],
         params: slugParams,
