@@ -247,6 +247,51 @@ describe("bulk preset apply", () => {
     expect(report).toMatchObject({ applied: 0, failed: 1 });
   });
 
+  // P10-A G3.5 and G4.7: a preset value with a command is never written by
+  // a bulk apply, and a preset secret reaches the drafts only as a mask.
+  it("G3.5 and G4.7 write no command and show no secret in a bulk apply", async () => {
+    const api = apiOf(t.app, t.owner);
+    const made = await api.post("/api/v1/presets", {
+      name: "shell",
+      description: "",
+      packId: "palworld",
+      values: {
+        "Launch.ServerName": "a `touch /tmp/dw-pwn` b",
+        AdminPassword: "MARKER-bulk-secret-7c",
+      },
+    });
+    expect(made.statusCode).toBe(201);
+    const id = made.json<{ id: string }>().id;
+    const launch = "dialwarden-args.txt";
+    const before = await fileText(t.servers.rootA, launch);
+    const drafted = await call(
+      t.app,
+      t.editor,
+      "POST",
+      `/api/v1/presets/${id}/bulk-drafts`,
+      { servers: [t.servers.a] },
+    );
+    expect(drafted.statusCode).toBe(200);
+    expect(drafted.body).not.toContain("MARKER-bulk-secret-7c");
+    const item = drafted.json<{ items: DraftItem[] }>().items[0];
+    const changeSet = item?.changeSet;
+    if (changeSet === null || changeSet === undefined) {
+      // Refused at the draft: the value never reached a change set.
+      expect(item?.error?.code).toMatch(/invalid_value|validation/);
+    } else {
+      const report = (
+        await call(t.app, t.editor, "POST", "/api/v1/presets/bulk-apply", {
+          changeSets: [changeSet.id],
+        })
+      ).json<Report>();
+      expect(report.items[0]).toMatchObject({
+        status: "failed",
+        error: { code: "validation" },
+      });
+    }
+    expect(await fileText(t.servers.rootA, launch)).toBe(before);
+  });
+
   it("answers 402 on Free and works again on Paid", async () => {
     await toFree(t.app, t.owner);
     const free = await drafts(t.owner, [t.servers.a]);

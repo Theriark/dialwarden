@@ -2,6 +2,8 @@
 // P-03): a signed-in user downloads their personal data as JSON, and the file
 // holds profile, grants, sessions, tokens and change sets of that user only —
 // never another person's data and never a credential of any kind.
+import { randomUUID } from "node:crypto";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
 import { afterEach, describe, expect, it } from "vitest";
 import { base32Decode, hotp, totpStep } from "../auth/totp.js";
 import type { TestApp } from "../../test/helpers.js";
@@ -55,6 +57,40 @@ describe("the own-data export (P-01 to P-03)", () => {
     expect(response.body).not.toContain(admin.email);
     expect(response.body).not.toContain(owner.email);
     expect(response.body).toContain(editor.email);
+  });
+
+  // P10-A G4.6: the author of a secret edit gets the edit, masked.
+  it("G4.6 exports a secret edit of the user without its value", async () => {
+    const t = await fixture();
+    const { app, editor } = t;
+    const secret = `MARKER-${randomUUID()}`;
+    const made = await call(
+      app,
+      editor,
+      "POST",
+      `/api/v1/servers/${t.servers.a}/change-sets`,
+      { edits: [{ settingKey: "AdminPassword", value: secret }] },
+    );
+    expect(made.statusCode).toBe(201);
+    const id = made.json<{ id: string }>().id;
+    const applied = await call(
+      app,
+      editor,
+      "POST",
+      `/api/v1/change-sets/${id}/apply`,
+      { runHooks: "none" },
+    );
+    expect(applied.json()).toMatchObject({ status: "applied" });
+    const response = await call(app, editor, "GET", "/api/v1/me/export");
+    expect(response.statusCode).toBe(200);
+    const exported = response.json<{
+      changeSets: { chips: { settingKey: string | null; to: unknown }[] }[];
+    }>();
+    const chips = exported.changeSets.flatMap((set) =>
+      set.chips.filter((chip) => chip.settingKey === "AdminPassword"),
+    );
+    expect(chips.map((chip) => chip.to)).toEqual([SECRET_MASK]);
+    expect(response.body).not.toContain(secret);
   });
 
   it("P-02 holds no credential of the user or the instance", async () => {

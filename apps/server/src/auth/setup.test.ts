@@ -146,6 +146,31 @@ describe("first-run setup token", () => {
     expect(staging).toEqual([]);
   });
 
+  // P10-A G5.5: once the owner exists the old setup token opens no import.
+  it("G5.5 refuses an import after the owner exists, even with the old token", async () => {
+    current = await testApp();
+    const { app, dataDir } = current;
+    const headers = setupHeaders(app);
+    const created = await postSetup(app, headers);
+    expect(created.statusCode).toBe(201);
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/setup/import",
+      headers: {
+        ...headers,
+        "content-type": "application/octet-stream",
+        "x-dialwarden-passphrase": "synthetic-passphrase-1234",
+      },
+      payload: randomBytes(1024),
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ error: "setup_done" });
+    const staging = (await readdir(dataDir)).filter((name) =>
+      name.startsWith(".import-"),
+    );
+    expect(staging).toEqual([]);
+  });
+
   it("keeps the token after a failed import, so the next import is accepted", async () => {
     // T4.11
     current = await testApp();
