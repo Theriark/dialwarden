@@ -175,6 +175,65 @@ const PACK = {
   sources: ["https://example.com/dialwarden/hookgame"],
 };
 
+/** A second synthetic pack with a Rust-style WebRCON probe (P10-A L5); its
+ * port and password come from its own settings file. */
+const RUST_PACK = {
+  id: "rusthook",
+  version: "1.0.0",
+  displayName: "Synthetic WebRCON game",
+  steamAppId: 4000003,
+  builds: { from: 0, to: null },
+  os: ["linux"],
+  detection: { markers: [{ path: "RustHook.sh" }] },
+  files: [
+    {
+      id: "rcon",
+      paths: { linux: ["server/Server.ini"] },
+      adapter: "ini",
+      encoding: "utf-8",
+      applyPolicy: "anytime",
+    },
+  ],
+  settings: [
+    {
+      key: "RconPort",
+      file: "rcon",
+      locator: { kind: "ini", section: "Rcon", key: "RconPort" },
+      type: "int",
+      default: 28016,
+      min: 1024,
+      max: 65535,
+      group: "Console",
+      description: "The TCP port of the synthetic game's web console.",
+    },
+    {
+      key: "RconPassword",
+      file: "rcon",
+      locator: { kind: "ini", section: "Rcon", key: "RconPassword" },
+      type: "string",
+      default: "",
+      secret: true,
+      group: "Console",
+      description: "The password of the synthetic game's web console.",
+    },
+  ],
+  rules: [],
+  presets: [],
+  probes: [
+    {
+      kind: "rustWebRcon",
+      portSetting: "RconPort",
+      passwordSetting: "RconPassword",
+      host: "127.0.0.1",
+      allow: ["server.save", "quit"],
+      saveCommand: "server.save",
+      stopCommand: "quit",
+    },
+  ],
+  hooksSupported: ["save", "stop"],
+  sources: ["https://example.com/dialwarden/rusthook"],
+};
+
 const CFG = [
   "[Server]",
   "ApiEnabled=True",
@@ -938,6 +997,52 @@ describe("the hook run API and its roles (contract C7)", () => {
     }
   });
 
+  // P10-A L5: a Rust WebRCON probe that fails answers control_error through
+  // POST hooks/run, never a 500 and never the game's own text.
+  it("L5 answers a failing Rust console with control_error, never a 500", async () => {
+    const rustDir = join(base, "packs", RUST_PACK.id);
+    await mkdir(rustDir, { recursive: true });
+    await writeFile(join(rustDir, "pack.json"), JSON.stringify(RUST_PACK));
+    const { api } = await setup();
+    const root = join(base, "rust");
+    await mkdir(join(root, "server"), { recursive: true });
+    await writeFile(join(root, "RustHook.sh"), "");
+    await writeFile(
+      join(root, "server", "Server.ini"),
+      "[Rcon]\nRconPort=28016\nRconPassword=rcon-secret\n",
+    );
+    const slug = await addServer(api, "Rusty", root);
+    // A plain web server that refuses the WebSocket upgrade with its own text.
+    const plain = createServer((_request, response) => {
+      response.writeHead(500).end("LEAKME console text");
+    });
+    plain.on("upgrade", (_request, socket) => {
+      socket.end(
+        "HTTP/1.1 500 Internal Server Error\r\n\r\nLEAKME console text",
+      );
+    });
+    await new Promise<void>((resolve) => plain.listen(0, "127.0.0.1", resolve));
+    try {
+      const plainPort = (plain.address() as AddressInfo).port;
+      for (const port of [1, plainPort]) {
+        const set = await putHooks(api, slug, {
+          probes: { rustWebRcon: { host: "127.0.0.1", port } },
+        });
+        expect(set.statusCode).toBe(200);
+        const run = await runHook(api, slug, "save");
+        expect([422, 424], `port ${port}: ${run.body}`).toContain(
+          run.statusCode,
+        );
+        expect(run.json()).toMatchObject({ error: "control_error" });
+        expect(run.body).not.toContain("LEAKME");
+        expect(run.body).not.toContain("rcon-secret");
+      }
+    } finally {
+      plain.closeAllConnections();
+      await new Promise<void>((resolve) => plain.close(() => resolve()));
+    }
+  });
+
   /** One more server of the synthetic pack, in its own folder. */
   async function extraServer(api: Api, name: string): Promise<string> {
     const root = join(base, name);
@@ -997,6 +1102,33 @@ describe("the hook run API and its roles (contract C7)", () => {
     expect(status).toMatchObject({ state: "stopped", pending: 0 });
     expect(await fileText(root, WORLD_PATH)).not.toContain("WorldSize=5");
     const failed = await api.get(`/api/v1/change-sets/${made.id}`);
+    expect(failed.json()).toMatchObject({
+      status: "failed",
+      error: { code: "author_cannot_write" },
+    });
+    expect(await appliedOn(api, slug)).toHaveLength(0);
+  });
+
+  // P10-B N2: a raw patch an admin parked is admin-only text. After the
+  // admin is lowered to editor (write grant kept), it is not written.
+  it("N2 never writes a parked raw patch of an admin lowered to editor", async () => {
+    const { app, api, root, slug } = await setup(PAID);
+    const user = await roleUser(app, "admin", slug);
+    const admin = apiOf(app, user);
+    const before = await fileText(root, WORLD_PATH);
+    const text = before.replace("WorldSize=1", "WorldSize=4");
+    const made = await admin.post(`/api/v1/servers/${slug}/change-sets`, {
+      patches: [{ fileId: "world", text }],
+    });
+    expect(made.statusCode).toBe(201);
+    const id = made.json<{ id: string }>().id;
+    expect((await apply(admin, id)).status).toBe("pending");
+    const role = `/api/v1/users/${user.userId}/role`;
+    expect((await api.put(role, { role: "editor" })).statusCode).toBe(200);
+    game().takeDown();
+    expect(await statusOf(api, slug)).toMatchObject({ pending: 0 });
+    expect(await fileText(root, WORLD_PATH)).toBe(before);
+    const failed = await api.get(`/api/v1/change-sets/${id}`);
     expect(failed.json()).toMatchObject({
       status: "failed",
       error: { code: "author_cannot_write" },
