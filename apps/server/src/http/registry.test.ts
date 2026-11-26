@@ -174,6 +174,23 @@ describe("feature registry on the server (contract C1)", () => {
     }
   });
 
+  // P10-A G6.1: a HEAD route is never a way around its GET's entitlement.
+  it("G6.1 gives every HEAD route the entitlement of its GET", async () => {
+    current = await testApp({ extend: withProbe });
+    const routes = current.app.ctx.routes;
+    const gets = new Map(
+      routes
+        .filter((route) => route.method === "GET")
+        .map((route) => [route.url, route.entitlement]),
+    );
+    const heads = routes.filter((route) => route.method === "HEAD");
+    expect(heads.length).toBeGreaterThan(0);
+    for (const head of heads) {
+      expect(gets.has(head.url), head.url).toBe(true);
+      expect(head.entitlement, head.url).toBe(gets.get(head.url));
+    }
+  });
+
   it("E-04 answers 402 before the role check, and 401 first", async () => {
     current = await paidApp();
     const { app } = current;
