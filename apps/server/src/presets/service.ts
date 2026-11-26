@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import type { JsonValue, Pack, SettingEdit } from "@dialwarden/packs-schema";
 import { eq } from "drizzle-orm";
+import type { FastifyBaseLogger } from "fastify";
 import type { ChangeSetService } from "../changes/service.js";
 import type {
   ChangeSetStatus,
@@ -56,6 +57,7 @@ export interface PresetServiceOptions {
   readonly servers: ServerService;
   readonly changes: ChangeSetService;
   readonly entitlement: EntitlementGate;
+  readonly log: FastifyBaseLogger;
   readonly now?: () => Date;
 }
 
@@ -67,6 +69,7 @@ export class PresetService {
   readonly #servers: ServerService;
   readonly #changes: ChangeSetService;
   readonly #entitlement: EntitlementGate;
+  readonly #log: FastifyBaseLogger;
   readonly #now: () => Date;
 
   constructor(options: PresetServiceOptions) {
@@ -75,6 +78,7 @@ export class PresetService {
     this.#servers = options.servers;
     this.#changes = options.changes;
     this.#entitlement = options.entitlement;
+    this.#log = options.log;
     this.#now = options.now ?? (() => new Date());
   }
 
@@ -175,6 +179,18 @@ export class PresetService {
   }
 
   /**
+   * The error of one bulk item. An unexpected one is logged and answered as
+   * internal, so the report of the servers already done is still answered.
+   */
+  #failureOf(error: unknown, server: string): BulkFailure {
+    const failure = failureOf(error);
+    if (failure.code === "internal") {
+      this.#log.error({ err: error, server }, "bulk preset item failed");
+    }
+    return failure;
+  }
+
+  /**
    * POST /api/v1/presets/ID/bulk-drafts (Paid, presets.bulk): the per-server
    * diff first. Each server gets its own draft change set of cause preset,
    * made on its own files, exactly as a single apply makes it; a server the
@@ -198,7 +214,8 @@ export class PresetService {
         const changeSet = await this.apply(id, server, author);
         items.push({ server, changeSet, error: null });
       } catch (error) {
-        items.push({ server, changeSet: null, error: failureOf(error) });
+        const failure = this.#failureOf(error, server);
+        items.push({ server, changeSet: null, error: failure });
       }
     }
     return items;
@@ -245,7 +262,8 @@ export class PresetService {
           error: done.error === null ? null : { ...done.error },
         });
       } catch (error) {
-        items.push(refused(id, found.serverId, failureOf(error)));
+        const failure = this.#failureOf(error, found.serverId);
+        items.push(refused(id, found.serverId, failure));
       }
     }
     const count = (status: string) =>
@@ -300,12 +318,13 @@ function refused(
 
 /**
  * The answer of an API, connector or control failure as an item's error:
- * its code and the details the single call would have answered.
+ * its code and the details the single call would have answered; any other
+ * error is internal.
  */
 function failureOf(error: unknown): BulkFailure {
   if (error instanceof ApiError) return { code: error.code, ...error.details };
   if (error instanceof ConnectorError || error instanceof ControlError) {
     return { code: error.code, message: error.message };
   }
-  throw error;
+  return { code: "internal" };
 }

@@ -7,7 +7,7 @@
 // answers 402, and Paid works again after the Free switch is off.
 import { chmod } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addServer,
   apiOf,
@@ -130,6 +130,52 @@ describe("bulk preset apply", () => {
     expect(await maxPlayers(t.servers.rootA)).toBe("10");
     expect(await maxPlayers(t.servers.rootB)).toBe("10");
     expect(await maxPlayers(rootC)).toBe("32");
+  });
+
+  it("answers an unexpected error in its item and goes on with the others", async () => {
+    const { changes } = t.app.ctx;
+    const create = changes.create.bind(changes);
+    const draftSpy = vi
+      .spyOn(changes, "create")
+      .mockImplementation((server, ...rest) =>
+        server.id === t.servers.b
+          ? Promise.reject(new Error("unexpected"))
+          : create(server, ...rest),
+      );
+    const response = await drafts(t.owner, [t.servers.a, t.servers.b, c]);
+    draftSpy.mockRestore();
+    expect(response.statusCode).toBe(200);
+    const items = response.json<{ items: DraftItem[] }>().items;
+    expect(items[1]).toEqual({
+      server: t.servers.b,
+      changeSet: null,
+      error: { code: "internal" },
+    });
+    expect(items[0]?.changeSet?.status).toBe("draft");
+    expect(items[2]?.changeSet?.status).toBe("draft");
+
+    const ids = [items[0], items[2]].map((item) => item?.changeSet?.id ?? "");
+    const apply = changes.apply.bind(changes);
+    const applySpy = vi
+      .spyOn(changes, "apply")
+      .mockImplementation((id, ...rest) =>
+        id === ids[0]
+          ? Promise.reject(new Error("unexpected"))
+          : apply(id, ...rest),
+      );
+    const applied = await bulkApply(t.owner, ids);
+    applySpy.mockRestore();
+    expect(applied.statusCode).toBe(200);
+    const report = applied.json<Report>();
+    expect(report).toMatchObject({ applied: 1, failed: 1 });
+    expect(report.items[0]).toEqual({
+      changeSetId: ids[0],
+      server: t.servers.a,
+      status: "refused",
+      error: { code: "internal" },
+    });
+    expect(report.items[1]?.status).toBe("applied");
+    expect(await maxPlayers(rootC)).toBe("10");
   });
 
   it("answers a missing server in its item, never as an error", async () => {

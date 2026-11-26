@@ -176,9 +176,10 @@ export class DriftService {
   }
 
   /**
-   * Checks one server now (POST .../drift/check and the job). A connector
-   * failure is a result, never an exception: it is stored as error with its
-   * code, so one unreachable host never stops the checks of the others.
+   * Checks one server now (POST .../drift/check and the job). A failure is a
+   * result, never an exception: it is stored as error with its code
+   * (internal for an unexpected one), so one unreachable host never stops
+   * the checks of the others and is checked again at its interval.
    */
   async check(server: ServerRecord): Promise<DriftView> {
     try {
@@ -192,7 +193,12 @@ export class DriftService {
       } else if (error instanceof ApiError) {
         this.#record(server.id, "error", error.code, null);
       } else {
-        throw error;
+        // Recorded too, so the server waits its interval like any other.
+        this.#log.error(
+          { err: error, server: server.id },
+          "drift check failed",
+        );
+        this.#record(server.id, "error", "internal", null);
       }
     }
     return this.#view(server.id);

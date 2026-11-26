@@ -9,7 +9,7 @@
 // The SFTP side runs in drift.integration.test.ts.
 import { chmod } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activityOf,
   apiOf,
@@ -185,6 +185,28 @@ describe("background drift checks", () => {
       expect(viewOf(t.servers.a).lastResult).toBe("drift");
     } finally {
       await chmod(folder, 0o755);
+    }
+  });
+
+  it("stores an unexpected failure as internal and waits the interval", async () => {
+    const checkDrift = vi
+      .spyOn(t.app.ctx.changes, "checkDrift")
+      .mockRejectedValue(new Error("unexpected"));
+    try {
+      await tickAt(0);
+      expect(viewOf(t.servers.a)).toMatchObject({
+        lastResult: "error",
+        lastError: "internal",
+        lastCheckedAt: iso(0),
+      });
+      const calls = checkDrift.mock.calls.length;
+      // Not due again at the next tick, only after its 15 minutes.
+      await tickAt(1);
+      expect(checkDrift.mock.calls.length).toBe(calls);
+      await tickAt(DEFAULT_INTERVAL_MINUTES);
+      expect(checkDrift.mock.calls.length).toBeGreaterThan(calls);
+    } finally {
+      checkDrift.mockRestore();
     }
   });
 

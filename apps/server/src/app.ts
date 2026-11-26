@@ -271,6 +271,7 @@ export async function buildApp(
     servers,
     changes,
     entitlement,
+    log: app.log,
     now,
   });
   // One login limiter for sign-in, invitation accepts and reset links, so
