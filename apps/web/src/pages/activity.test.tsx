@@ -202,5 +202,18 @@ describe("ActivityPage", () => {
     expect(
       describeEvent(event(1, "user.changed", { action: "created" })).word,
     ).toBe("User");
+    // P10-B: the second-factor lock-out has its own words and a warning.
+    const locked = describeEvent(
+      event(1, "user.changed", { action: "second_factor_locked" }),
+    );
+    expect(locked.word).toBe("Locked");
+    expect(locked.kind).toBe("warning");
+    expect(locked.sentence).toBe(
+      "An account was locked after too many second-factor failures",
+    );
+    expect(
+      describeEvent(event(1, "user.changed", { action: "grants_changed" }))
+        .sentence,
+    ).toBe("A user's server grants were changed");
   });
 });

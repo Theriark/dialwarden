@@ -33,6 +33,7 @@ function server(
     hasPassword: false,
     demo: false,
     editable: true,
+    access: "write",
     createdAt: "2026-11-23T00:00:00Z",
     updatedAt: "2026-11-23T00:00:00Z",
     lastEditedAt: null,

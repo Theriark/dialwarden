@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-// The schedules page: every state in words and a badge, the calendar with
-// the day list, the delete flow, the viewer's read-only sentence and the
-// Free plan with the upgrade hint.
+// The schedules page: every state in words and a badge, the chips with the
+// pack's labels (P9 live check L3), the week tile that counts reverts too
+// (L5), the calendar with the day list, the delete and replace flows (a
+// replace whose old schedule is already gone is a clean replace, P9-C
+// review R1), the viewer's read-only sentence, the editor whose grant on
+// the server only reads (P10-A L22) and the Free plan with the upgrade hint.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
 import type { Schedule } from "../api/schema";
 import { calendarItemsOf } from "../components/schedule-calendar";
 import { entitlement, OWNER } from "../test/fixtures";
@@ -14,27 +18,75 @@ import {
   type Handler,
 } from "../test/render";
 import { startRouter } from "../test/start";
-import { scheduleStateWords, whenWords } from "./schedules";
+import {
+  chipsOf,
+  dueWithinWeek,
+  scheduleStateWords,
+  whenWords,
+} from "./schedules";
 
 afterEach(resetAfterEach);
 
-const SERVERS = {
-  items: [
+function serverItem(access: "read" | "write") {
+  return {
+    id: "home",
+    name: "Home",
+    packId: "palworld",
+    displayName: "Palworld",
+    os: "linux",
+    connector: { kind: "local", root: "/srv/home" },
+    hasPassword: false,
+    demo: false,
+    editable: true,
+    access,
+    createdAt: "2026-11-23T00:00:00Z",
+    updatedAt: "2026-11-23T00:00:00Z",
+    lastEditedAt: null,
+  };
+}
+
+const SERVERS = { items: [serverItem("write")] };
+
+/** The Palworld pack as the list needs it: labels for the chips. */
+const META = {
+  id: "palworld",
+  version: "1.0",
+  displayName: "Palworld",
+  steamAppId: 1,
+  os: ["linux"],
+  files: [
     {
-      id: "home",
-      name: "Home",
-      packId: "palworld",
-      displayName: "Palworld",
-      os: "linux",
-      connector: { kind: "local", root: "/srv/home" },
-      hasPassword: false,
-      demo: false,
-      editable: true,
-      createdAt: "2026-11-23T00:00:00Z",
-      updatedAt: "2026-11-23T00:00:00Z",
-      lastEditedAt: null,
+      id: "settings",
+      paths: { linux: ["PalWorldSettings.ini"] },
+      adapter: "ini",
+      encoding: "utf-8",
+      applyPolicy: "anytime",
     },
   ],
+  settings: [
+    {
+      key: "ExpRate",
+      label: "Experience rate",
+      file: "settings",
+      locator: { kind: "ini", section: null, key: "ExpRate" },
+      type: "float",
+      description: "How fast the experience grows.",
+      restartRequired: true,
+    },
+    {
+      key: "AdminPassword",
+      label: "Admin password",
+      file: "settings",
+      locator: { kind: "ini", section: null, key: "AdminPassword" },
+      type: "string",
+      secret: true,
+      description: "Who may administer the server.",
+    },
+  ],
+  rules: [],
+  presets: [],
+  hooksSupported: [],
+  sources: [],
 };
 
 function schedule(overrides: Partial<Schedule>): Schedule {
@@ -132,6 +184,9 @@ function stubWorld(extra?: Handler) {
     if (method === "GET" && path === "/api/v1/schedules") {
       return { status: 200, body: { items: ALL } };
     }
+    if (method === "GET" && path === "/api/v1/games/palworld/settings-meta") {
+      return { status: 200, body: META };
+    }
     if (method === "DELETE" && path.startsWith("/api/v1/schedules/")) {
       return { status: 204 };
     }
@@ -141,7 +196,7 @@ function stubWorld(extra?: Handler) {
 }
 
 describe("SchedulesPage", () => {
-  it("lists every schedule with its state and when it runs", async () => {
+  it("lists every schedule with its state, when it runs and the pack's labels", async () => {
     stubViewport(1440);
     stubWorld();
     startRouter("/schedules");
@@ -155,9 +210,51 @@ describe("SchedulesPage", () => {
     expect(screen.getAllByText("Ran", { exact: true }).length).toBe(2);
     expect(screen.getAllByText("Reverted", { exact: true }).length).toBe(2);
     expect(screen.getByText("Every day at 04:00 (Europe/Lisbon)")).toBeTruthy();
-    expect(screen.getAllByText("ExpRate: set to 2").length).toBe(6);
+    // The chips carry the pack's label once its meta answered (L3), with
+    // the restart marker the pack declares.
+    expect(
+      (await screen.findAllByText("Experience rate: set to 2")).length,
+    ).toBe(6);
+    expect(screen.queryByText("ExpRate: set to 2")).toBeNull();
+    expect(screen.getAllByText("Restart required").length).toBe(6);
     expect(screen.getByRole("grid", { name: /Schedules in/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: "New schedule" })).toBeTruthy();
+  });
+
+  it("counts a revert due this week in the week tile (L5)", async () => {
+    stubViewport(1440);
+    const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/schedules") {
+        return {
+          status: 200,
+          body: {
+            items: [
+              // Ran, its revert is due in two days: a run is not due, the
+              // revert is.
+              schedule({
+                name: "Ran, reverting",
+                nextRunAt: null,
+                lastRunAt: "2026-11-20T04:00:00.000Z",
+                lastResult: "applied",
+                revertAt: soon,
+                revertDueAt: soon,
+              }),
+            ],
+          },
+        };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("Ran, reverting");
+    const tile = screen.getByText("Next 7 days").closest("div");
+    expect(tile).not.toBeNull();
+    if (tile === null) return;
+    expect(within(tile).getByText("1")).toBeTruthy();
+    expect(
+      within(tile).getByText("Runs and reverts due this week"),
+    ).toBeTruthy();
   });
 
   it("deletes a schedule after the confirm dialog", async () => {
@@ -190,7 +287,7 @@ describe("SchedulesPage", () => {
         };
       }
       if (method === "DELETE" && path === "/api/v1/schedules/s-weekend-rates") {
-        return { status: 404, body: { error: "schedule_not_found" } };
+        return { status: 500, body: { error: "internal" } };
       }
       return undefined;
     });
@@ -209,7 +306,9 @@ describe("SchedulesPage", () => {
     // a third copy, and the toast says the old one must go by hand.
     await screen.findByText("Schedule created, but the old one is still there");
     expect(
-      screen.getByText(/was not removed \(This schedule no longer exists\.\)/),
+      screen.getByText(
+        /was not removed \(The server hit an error\. Check its log\.\)/,
+      ),
     ).toBeTruthy();
     await waitFor(() => {
       expect(
@@ -220,6 +319,61 @@ describe("SchedulesPage", () => {
     expect(
       calls.filter((call) => call === "GET /api/v1/schedules").length,
     ).toBeGreaterThan(1);
+  });
+
+  it("treats an old schedule that is already gone as replaced (R1)", async () => {
+    stubViewport(1440);
+    stubWorld(([method, path]) => {
+      if (method === "POST" && path === "/api/v1/schedules") {
+        return {
+          status: 201,
+          body: schedule({ name: "Weekend rates", id: "s-new" }),
+        };
+      }
+      if (method === "DELETE" && path === "/api/v1/schedules/s-weekend-rates") {
+        return { status: 404, body: { error: "schedule_not_found" } };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("Weekend rates");
+
+    const row = screen.getByText("Weekend rates").closest("li");
+    expect(row).not.toBeNull();
+    if (row === null) return;
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    const form = await screen.findByRole("form", { name: "Replace schedule" });
+    fireEvent.click(
+      within(form).getByRole("button", { name: "Replace schedule" }),
+    );
+    await screen.findByText("Schedule replaced");
+    expect(screen.queryByText(/old one is still there/)).toBeNull();
+  });
+
+  it("keeps an editor whose grant only reads the server out of the controls (L22)", async () => {
+    stubViewport(1440);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/auth/session") {
+        return {
+          status: 200,
+          body: { ...OWNER, user: { ...OWNER.user, role: "editor" } },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers") {
+        return { status: 200, body: { items: [serverItem("read")] } };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("Weekend rates");
+    expect(
+      screen.getByText(
+        /You are signed in as editor with read access to this server/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "New schedule" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
   });
 
   it("renders the upgrade hint and the paused explanation on Free", async () => {
@@ -259,6 +413,51 @@ describe("SchedulesPage", () => {
     expect(screen.getByText(/You are signed in as viewer/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: "New schedule" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("labels the chips from the pack and masks a secret edit", () => {
+    const stored = schedule({
+      name: "Private",
+      edits: [
+        { settingKey: "ExpRate", value: 2 },
+        { settingKey: "AdminPassword", value: SECRET_MASK },
+        { settingKey: "Unknown.Key", value: "x" },
+      ],
+    });
+    const byKey = new Map(
+      META.settings.map((setting) => [setting.key, setting] as const),
+    );
+    const chips = chipsOf(stored, byKey as never);
+    expect(chips.map((chip) => [chip.kind, chip.label, chip.to])).toEqual([
+      ["changed", "Experience rate", 2],
+      ["masked", "Admin password", SECRET_MASK],
+      ["changed", "Unknown.Key", "x"],
+    ]);
+    expect(chips[0]?.restartRequired).toBe(true);
+    // Without the pack (meta not loaded yet) the keys stand in.
+    expect(chipsOf(stored).map((chip) => chip.label)).toEqual([
+      "ExpRate",
+      "AdminPassword",
+      "Unknown.Key",
+    ]);
+    expect(chipsOf(stored)[1]?.kind).toBe("masked");
+  });
+
+  it("counts a run or a revert due within a week, on an active schedule only", () => {
+    const now = Date.parse("2026-11-26T10:00:00Z");
+    const day = 24 * 60 * 60 * 1000;
+    const at = (days: number) => new Date(now + days * day).toISOString();
+    expect(dueWithinWeek(schedule({ nextRunAt: at(2) }), now)).toBe(true);
+    expect(dueWithinWeek(schedule({ nextRunAt: at(9) }), now)).toBe(false);
+    expect(
+      dueWithinWeek(schedule({ nextRunAt: null, revertDueAt: at(3) }), now),
+    ).toBe(true);
+    expect(
+      dueWithinWeek(
+        schedule({ state: "paused", nextRunAt: at(1), revertDueAt: at(1) }),
+        now,
+      ),
+    ).toBe(false);
   });
 
   it("words the states and places the calendar items", () => {
