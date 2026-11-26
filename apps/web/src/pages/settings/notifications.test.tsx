@@ -254,14 +254,14 @@ describe("NotificationsPage", () => {
         {
           ...state,
           url: "https://new.example.net/hook",
-          signingSecret: "0123456789abcdef",
+          signingSecret: "test-secret-test",
         },
         true,
       ).settings,
     ).toEqual({
       kind: "webhook",
       url: "https://new.example.net/hook",
-      signingSecret: "0123456789abcdef",
+      signingSecret: "test-secret-test",
       allowPrivateHost: false,
     });
     const smtp = inputOfChannelState(
