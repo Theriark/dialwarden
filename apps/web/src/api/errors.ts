@@ -86,6 +86,10 @@ const MESSAGES = new Map<string, string>([
   ["no_url", "This channel has no address to send to."],
   ["timeout", "The receiver did not answer in time."],
   ["connection", "The receiver could not be reached."],
+  [
+    "password_required",
+    "The mail server, port or user name changed: enter the password again.",
+  ],
   ["tls_failed", "The secure connection could not be made."],
   ["auth_failed", "The mail server refused the sign-in."],
   ["smtp_failed", "The mail server refused the message."],

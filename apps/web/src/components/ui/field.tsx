@@ -1,7 +1,11 @@
 // Form controls: a label, the control, help text and the inline error, wired
-// with aria-describedby and aria-invalid (design-direction-1 part 4).
+// with aria-describedby and aria-invalid (design-direction-1 part 4). A
+// warning (a lint of severity warning, phase-report-07 F-P7-2) sits under the
+// control in the warning colour with its own icon: the value is accepted,
+// so the control is not marked invalid and the text is a status, not an
+// alert.
 import * as Label from "@radix-ui/react-label";
-import { CircleX, Eye, EyeOff } from "lucide-react";
+import { CircleX, Eye, EyeOff, TriangleAlert } from "lucide-react";
 import {
   useState,
   type InputHTMLAttributes,
@@ -18,21 +22,30 @@ interface FieldFrameProps {
   label: string;
   help?: string | undefined;
   error?: string | undefined;
+  warning?: string | undefined;
   /** Something next to the label, such as a reveal toggle. */
   trailing?: ReactNode;
   children: ReactNode;
+}
+
+function present(text: string | undefined): text is string {
+  return text !== undefined && text !== "";
 }
 
 export function describedBy(
   id: string,
   help: string | undefined,
   error: string | undefined,
+  warning?: string | undefined,
 ): string | undefined {
   const ids: string[] = [];
-  if (error !== undefined && error !== "") {
+  if (present(error)) {
     ids.push(`${id}-error`);
   }
-  if (help !== undefined && help !== "") {
+  if (present(warning)) {
+    ids.push(`${id}-warning`);
+  }
+  if (present(help)) {
     ids.push(`${id}-help`);
   }
   return ids.length === 0 ? undefined : ids.join(" ");
@@ -43,6 +56,7 @@ export function FieldFrame({
   label,
   help,
   error,
+  warning,
   trailing,
   children,
 }: FieldFrameProps) {
@@ -55,7 +69,7 @@ export function FieldFrame({
         {trailing}
       </div>
       {children}
-      {error !== undefined && error !== "" ? (
+      {present(error) ? (
         <p
           id={`${id}-error`}
           role="alert"
@@ -65,7 +79,17 @@ export function FieldFrame({
           {error}
         </p>
       ) : null}
-      {help !== undefined && help !== "" ? (
+      {present(warning) ? (
+        <p
+          id={`${id}-warning`}
+          role="status"
+          className="flex items-center gap-1.5 text-sm text-warning"
+        >
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          {warning}
+        </p>
+      ) : null}
+      {present(help) ? (
         <p id={`${id}-help`} className="text-sm text-fg-muted">
           {help}
         </p>
@@ -82,6 +106,7 @@ export interface TextFieldProps extends Omit<
   label: string;
   help?: string | undefined;
   error?: string | undefined;
+  warning?: string | undefined;
 }
 
 export function TextField({
@@ -89,19 +114,26 @@ export function TextField({
   label,
   help,
   error,
+  warning,
   className,
   type = "text",
   ...rest
 }: TextFieldProps) {
-  const invalid = error !== undefined && error !== "";
+  const invalid = present(error);
   return (
-    <FieldFrame id={id} label={label} help={help} error={error}>
+    <FieldFrame
+      id={id}
+      label={label}
+      help={help}
+      error={error}
+      warning={warning}
+    >
       <input
         id={id}
         type={type}
         className={cn(CONTROL, "h-10", className)}
         aria-invalid={invalid ? true : undefined}
-        aria-describedby={describedBy(id, help, error)}
+        aria-describedby={describedBy(id, help, error, warning)}
         {...rest}
       />
     </FieldFrame>
@@ -114,11 +146,12 @@ export function PasswordField({
   label,
   help,
   error,
+  warning,
   className,
   ...rest
 }: Omit<TextFieldProps, "type">) {
   const [shown, setShown] = useState(false);
-  const invalid = error !== undefined && error !== "";
+  const invalid = present(error);
   const toggle = (
     <button
       type="button"
@@ -143,6 +176,7 @@ export function PasswordField({
       label={label}
       help={help}
       error={error}
+      warning={warning}
       trailing={toggle}
     >
       <input
@@ -150,7 +184,7 @@ export function PasswordField({
         type={shown ? "text" : "password"}
         className={cn(CONTROL, "h-10 font-mono", className)}
         aria-invalid={invalid ? true : undefined}
-        aria-describedby={describedBy(id, help, error)}
+        aria-describedby={describedBy(id, help, error, warning)}
         {...rest}
       />
     </FieldFrame>
@@ -165,6 +199,7 @@ export interface TextAreaFieldProps extends Omit<
   label: string;
   help?: string | undefined;
   error?: string | undefined;
+  warning?: string | undefined;
 }
 
 export function TextAreaField({
@@ -172,17 +207,24 @@ export function TextAreaField({
   label,
   help,
   error,
+  warning,
   className,
   ...rest
 }: TextAreaFieldProps) {
-  const invalid = error !== undefined && error !== "";
+  const invalid = present(error);
   return (
-    <FieldFrame id={id} label={label} help={help} error={error}>
+    <FieldFrame
+      id={id}
+      label={label}
+      help={help}
+      error={error}
+      warning={warning}
+    >
       <textarea
         id={id}
         className={cn(CONTROL, "min-h-28 py-2 font-mono text-sm", className)}
         aria-invalid={invalid ? true : undefined}
-        aria-describedby={describedBy(id, help, error)}
+        aria-describedby={describedBy(id, help, error, warning)}
         {...rest}
       />
     </FieldFrame>
@@ -199,6 +241,7 @@ export interface SelectFieldProps {
   label: string;
   help?: string | undefined;
   error?: string | undefined;
+  warning?: string | undefined;
   value: string;
   options: readonly SelectOption[];
   onChange: (value: string) => void;
@@ -217,15 +260,22 @@ export function SelectField({
   label,
   help,
   error,
+  warning,
   value,
   options,
   onChange,
   disabled = false,
   placeholder,
 }: SelectFieldProps) {
-  const invalid = error !== undefined && error !== "";
+  const invalid = present(error);
   return (
-    <FieldFrame id={id} label={label} help={help} error={error}>
+    <FieldFrame
+      id={id}
+      label={label}
+      help={help}
+      error={error}
+      warning={warning}
+    >
       <select
         id={id}
         value={value}
@@ -235,7 +285,7 @@ export function SelectField({
         }}
         className={cn(CONTROL, "h-10 disabled:opacity-60")}
         aria-invalid={invalid ? true : undefined}
-        aria-describedby={describedBy(id, help, error)}
+        aria-describedby={describedBy(id, help, error, warning)}
       >
         {placeholder === undefined ? null : (
           <option value="">{placeholder}</option>
