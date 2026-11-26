@@ -80,11 +80,20 @@ export const FEATURES: readonly FeatureDefinition[] = [
     ],
   },
   {
-    // P9-A ships the dispatch seam only; the channel routes come with P9-B.
+    // The dispatch seam of P9-A and the channels of P9-B.
     key: "notifications",
     label: "Notification channels",
     available: true,
-    routes: [],
+    routes: [
+      "GET /api/v1/notifications/channels",
+      "POST /api/v1/notifications/channels",
+      "GET /api/v1/notifications/channels/:id",
+      "PUT /api/v1/notifications/channels/:id",
+      "DELETE /api/v1/notifications/channels/:id",
+      "POST /api/v1/notifications/channels/:id/test",
+      "GET /api/v1/notifications",
+      "POST /api/v1/notifications/read",
+    ],
   },
   {
     key: "team.users",

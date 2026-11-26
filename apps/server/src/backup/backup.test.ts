@@ -633,6 +633,49 @@ describe("first-run import", () => {
     }
   });
 
+  // P9-B code review M2: the channels of the imported database deliver at
+  // once, without a restart.
+  it("registers the imported notification channels without a restart", async () => {
+    const { app, owner } = await seeded();
+    const made = await app.inject({
+      method: "POST",
+      url: "/api/v1/notifications/channels",
+      headers: headersOf(owner),
+      payload: {
+        name: "Bell",
+        enabled: true,
+        types: ["backup.done"],
+        settings: { kind: "in_app" },
+      },
+    });
+    expect(made.statusCode).toBe(201);
+    const exported = await app.inject({
+      method: "POST",
+      url: "/api/v1/system/backup-export",
+      headers: headersOf(owner),
+      payload: { passphrase: PASSPHRASE },
+    });
+    expect(exported.statusCode).toBe(200);
+
+    const fresh = await testApp();
+    try {
+      const imported = await importInto(
+        fresh.app,
+        exported.rawPayload,
+        PASSPHRASE,
+      );
+      expect(imported.statusCode).toBe(200);
+      fresh.app.ctx.activity.record("backup.done", { data: { id: "b-1" } });
+      await fresh.app.ctx.notifications.idle();
+      const inbox = fresh.app.ctx.store.sqlite
+        .prepare("SELECT type FROM notification_inbox")
+        .all() as { type: string }[];
+      expect(inbox).toEqual([{ type: "backup.done" }]);
+    } finally {
+      await fresh.close();
+    }
+  });
+
   // Code review M3: recovery codes keep working after an import into an
   // instance with another APP_SECRET_KEY.
   it("keeps recovery codes working after an import from another key", async () => {

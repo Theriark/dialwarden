@@ -36,6 +36,10 @@ const SECRET_FIELDS = [
   "appSecretKey",
   "sessionSecret",
   "setupToken",
+  "signingSecret",
+  "secretEnc",
+  "secret_enc",
+  "webhookUrl",
   "DEV_SEED_OWNER_PASSWORD",
   "key",
 ];

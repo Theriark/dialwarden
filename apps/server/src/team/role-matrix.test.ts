@@ -143,6 +143,16 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "GET /api/v1/reports/changes": "user",
   "GET /api/v1/reports/changes/print": "user",
   "POST /api/v1/system/demo-drift/run": "owner",
+  // Notification channels (P9-B): owner and admin configure and test them;
+  // every user reads the in-app notifications of their servers.
+  "GET /api/v1/notifications/channels": "admin",
+  "POST /api/v1/notifications/channels": "admin",
+  "GET /api/v1/notifications/channels/:id": "admin",
+  "PUT /api/v1/notifications/channels/:id": "admin",
+  "DELETE /api/v1/notifications/channels/:id": "admin",
+  "POST /api/v1/notifications/channels/:id/test": "admin",
+  "GET /api/v1/notifications": "user",
+  "POST /api/v1/notifications/read": "user",
 };
 
 const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
@@ -258,7 +268,8 @@ function concrete(url: string, server: "a" | "b") {
     .replace("/presets/:id", `/presets/${ids.preset}`)
     .replace("/change-sets/:id", `/change-sets/${changeSet}`)
     .replace("/snapshots/:id", `/snapshots/${snapshot}`)
-    .replace("/schedules/:id", `/schedules/${schedule}`);
+    .replace("/schedules/:id", `/schedules/${schedule}`)
+    .replace("/channels/:id", `/channels/${randomUUID()}`);
   const onBody =
     url.endsWith("/presets/:id/apply") || url === "/api/v1/schedules";
   const body = onBody ? { server: slug } : {};
@@ -548,6 +559,7 @@ describe("privilege escalation (A-03 to A-18)", () => {
       "POST /api/v1/auth/totp/disable",
       "POST /api/v1/tokens",
       "DELETE /api/v1/tokens/:id",
+      "POST /api/v1/notifications/read",
     ];
     const publicRoutes = [
       "/api/v1/setup",

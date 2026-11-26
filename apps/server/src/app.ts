@@ -2,8 +2,9 @@
 // OpenAPI 3.1 at /api/v1/openapi.json, pino with redaction, SQLite through the
 // store, authentication, the licence and entitlement gate, activity, the
 // backup engine, connectors, servers, change sets and snapshots (P4), the
-// Paid fleet layer (P9-A), and the built web app with its security headers
-// (contract C8). buildApp() opens everything; app.close() closes it again.
+// Paid fleet layer (P9-A) with its notification channels (P9-B), and the
+// built web app with its security headers (contract C8). buildApp() opens
+// everything; app.close() closes it again.
 import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import fastifyCookie from "@fastify/cookie";
@@ -49,7 +50,9 @@ import {
 } from "./http/zod.js";
 import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
+import { ChannelService } from "./notifications/channels.js";
 import { NotificationDispatcher } from "./notifications/dispatch.js";
+import type { SmtpTlsOptions } from "./notifications/transports.js";
 import { OidcAccounts } from "./oidc/accounts.js";
 import type { OidcNetworkOptions } from "./oidc/network.js";
 import { OidcService } from "./oidc/service.js";
@@ -71,6 +74,7 @@ import { healthRoutes } from "./routes/health.js";
 import { hookRoutes } from "./routes/hooks.js";
 import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
+import { notificationRoutes } from "./routes/notifications.js";
 import { oidcRoutes } from "./routes/oidc.js";
 import { presetRoutes } from "./routes/presets.js";
 import { reportRoutes } from "./routes/reports.js";
@@ -118,6 +122,14 @@ export interface BuildOptions {
    * an identity provider on 127.0.0.1 over http, or swaps its resolver.
    */
   oidcNetwork?: OidcNetworkOptions;
+  /**
+   * Tests only, never read from the environment: lets the notification
+   * channels reach a test server on 127.0.0.1 (over http for the webhooks),
+   * or swaps their resolver.
+   */
+  notificationNetwork?: OidcNetworkOptions;
+  /** Tests only: extra CAs the SMTP channel trusts (a test certificate). */
+  notificationTls?: SmtpTlsOptions;
 }
 
 function cookieSecret(config: AppConfig, appKey: Buffer): string {
@@ -323,6 +335,28 @@ export async function buildApp(
     entitlement,
     log: app.log,
   });
+  const reports = new ReportService({
+    store,
+    servers,
+    packs: packs.packs,
+    now,
+  });
+  // The P9-B channels on the dispatch seam: none exists by default, so the
+  // image makes no outbound call with its default settings.
+  const channels = new ChannelService({
+    store,
+    aead,
+    entitlement,
+    dispatcher: notifications,
+    servers,
+    packs: packs.packs,
+    reports,
+    log: app.log,
+    network: options.notificationNetwork,
+    tls: options.notificationTls,
+    now,
+  });
+  channels.start();
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -377,8 +411,9 @@ export async function buildApp(
     schedules,
     drift,
     matrix: new MatrixService({ packs: packs.packs, servers, changes }),
-    reports: new ReportService({ store, servers, packs: packs.packs, now }),
+    reports,
     notifications,
+    channels,
     demoDrift: new DemoDriftJob({
       demoSeed: config.demoSeed,
       servers,
@@ -415,6 +450,7 @@ export async function buildApp(
     await ctx.schedules.stop();
     await ctx.drift.stop();
     ctx.demoDrift.stop();
+    ctx.channels.stop();
     ctx.notifications.stop();
     await ctx.notifications.idle();
     ctx.store.close();
@@ -470,6 +506,7 @@ export async function buildApp(
   driftRoutes(app);
   fleetRoutes(app);
   reportRoutes(app);
+  notificationRoutes(app);
   demoRoutes(app);
   app.get(
     "/api/v1/openapi.json",

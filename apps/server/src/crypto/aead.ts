@@ -131,4 +131,9 @@ export const ENCRYPTED_COLUMNS = [
   },
   { table: "schedules", column: "payload_enc", context: "schedules.payload" },
   { table: "schedules", column: "revert_enc", context: "schedules.revert" },
+  {
+    table: "notification_channels",
+    column: "secret_enc",
+    context: "notification_channels.secret",
+  },
 ] as const;

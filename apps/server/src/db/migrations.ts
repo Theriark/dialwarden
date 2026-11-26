@@ -379,6 +379,51 @@ CREATE TABLE drift_checks (
 );
 `;
 
+// Notification channels (P9-B). notification_channels holds each channel:
+// its kind, the C6 types it receives, the settings that are not secret as
+// JSON, and the secrets (webhook URL, signing secret, SMTP password) as one
+// JSON value encrypted with APP_SECRET_KEY; the last delivery result keeps a
+// code only, never a server answer. notification_inbox holds what the in-app
+// channel shows, naming the actor by id (D7) so erasing a user rewrites
+// nothing, and notification_reads how far each user has read it.
+const notifications = `
+CREATE TABLE notification_channels (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('in_app', 'webhook', 'discord', 'smtp')),
+  enabled INTEGER NOT NULL,
+  types TEXT NOT NULL,
+  config TEXT NOT NULL,
+  secret_enc TEXT,
+  last_delivery_at TEXT,
+  last_result TEXT,
+  last_error TEXT,
+  failures INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE notification_inbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+  channel_id TEXT NOT NULL
+    REFERENCES notification_channels(id) ON DELETE CASCADE,
+  event_id INTEGER NOT NULL,
+  type TEXT NOT NULL,
+  server_id TEXT,
+  at TEXT NOT NULL,
+  actor TEXT,
+  title TEXT NOT NULL,
+  lines TEXT NOT NULL
+);
+CREATE INDEX notification_inbox_server ON notification_inbox (server_id);
+
+CREATE TABLE notification_reads (
+  user_id TEXT PRIMARY KEY NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  last_read_id INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
@@ -389,6 +434,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: "0007_team", sql: team },
   { id: "0008_actor_ids", sql: actorIds },
   { id: "0009_fleet", sql: fleet },
+  { id: "0010_notifications", sql: notifications },
 ];
 
 /** The id of the newest migration this build knows. */
