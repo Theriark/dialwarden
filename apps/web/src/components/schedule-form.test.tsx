@@ -443,9 +443,11 @@ describe("ScheduleForm", () => {
       "1",
     );
 
+    // The name joins the visible words and the read-only setting name; the
+    // space before the colon depends on the name computation of the runtime.
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Remove Exp rate from the schedule",
+        name: /^Remove from the schedule\s*:\s*Exp rate$/,
       }),
     );
     await waitFor(() => {

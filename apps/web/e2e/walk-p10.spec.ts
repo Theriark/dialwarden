@@ -302,7 +302,9 @@ test("the owner's fleet tile, schedules with labels and the reports page on Free
       await expect(form.getByLabel("Experience rate")).toBeVisible();
       await expect(form.getByText("Edited", { exact: true })).toHaveCount(0);
       await expect(
-        form.getByRole("button", { name: /Remove Experience rate/ }),
+        form.getByRole("button", {
+          name: /^Remove from the schedule\s*:\s*Experience rate$/,
+        }),
       ).toBeVisible();
     },
     "/schedules",
