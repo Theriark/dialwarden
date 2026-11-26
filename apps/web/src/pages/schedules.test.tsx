@@ -368,12 +368,52 @@ describe("SchedulesPage", () => {
     await screen.findByText("Weekend rates");
     expect(
       screen.getByText(
-        /You are signed in as editor with read access to this server/,
+        /You are signed in as editor with read access to every server listed here: you read the schedules/,
       ),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "New schedule" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  // P10-B2 review M1: an empty fleet is not a read grant. The owner keeps
+  // the New button (disabled, nothing to pick) and sees no read-only
+  // sentence.
+  it("keeps the owner out of the read-only sentence with an empty fleet (M1)", async () => {
+    stubViewport(1440);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/servers") {
+        return { status: 200, body: { items: [] } };
+      }
+      if (method === "GET" && path === "/api/v1/schedules") {
+        return { status: 200, body: { items: [] } };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("No schedule yet");
+    expect(screen.queryByText(/You are signed in as/)).toBeNull();
+    expect(screen.getByText(/Plan a change for later/)).toBeTruthy();
+    const buttons = screen.getAllByRole("button", {
+      name: "New schedule",
+    }) as HTMLButtonElement[];
+    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(buttons[0]?.getAttribute("title")).toBe("Add a server first");
+  });
+
+  it("shows the error state, not a read grant, when the servers cannot be loaded (M1)", async () => {
+    stubViewport(1440);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/servers") {
+        return { status: 500, body: { error: "internal" } };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("The servers could not be loaded.");
+    expect(screen.queryByText(/You are signed in as/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
   });
 
   it("renders the upgrade hint and the paused explanation on Free", async () => {

@@ -386,7 +386,11 @@ export function SchedulesPage() {
       serverList.find((server) => server.id === serverId)?.packId ?? "",
     );
   // Who writes what (P10-A L22): the role allows writes and the server's own
-  // answer says write for that server. The New button needs one such server.
+  // answer says write for that server. The read-only sentence is for a
+  // viewer, or for an editor whose grant reads every server listed here; the
+  // owner and an admin always write (the server answers write for both), so
+  // an empty list is never read-only, only a New button with nothing to pick
+  // (P10-B2 review M1).
   const roleWrites = user !== null && SERVER_WRITE_ROLES.includes(user.role);
   const writable = serverList.filter((server) =>
     canWriteServer(user, server.access),
@@ -394,7 +398,9 @@ export function SchedulesPage() {
   const accessOf = new Map(
     serverList.map((server) => [server.id, server.access]),
   );
-  const canWrite = writable.length > 0;
+  const grantReadOnly =
+    roleWrites && serverList.length > 0 && writable.length === 0;
+  const canWrite = roleWrites && !grantReadOnly;
 
   if (schedules.isPending || servers.isPending) {
     return (
@@ -465,6 +471,21 @@ export function SchedulesPage() {
     );
   }
 
+  if (servers.isError) {
+    return (
+      <>
+        <PageHeader title="Schedules" />
+        <ErrorState
+          message="The servers could not be loaded."
+          onRetry={() => {
+            void servers.refetch();
+          }}
+          retrying={servers.isFetching}
+        />
+      </>
+    );
+  }
+
   const all = schedules.data.items;
   const shown = filter === "" ? all : all.filter((s) => s.serverId === filter);
   const now = Date.now();
@@ -488,6 +509,7 @@ export function SchedulesPage() {
       variant="primary"
       icon={<Plus className="size-4" aria-hidden="true" />}
       disabled={writable.length === 0}
+      title={writable.length === 0 ? "Add a server first" : undefined}
       onClick={() => {
         setForm("new");
       }}
@@ -508,7 +530,8 @@ export function SchedulesPage() {
           role={user?.role ?? "viewer"}
           reads="the schedules"
           writes="makes and removes them"
-          grant={roleWrites}
+          grant={grantReadOnly}
+          where="every server listed here"
           className="mb-4"
         />
       )}

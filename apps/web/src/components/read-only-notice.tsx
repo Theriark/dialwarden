@@ -17,6 +17,11 @@ export interface ReadOnlyNoticeProps {
   writes: string;
   /** True when the role could write but the grant on this server is read. */
   grant?: boolean | undefined;
+  /**
+   * What the read grant covers: "this server" on a server's own screens, or
+   * "every server listed here" on a page that spans the fleet.
+   */
+  where?: string | undefined;
   className?: string | undefined;
 }
 
@@ -25,6 +30,7 @@ export function ReadOnlyNotice({
   reads,
   writes,
   grant = false,
+  where = "this server",
   className,
 }: ReadOnlyNoticeProps) {
   return (
@@ -32,7 +38,7 @@ export function ReadOnlyNotice({
       <span className="flex items-center gap-2">
         <Eye className="size-4 shrink-0" aria-hidden="true" />
         {grant
-          ? `You are signed in as ${roleWord(role).toLowerCase()} with read access to this server: you read ${reads}. A write grant from the owner or an admin ${writes}.`
+          ? `You are signed in as ${roleWord(role).toLowerCase()} with read access to ${where}: you read ${reads}. A write grant from the owner or an admin ${writes}.`
           : `You are signed in as ${roleWord(role).toLowerCase()}: you read ${reads}. The owner, an admin or an editor with write access ${writes}.`}
       </span>
     </Alert>
