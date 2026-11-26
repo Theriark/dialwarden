@@ -1,9 +1,9 @@
 // The Dialwarden server (dev-work-plan P1-A): Fastify 5 with zod schemas,
 // OpenAPI 3.1 at /api/v1/openapi.json, pino with redaction, SQLite through the
 // store, authentication, the licence and entitlement gate, activity, the
-// backup engine, connectors, servers, change sets and snapshots (P4), and the
-// built web app with its security headers (contract C8). buildApp() opens
-// everything; app.close() closes it again.
+// backup engine, connectors, servers, change sets and snapshots (P4), the
+// Paid fleet layer (P9-A), and the built web app with its security headers
+// (contract C8). buildApp() opens everything; app.close() closes it again.
 import { hkdfSync, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import fastifyCookie from "@fastify/cookie";
@@ -35,6 +35,8 @@ import { loadAppKey } from "./crypto/app-key.js";
 import { HookService } from "./control/hooks.js";
 import { Settings } from "./db/settings.js";
 import { Store } from "./db/store.js";
+import { DriftService } from "./drift/service.js";
+import { MatrixService } from "./fleet/matrix.js";
 import type { AppContext } from "./http/context.js";
 import { errorHandler } from "./http/errors.js";
 import { registerGuard } from "./http/guard.js";
@@ -47,18 +49,23 @@ import {
 } from "./http/zod.js";
 import { LicenceService } from "./licence/service.js";
 import { loggerOptions } from "./log.js";
+import { NotificationDispatcher } from "./notifications/dispatch.js";
 import { OidcAccounts } from "./oidc/accounts.js";
 import type { OidcNetworkOptions } from "./oidc/network.js";
 import { OidcService } from "./oidc/service.js";
 import { EditableServers } from "./plan/editable.js";
 import { PresetService } from "./presets/service.js";
 import { RetentionService } from "./privacy/retention.js";
+import { ReportService } from "./reports/service.js";
 import { activityRoutes } from "./routes/activity.js";
 import { apiAccessRoutes } from "./routes/api-access.js";
 import { auditRoutes } from "./routes/audit.js";
 import { authRoutes } from "./routes/auth.js";
 import { changeRoutes } from "./routes/changes.js";
 import { connectorRoutes } from "./routes/connectors.js";
+import { demoRoutes } from "./routes/demo.js";
+import { driftRoutes } from "./routes/drift.js";
+import { fleetRoutes } from "./routes/fleet.js";
 import { gameRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { hookRoutes } from "./routes/hooks.js";
@@ -66,11 +73,15 @@ import { invitationRoutes } from "./routes/invitations.js";
 import { licenceRoutes } from "./routes/licence.js";
 import { oidcRoutes } from "./routes/oidc.js";
 import { presetRoutes } from "./routes/presets.js";
+import { reportRoutes } from "./routes/reports.js";
 import { retentionRoutes } from "./routes/retention.js";
+import { scheduleRoutes } from "./routes/schedules.js";
 import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
 import { userRoutes } from "./routes/users.js";
+import { ScheduleService } from "./schedules/service.js";
 import { seedDemoServers } from "./servers/demo.js";
+import { DemoDriftJob } from "./servers/demo-drift.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
 import { TokenService } from "./team/api-access.js";
@@ -284,6 +295,33 @@ export async function buildApp(
     log: app.log,
     now,
   });
+  // The Paid fleet layer of P9-A. The scheduler and the drift checks run as
+  // croner jobs started by main.ts (tests call their tick() with a fake
+  // clock); both do nothing on Free.
+  const schedules = new ScheduleService({
+    store,
+    aead,
+    servers,
+    changes,
+    team,
+    activity,
+    entitlement,
+    log: app.log,
+    now,
+  });
+  const drift = new DriftService({
+    store,
+    servers,
+    changes,
+    entitlement,
+    log: app.log,
+    now,
+  });
+  const notifications = new NotificationDispatcher({
+    activity,
+    entitlement,
+    log: app.log,
+  });
   const ctx: AppContext = {
     config,
     version: VERSION,
@@ -335,6 +373,18 @@ export async function buildApp(
       network: options.oidcNetwork,
       now,
     }),
+    schedules,
+    drift,
+    matrix: new MatrixService({ packs: packs.packs, servers, changes }),
+    reports: new ReportService({ store, servers, packs: packs.packs, now }),
+    notifications,
+    demoDrift: new DemoDriftJob({
+      demoSeed: config.demoSeed,
+      servers,
+      changes,
+      log: app.log,
+      now,
+    }),
     maintenance: false,
     importing: false,
     routes: [],
@@ -361,6 +411,11 @@ export async function buildApp(
   app.addHook("onClose", async () => {
     await ctx.backups.stop();
     ctx.retention.stop();
+    await ctx.schedules.stop();
+    await ctx.drift.stop();
+    ctx.demoDrift.stop();
+    ctx.notifications.stop();
+    await ctx.notifications.idle();
     ctx.store.close();
   });
 
@@ -410,6 +465,11 @@ export async function buildApp(
   invitationRoutes(app);
   auditRoutes(app);
   retentionRoutes(app);
+  scheduleRoutes(app);
+  driftRoutes(app);
+  fleetRoutes(app);
+  reportRoutes(app);
+  demoRoutes(app);
   app.get(
     "/api/v1/openapi.json",
     { config: { auth: "public" }, schema: { hide: true } },
