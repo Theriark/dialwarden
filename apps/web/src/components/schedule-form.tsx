@@ -719,16 +719,22 @@ export function ScheduleForm({
                         }}
                       />
                       <div className="flex justify-end">
+                        {/* The setting's name is read after the visible
+                            words, not put in an aria-label: a label holding
+                            it would make the button a second match for the
+                            field's own label. */}
                         <Button
                           variant="ghost"
                           className="h-7 px-2 text-xs"
                           disabled={pending}
-                          aria-label={`Remove ${setting.label ?? setting.key} from the schedule`}
                           onClick={() => {
                             removeSetting(edit.settingKey);
                           }}
                         >
                           Remove from the schedule
+                          <span className="sr-only">
+                            : {setting.label ?? setting.key}
+                          </span>
                         </Button>
                       </div>
                     </li>
