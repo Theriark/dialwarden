@@ -70,6 +70,12 @@ export interface SftpOptions {
   readonly operationTimeoutMs?: number;
   /** false never uses posix-rename (tests of the plain-rename fallback). */
   readonly posixRename?: boolean;
+  /**
+   * True for panel SFTP, which is chrooted, so / is the game folder there.
+   * Otherwise a root that resolves to / is refused (P10-A L4): every file of
+   * the host would be inside it.
+   */
+  readonly rootMayBeSlash?: boolean;
 }
 
 /** SFTP status codes (draft-ietf-secsh-filexfer-02). */
@@ -330,6 +336,12 @@ export class SftpConnector implements Connector {
       given === "" ? "." : given,
       "the server root",
     );
+    if (root === "/" && this.#options.rootMayBeSlash !== true) {
+      throw new ConnectorError(
+        "PathEscape",
+        "the server root cannot be / (the whole host)",
+      );
+    }
     const stats = await this.#lstatOf(sftp, root, "the server root");
     if ((stats.mode & S_IFMT) !== S_IFDIR) {
       throw new ConnectorError("NotFound", "the server root is not a folder");

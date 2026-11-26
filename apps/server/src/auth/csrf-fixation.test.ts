@@ -340,6 +340,41 @@ describe("sessions and CSRF on sign-in (S-01 to S-07)", () => {
     ).toBe(401);
   });
 
+  // P10-A G5.4: driven by the route list, so a new state-changing route
+  // cannot skip the check.
+  it("G5.4 refuses every non-GET API route with a session and no CSRF header", async () => {
+    const t = await fixture();
+    const { app, owner, servers } = t;
+    const routes = app.ctx.routes.filter(
+      (route) =>
+        route.url.startsWith("/api/v1/") &&
+        !["GET", "HEAD", "OPTIONS"].includes(route.method),
+    );
+    expect(routes.length).toBeGreaterThan(40);
+    const answers = new Map<string, string>();
+    for (const route of routes) {
+      const url = route.url
+        .replace(":slug", servers.a)
+        .replace(/:[A-Za-z]+/g, "00000000-0000-4000-8000-000000000000");
+      const response = await app.inject({
+        method: route.method as "POST",
+        url,
+        headers: { cookie: owner.cookie, "content-type": "application/json" },
+        payload: "{}",
+      });
+      answers.set(
+        `${route.method} ${route.url}`,
+        `${String(response.statusCode)} ${response.body}`,
+      );
+    }
+    const wrong = [...answers].filter(
+      ([, answer]) => answer !== '403 {"error":"csrf"}',
+    );
+    expect(wrong).toEqual([]);
+    const session = await call(app, owner, "GET", "/api/v1/auth/session");
+    expect(session.statusCode).toBe(200);
+  });
+
   it("S-07 answers no CORS header", async () => {
     const t = await fixture();
     const { app, editor } = t;

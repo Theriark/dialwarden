@@ -230,6 +230,34 @@ describe("shell variables: malformed files", () => {
     expect(shell.get(shell.parse(bytes("A=x\\\ny\n")), name("A"))).toBe("xy");
   });
 
+  // P10-A L7: the shell reads a CR as an ordinary character and systemd as
+  // a line end, so a CR that does not end a CRLF line is a syntax error in
+  // both dialects rather than a line end in this parser.
+  it("accepts a CR only before a line break or at the file end", () => {
+    const codes = (adapter: typeof shell, input: string) =>
+      adapter.lint(adapter.parse(bytes(input))).map((issue) => issue.code);
+    for (const adapter of [shell, systemd]) {
+      expect(codes(adapter, "A=a\r touch /tmp/x\n")).toEqual(["syntax"]);
+      expect(codes(adapter, "A=a\rB=b\n")).toEqual(["syntax"]);
+      expect(codes(adapter, "A=a\r\nB=b\r\n")).toEqual([]);
+      expect(codes(adapter, "A=a\r")).toEqual([]);
+    }
+    expect(codes(shell, "A=a\n\r touch /tmp/x\n")).toEqual(["syntax"]);
+    expect(shell.get(shell.parse(bytes("A=a\r\n")), name("A"))).toBe("a");
+  });
+
+  // P10-A L7: the shell reads a form feed, a vertical tab and a BOM as word
+  // bytes, so a # after one is no comment and the rest of the line runs.
+  it("refuses a form feed, vertical tab or BOM before a # comment", () => {
+    const codes = (input: string) =>
+      shell.lint(shell.parse(bytes(input))).map((issue) => issue.code);
+    const bom = String.fromCharCode(0xfeff);
+    expect(codes("A=a\n\f#;touch /tmp/x\n")).toEqual(["syntax"]);
+    expect(codes("A=a\n\v#;touch /tmp/x\n")).toEqual(["syntax"]);
+    expect(codes(`${bom}#;touch /tmp/x\nA=a\n`)).toEqual(["syntax"]);
+    expect(codes("A=a\n  # a comment\n\tB=b\n")).toEqual([]);
+  });
+
   it("ends a line continuation before appending a variable", () => {
     const out = edited(shell, "A=x\\\n", (d) => shell.insert(d, name("B"), 1));
     expect(out).toBe('A=x\\\n\nB="1"\n');

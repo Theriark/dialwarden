@@ -203,6 +203,12 @@ export const changeSets = sqliteTable(
      * the start hook runs after the write.
      */
     runHooks: text("run_hooks"),
+    /**
+     * Who applied a change that is pending (P10-A L21): the flush writes it
+     * only while that user may still write on the server. Null for changes
+     * parked before 0011 and for changes that never waited.
+     */
+    parkedBy: text("parked_by"),
     /** The snapshot a rollback restores. */
     restoreOf: text("restore_of"),
     createdAt: text("created_at").notNull(),

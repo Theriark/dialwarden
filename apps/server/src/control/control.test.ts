@@ -4,7 +4,9 @@
 // command. The packs here are the real Palworld pack (its shipped REST
 // probe) and a small synthetic RCON pack, both against static values.
 import { randomBytes } from "node:crypto";
+import { createServer, type AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
+import { readFileValues } from "@dialwarden/packs-schema";
 import { loadPacks } from "@dialwarden/packs-schema/node";
 import { describe, expect, it } from "vitest";
 import { createAead, type Aead } from "../crypto/aead.js";
@@ -19,6 +21,7 @@ import {
 } from "./control.js";
 import type { JsonValue, Pack, Probe } from "@dialwarden/packs-schema";
 import { SourceRcon } from "./source-rcon.js";
+import { Telnet7dtd } from "./telnet-7dtd.js";
 import { allowedCommand, isControlError, LIMITS } from "./types.js";
 
 const PACKS = fileURLToPath(new URL("../../../../packs/", import.meta.url));
@@ -363,5 +366,63 @@ describe("hook client", () => {
       });
     expect(docker).toThrowError(/proxy URL is not usable/);
     expect(isControlError(new Error("x"))).toBe(false);
+  });
+});
+
+describe("control resolver: 7 Days to Die telnet password", () => {
+  // P10-A G3.8: an encoded line break in serverconfig.xml decodes to a real
+  // one; the password is refused before any connection is made.
+  it("G3.8 refuses a password with an encoded LF before connecting", async () => {
+    const sevenDays = packs.get("7dtd");
+    const probe = sevenDays?.probes.find((p) => p.kind === "telnet7dtd");
+    if (sevenDays === undefined || probe === undefined) {
+      throw new Error("the 7dtd pack or its telnet probe is missing");
+    }
+    let connections = 0;
+    const listener = createServer((socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    await new Promise<void>((resolve) => {
+      listener.listen(0, "127.0.0.1", () => resolve());
+    });
+    try {
+      const port = (listener.address() as AddressInfo).port;
+      const xml = [
+        '<?xml version="1.0"?>',
+        "<ServerSettings>",
+        '  <property name="TelnetPassword" value="pw&#10;shutdown"/>',
+        `  <property name="TelnetPort" value="${String(port)}"/>`,
+        "</ServerSettings>",
+        "",
+      ].join("\n");
+      const read = readFileValues(
+        sevenDays,
+        "serverconfig",
+        new TextEncoder().encode(xml),
+      );
+      expect(read.values.get("TelnetPassword")).toBe("pw\nshutdown");
+      const resolved = await probeOptions({
+        probe,
+        context: context(Object.fromEntries(read.values), "127.0.0.1"),
+      });
+      if (resolved?.kind !== "telnet7dtd") {
+        throw new Error("the telnet probe did not resolve");
+      }
+      const client = new Telnet7dtd(resolved.options);
+      for (const action of [() => client.save(), () => client.stop()]) {
+        let caught: unknown;
+        try {
+          await action();
+        } catch (error) {
+          caught = error;
+        }
+        expect(isControlError(caught, "Refused")).toBe(true);
+        expect((caught as Error).message).not.toContain("shutdown");
+      }
+      expect(connections).toBe(0);
+    } finally {
+      listener.close();
+    }
   });
 });

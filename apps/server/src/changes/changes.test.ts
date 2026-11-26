@@ -275,6 +275,12 @@ describe("change sets (contract C5)", () => {
     });
     const file = await post({ patches: [{ fileId: "nope", text: "x" }] });
     expect(file.json()).toEqual({ error: "unknown_file", fileId: "nope" });
+    // P10-A G1.3: a file id is a pack id, never a path.
+    const climb = await post({
+      patches: [{ fileId: "../../etc/passwd", text: "x" }],
+    });
+    expect(climb.statusCode).toBe(422);
+    expect(climb.json()).toMatchObject({ error: "unknown_file" });
     const both = await post({
       edits: [{ settingKey: "ExpRate", value: 2 }],
       patches: [{ fileId: "settings", text: "x" }],
@@ -394,6 +400,44 @@ describe("the write path (rnd-report-1 2.7)", () => {
       ["external", "applied"],
       ["import", "applied"],
     ]);
+  });
+
+  // P10-A G4.5: a conflict on a secret shows all three sides as masks.
+  it("G4.5 masks base, ours and theirs of a secret in conflict", async () => {
+    const { app, api, root, slug } = await palworld();
+    const [base, ours, theirs] = ["base", "ours", "theirs"].map(
+      (side) => `${side}-${randomUUID()}`,
+    );
+    await change(api, slug, { AdminPassword: base });
+    const made = await draft(api, slug, { AdminPassword: ours });
+    let edited = false;
+    app.ctx.changes.beforeWrite = async () => {
+      if (edited) return;
+      edited = true;
+      await outside(
+        root,
+        `AdminPassword="${base ?? ""}"`,
+        `AdminPassword="${theirs ?? ""}"`,
+      );
+    };
+    const done = await apply(api, made.id);
+    expect(done.status).toBe("conflict");
+    expect(done.conflict?.files[0]).toMatchObject({
+      settings: [
+        {
+          settingKey: "AdminPassword",
+          base: SECRET_MASK,
+          ours: SECRET_MASK,
+          theirs: SECRET_MASK,
+        },
+      ],
+    });
+    const shown = await api.get(`/api/v1/change-sets/${made.id}`);
+    for (const body of [JSON.stringify(done), shown.body]) {
+      for (const value of [base, ours, theirs]) {
+        expect(body).not.toContain(value);
+      }
+    }
   });
 
   it("gives up as busy when the file keeps changing, losing no edit", async () => {
@@ -631,7 +675,8 @@ describe("the change set state machine", () => {
     });
     const unknown = await api.get(`/api/v1/change-sets/${randomUUID()}`);
     expect(unknown.statusCode).toBe(404);
-    expect((await api.get("/api/v1/change-sets/x")).statusCode).toBe(400);
+    // P10-A I5: a malformed id answers like a missing one, before the schema.
+    expect((await api.get("/api/v1/change-sets/x")).statusCode).toBe(404);
     const shown = await api.get(`/api/v1/change-sets/${made.id}`);
     expect(shown.json()).toMatchObject({ id: made.id, status: "applied" });
   });
@@ -823,6 +868,101 @@ describe("history limits (contract C1)", () => {
     const past = await history(api, slug);
     expect(past.entries.at(0)?.cause).toBe("external");
     expect(past.hiddenCount).toBe(2);
+  });
+
+  it("L20 answers 402 for a hidden entry read by id, until Paid", async () => {
+    const { api, slug } = await palworld();
+    for (const rate of [2, 3, 4, 5, 6, 7]) {
+      await change(api, slug, { ExpRate: rate });
+    }
+    // The ids of every change leak through the activity feed on Free.
+    const feed = await api.get("/api/v1/activity?type=change.applied");
+    const ids = feed
+      .json<{ items: { data: { changeSetId?: string } }[] }>()
+      .items.map((item) => item.data.changeSetId ?? "");
+    expect(ids).toHaveLength(6);
+    const oldest = ids.at(-1) ?? "";
+    const hidden = await api.get(`/api/v1/change-sets/${oldest}`);
+    expect(hidden.statusCode).toBe(402);
+    expect(hidden.json()).toEqual({
+      error: "payment_required",
+      plan: "free",
+      limit: "historyVisible",
+      current: 7,
+      max: 5,
+    });
+    const newest = await api.get(`/api/v1/change-sets/${ids[0] ?? ""}`);
+    expect(newest.statusCode).toBe(200);
+    const token = customerLicence();
+    expect((await api.put("/api/v1/licence", { token })).statusCode).toBe(200);
+    const paid = await api.get(`/api/v1/change-sets/${oldest}`);
+    expect(paid.statusCode).toBe(200);
+  });
+
+  it("L20 refuses to apply again a failed rollback that is now hidden", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    // The rollback fails: the host drops the connection before the write.
+    app.ctx.changes.beforeWrite = async () => {
+      throw new ConnectorError("Connection", "simulated drop");
+    };
+    const rollback = await restoreSnapshot(api, ids.settings);
+    app.ctx.changes.beforeWrite = null;
+    const failed = rollback.json<ChangeSetBody>();
+    expect(failed.status).toBe("failed");
+    for (const rate of [3, 4, 5, 6, 7]) {
+      await change(api, slug, { ExpRate: rate });
+    }
+    const before = await settingsText(root);
+    const again = await api.post(`/api/v1/change-sets/${failed.id}/apply`);
+    expect(again.statusCode).toBe(402);
+    expect(again.json()).toMatchObject({ limit: "historyVisible", max: 5 });
+    expect(await settingsText(root)).toBe(before);
+  });
+
+  // P10-B N1: snapshot retention keeps no snapshot of a failed rollback,
+  // but its payload still holds the bytes: the check then falls back on
+  // the rollback entry itself, so a hidden one still answers 402 on Free.
+  it("N1 refuses a hidden failed rollback whose snapshot was pruned", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    app.ctx.changes.beforeWrite = async () => {
+      throw new ConnectorError("Connection", "simulated drop");
+    };
+    const rollback = await restoreSnapshot(api, ids.settings);
+    app.ctx.changes.beforeWrite = null;
+    const failed = rollback.json<ChangeSetBody>();
+    expect(failed.status).toBe("failed");
+    for (const rate of [3, 4, 5, 6, 7]) {
+      await change(api, slug, { ExpRate: rate });
+    }
+    app.ctx.store.sqlite
+      .prepare("DELETE FROM snapshots WHERE id = ?")
+      .run(ids.settings);
+    const before = await settingsText(root);
+    const again = await api.post(`/api/v1/change-sets/${failed.id}/apply`);
+    expect(again.statusCode).toBe(402);
+    expect(again.json()).toMatchObject({ limit: "historyVisible", max: 5 });
+    expect(await settingsText(root)).toBe(before);
+  });
+
+  it("F10 adds no history entry for a restore that writes nothing", async () => {
+    const { api, slug } = await palworld();
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    const first = await restoreSnapshot(api, ids.settings);
+    expect(first.json()).toMatchObject({ status: "applied" });
+    const count = (await history(api, slug)).entries.length;
+    // The file already holds that version: answered applied, no new entry.
+    const again = await restoreSnapshot(api, ids.settings);
+    expect(again.statusCode).toBe(200);
+    expect(again.json()).toMatchObject({
+      cause: "rollback",
+      status: "applied",
+    });
+    expect((await history(api, slug)).entries).toHaveLength(count);
   });
 
   it("meters the snapshot store for the owner", async () => {

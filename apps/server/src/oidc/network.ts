@@ -69,6 +69,20 @@ export function policyOf(
   };
 }
 
+/**
+ * The IPv4 address inside an IPv4-compatible IPv6 address (::a.b.c.d, the
+ * deprecated ::/96), or null. ipaddr.js calls ::7f00:1 plain unicast, so
+ * without this the policy let 127.0.0.1 and 169.254.169.254 through in that
+ * spelling (P10-A U1). :: and ::1 keep their own meaning.
+ */
+function embeddedIpv4(v6: ipaddr.IPv6): ipaddr.IPv4 | null {
+  const [a, b, c, d, e, f, high = 0, low = 0] = v6.parts;
+  if ([a, b, c, d, e, f].some((part) => part !== 0)) return null;
+  if (high === 0 && low <= 1) return null;
+  const bytes = [high >> 8, high & 0xff, low >> 8, low & 0xff];
+  return ipaddr.IPv4.parse(bytes.join("."));
+}
+
 /** Whether one address may be reached under the policy. */
 export function addressAllowed(text: string, policy: NetworkPolicy): boolean {
   // A zone id (fe80::1%eth0) is link-local anyway; drop it for the parser.
@@ -78,6 +92,7 @@ export function addressAllowed(text: string, policy: NetworkPolicy): boolean {
   if (address.kind() === "ipv6") {
     const v6 = address as ipaddr.IPv6;
     if (v6.isIPv4MappedAddress()) address = v6.toIPv4Address();
+    else address = embeddedIpv4(v6) ?? v6;
   }
   const range = address.range();
   if (range === "unicast") return true;

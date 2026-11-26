@@ -167,6 +167,14 @@ function valueText(value: Value, previous: string | undefined): string {
         "quotes and line breaks cannot be written to a cfg value",
       );
     }
+    // A console may end a command at ; even inside quotes, and a NUL ends
+    // the line of a C reader: neither is written (P10-A U2).
+    if (value.includes(";") || value.includes("\0")) {
+      throw new FormatError(
+        "invalid-value",
+        "a semicolon or a NUL cannot be written to a cfg value",
+      );
+    }
     return value;
   }
   if (typeof value === "number") return numberText(value, previous);

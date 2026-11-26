@@ -42,10 +42,16 @@ export function activityRoutes(app: FastifyInstance): void {
       const principal = request.principal;
       // Editors and viewers see the events of their servers only; user and
       // licence events, which carry e-mail addresses, stay with the owner
-      // and admins (D23).
+      // and admins (D23). An admin's viewer-scoped API token sees the
+      // servers its creator sees, as the inbox does (P10-A G7.5).
       const limited = principal !== null && !atLeast(principal.role, "admin");
-      const grants = limited ? app.ctx.team.grantsOf(principal.userId) : [];
-      const onlyServers = grants.map((grant) => grant.server);
+      const visible = app.ctx.team.visibleServers(principal);
+      const onlyServers = limited
+        ? app.ctx.servers
+            .list()
+            .map((server) => server.id)
+            .filter(visible)
+        : [];
       const page = app.ctx.activity.list({
         limit,
         ...(before === undefined ? {} : { before }),

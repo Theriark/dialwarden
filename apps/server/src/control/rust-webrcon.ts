@@ -8,11 +8,13 @@
 // means the console is down or the password was refused; the two cannot be
 // told apart on the wire, so the probe reports unknown. The URL holds the
 // password, so no error text ever names the address.
-import { connect } from "node:net";
+import { connect, isIPv6 } from "node:net";
 import {
   allowedCommand,
   ControlError,
   LIMITS,
+  usableHost,
+  usablePort,
   type AllowList,
   type ControlTimeouts,
   type GameControl,
@@ -206,8 +208,45 @@ export class RustWebRcon implements GameControl {
     await this.#command(this.#options.stopCommand);
   }
 
+  /**
+   * The console URL, built by the URL parser like the Palworld REST address
+   * (P10-A L5): an IPv6 host gets its brackets, and a host that would move
+   * the URL elsewhere is refused before any connection is made.
+   */
+  #url(): URL {
+    const { host, port, password } = this.#options;
+    const hostPart = isIPv6(host) ? `[${host}]` : host;
+    const url = usableHost(host)
+      ? URL.parse(`ws://${hostPart}:${port}/`)
+      : null;
+    if (
+      url === null ||
+      !usablePort(port) ||
+      url.hostname !== hostPart.toLowerCase() ||
+      url.pathname !== "/"
+    ) {
+      throw new ControlError(
+        "Refused",
+        "the web console address is not usable",
+      );
+    }
+    try {
+      url.pathname = `/${encodeURIComponent(password)}`;
+    } catch (error) {
+      // A lone surrogate cannot be encoded (URIError): refused like a bad
+      // address, so it answers control_error, never a 500 (P10-B N4).
+      throw new ControlError(
+        "Refused",
+        "the web console password is not usable",
+        error,
+      );
+    }
+    return url;
+  }
+
   /** Opens the console; the open failure says down or refused. */
   async #session(): Promise<Console> {
+    const url = this.#url();
     // A closed TCP port is the game being down; the WebSocket API would
     // only say that the handshake never happened, which also covers a
     // refused password. The TCP probe tells the two apart.
@@ -236,8 +275,18 @@ export class RustWebRcon implements GameControl {
         resolve();
       });
     });
-    const url = `ws://${this.#options.host}:${this.#options.port}/${encodeURIComponent(this.#options.password)}`;
-    const session = new Console(url, connectMs);
+    let session: Console;
+    try {
+      session = new Console(url.href, connectMs);
+    } catch (error) {
+      // The WebSocket constructor throws a SyntaxError on a URL it cannot
+      // use; as a ControlError it answers control_error, never a 500.
+      throw new ControlError(
+        "Refused",
+        "the web console address is not usable",
+        error,
+      );
+    }
     try {
       await session.opened;
       return session;

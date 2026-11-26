@@ -26,6 +26,19 @@ claim it. Keep the log private until setup is done. `DEV_SEED_OWNER_EMAIL` and
 `DEV_SEED_OWNER_PASSWORD` create the owner at first start for unattended test
 setups; do not leave them set on a production instance.
 
+## Known limitations
+
+- SFTP servers: a file is checked against the server folder when it is
+  opened, not again after an atomic rename, and reads and folder lists have
+  no size limit yet. A process on the game host that can write the config
+  folder could use the gap between the check and the read or write. Give the
+  SFTP account access to the game folder only (a chrooted panel account is
+  best).
+- The data folder holds the snapshots (`snapshots/`) and backups
+  (`backups/`) of your game files as plain files. Protect them like the key
+  file: owner-only permissions (files 0600, folders 0700) and no other user
+  on the volume.
+
 ## Verifying images
 
 Every image is signed with cosign keyless signing from this repository's CI. See

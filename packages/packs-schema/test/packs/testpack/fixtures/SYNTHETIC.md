@@ -8,5 +8,5 @@ or wiki text (legal-input-1, section 2).
 | --- | --- |
 | Game.ini | an Unreal INI file with a settings section, a quoted name, an empty value and a one-line struct |
 | Engine.ini | a second Unreal INI file of the same game, for the wrong-file lint |
-| launch.txt | a start command with a dash flag that has a value and a bare flag |
+| launch.txt | a start command on one line, the way the start snippets eval an undeclared launch file, with a dash flag that has a value and a bare flag |
 | testserver.cfg | a LinuxGSM-style shell variable file with start parameters |

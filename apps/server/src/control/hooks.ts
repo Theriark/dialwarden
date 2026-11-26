@@ -135,18 +135,23 @@ interface Where {
 
 type HookRow = typeof serverHooks.$inferSelect;
 
-/** A control error as an API error, with its code for the UI. */
+/**
+ * A control error as an API error, with its code for the UI. Every code
+ * answers in the 4xx range (P6 O1): a proxy such as Cloudflare replaces the
+ * body of a 5xx answer with its own page, and the UI would lose the code.
+ * 424 says the game server, a dependency of the request, failed.
+ */
 export function controlFailure(error: unknown): ApiError {
   if (!(error instanceof ControlError)) throw error;
   const status: Record<ControlErrorCode, number> = {
-    Connection: 502,
-    Timeout: 502,
-    Auth: 502,
-    Protocol: 502,
-    HostKey: 502,
+    Connection: 424,
+    Timeout: 424,
+    Auth: 424,
+    Protocol: 424,
+    HostKey: 424,
     Refused: 422,
-    Failed: 500,
-    Unsupported: 501,
+    Failed: 424,
+    Unsupported: 422,
   };
   return new ApiError(status[error.code], "control_error", {
     code: error.code,

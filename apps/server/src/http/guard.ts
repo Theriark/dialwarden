@@ -138,7 +138,7 @@ function textField(value: unknown, field: string): string | null {
 /**
  * The game server a scoped route acts on: a slug, the server of a change set
  * or snapshot, or null when there is none. A value that is not even shaped
- * like an id is left to the schema (400), so it reveals nothing either.
+ * like an id is "malformed" and answers like a missing object (P10-A I5).
  */
 function serverOf(
   app: FastifyInstance,
@@ -187,9 +187,9 @@ function checkServer(
   scope: ServerScope,
 ): void {
   const serverId = serverOf(app, request, scope.from);
-  // A malformed id never reaches the handler: the schema answers 400.
-  if (serverId === "malformed") return;
-  if (serverId === null) throw missing(scope.from);
+  // A malformed id answers like a missing object, before any route schema
+  // (P10-A I5: the check fails closed even on a route without one).
+  if (serverId === "malformed" || serverId === null) throw missing(scope.from);
   const grant = app.ctx.team.grantLevel(principal.userId, serverId);
   const level = serverLevel(principal, grant);
   if (level === null) throw missing(scope.from);

@@ -23,6 +23,17 @@
 // Each password is generated here, registered with browser_account (labels
 // admin, editor and viewer) and used once to accept the invitation; the
 // invitation value and the session never leave this process either.
+//
+// P10 (phase-report-08 F6): the owner pair can also be passed in, so the
+// tool runs where those variables are not set: --owner-email ADDRESS and
+// --owner-password-stdin, which reads the password from the first line of
+// standard input (never an argument, so it stays out of the process list).
+// The operator runs it, for example with the password manager piping the
+// pair; the crew never holds the owner password and adds team accounts in
+// the browser instead. --team also makes the in-app notification channel
+// when the instance has none (phase-report-09 G3), so the bell is not
+// empty. Invitations and channels are Paid: on Free --team stops at the
+// first invitation (402, exit 1) and the channel step answers skipped.
 import { execFile } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { parseArgs } from "node:util";
@@ -36,7 +47,7 @@ export const DEFAULT_EMAIL = "owner@dialwarden.test";
 export const DEFAULT_REPO = "dialwarden";
 
 const USAGE =
-  "usage: node tools/seed/seed-accounts.mjs --base-url https://stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment), or --team instead of the setup token to add admin, editor and viewer";
+  "usage: node tools/seed/seed-accounts.mjs --base-url https://stg-dialwarden.theriark.dev --env stage|dev --setup-token TOKEN [--email ADDRESS] [--repo NAME] (or DIALWARDEN_SETUP_TOKEN in the environment), or --team instead of the setup token to add admin, editor, viewer and the in-app channel [--owner-email ADDRESS --owner-password-stdin]";
 const SETUP_TOKEN = /^[0-9a-f]{64}$/;
 const VARIABLE_NAME = /\b[A-Z][A-Z0-9_]*_(?:EMAIL|PASSWORD)\b/g;
 
@@ -92,6 +103,8 @@ export function parseSeedArgs(argv, env = process.env) {
       repo: { type: "string" },
       "setup-token": { type: "string" },
       team: { type: "boolean" },
+      "owner-email": { type: "string" },
+      "owner-password-stdin": { type: "boolean" },
     },
     strict: true,
     allowPositionals: false,
@@ -104,8 +117,23 @@ export function parseSeedArgs(argv, env = process.env) {
   }
   const baseUrl = checkBaseUrl(values["base-url"], values.env);
   const repo = values.repo ?? DEFAULT_REPO;
+  const ownerEmail = values["owner-email"];
+  const ownerPasswordStdin = values["owner-password-stdin"] === true;
+  if (values.team !== true && (ownerEmail || ownerPasswordStdin)) {
+    throw new SeedError("--owner-email and --owner-password-stdin need --team");
+  }
+  if (ownerPasswordStdin && !ownerEmail) {
+    throw new SeedError("--owner-password-stdin needs --owner-email");
+  }
   if (values.team === true) {
-    return { env: values.env, baseUrl, repo, team: true };
+    return {
+      env: values.env,
+      baseUrl,
+      repo,
+      team: true,
+      ownerEmail: ownerEmail ?? null,
+      ownerPasswordStdin,
+    };
   }
   const given = values["setup-token"] ?? env.DIALWARDEN_SETUP_TOKEN ?? "";
   const setupToken = given.trim();
@@ -315,6 +343,60 @@ export async function ownerSession(baseUrl, credentials, fetchImpl) {
   return { cookie: sessionPair(response), csrf: body.csrfToken };
 }
 
+/** The first line of standard input, at most 1 KiB (the owner password). */
+export async function readStdinLine(stream = process.stdin, limit = 1024) {
+  let text = "";
+  for await (const chunk of stream) {
+    text += String(chunk);
+    if (text.length > limit) {
+      throw new SeedError("standard input holds more than one short line");
+    }
+  }
+  return (text.split(/\r?\n/)[0] ?? "").trim();
+}
+
+/** The C6 activity types the in-app channel receives (all of them). */
+export const ACTIVITY_TYPES = [
+  "change.applied",
+  "change.pending",
+  "change.conflict",
+  "hook.run",
+  "drift.detected",
+  "schedule.run",
+  "schedule.reverted",
+  "backup.done",
+  "backup.failed",
+  "licence.changed",
+  "user.changed",
+];
+
+/**
+ * Makes the in-app notification channel when the instance has none
+ * (phase-report-09 G3). Channels are Paid: on Free the step is skipped.
+ * Answers what happened: made, present or skipped.
+ */
+export async function ensureInAppChannel(call) {
+  const path = "/api/v1/notifications/channels";
+  const listed = await call("GET", path);
+  if (listed.status === 402) return "skipped (Free plan)";
+  if (listed.status !== 200) {
+    throw new SeedError(`GET ${path} answered ${listed.status}`);
+  }
+  const items = Array.isArray(listed.body?.items) ? listed.body.items : [];
+  if (items.some((item) => item?.kind === "in_app")) return "present";
+  const made = await call("POST", path, {
+    name: "In-app",
+    enabled: true,
+    types: ACTIVITY_TYPES,
+    settings: { kind: "in_app" },
+  });
+  if (made.status !== 201) {
+    const code = made.body?.error ?? "unknown";
+    throw new SeedError(`POST ${path} answered ${made.status} (${code})`);
+  }
+  return "made";
+}
+
 /** The first demo servers by id: the grants of the editor and the viewer. */
 export function demoServers(items, count = TEAM_GRANT_SERVERS) {
   return items
@@ -335,11 +417,23 @@ export async function seedTeam(options, deps) {
   const run = deps.run ?? runTaskClient;
   const variables = ownerVariables(env);
   const source = new Map(Object.entries(deps.env ?? process.env));
-  const email = source.get(variables.email) ?? "";
-  const password = source.get(variables.password) ?? "";
+  let email = source.get(variables.email) ?? "";
+  let password = source.get(variables.password) ?? "";
+  if (options.ownerEmail) {
+    email = options.ownerEmail;
+    password = "";
+  }
+  if (options.ownerPasswordStdin) {
+    try {
+      password = await (deps.readStdin ?? readStdinLine)();
+    } catch (error) {
+      stderr.write(`seed: ${String(error.message).slice(0, 200)}\n`);
+      return 2;
+    }
+  }
   if (email === "" || password === "") {
     stderr.write(
-      `seed: ${variables.email} and ${variables.password} are required\n`,
+      `seed: the owner pair is required: --owner-email with --owner-password-stdin, or ${variables.email} and ${variables.password}\n`,
     );
     return 2;
   }
@@ -420,10 +514,11 @@ export async function seedTeam(options, deps) {
       }
       done.push(account.label);
     }
+    const channel = await ensureInAppChannel(call);
     const made = done.length > 0 ? done.join(", ") : "nobody new";
     const shown = names.length > 0 ? names.join(" ") : "(no names returned)";
     stdout.write(
-      `seed: ${made} on ${baseUrl} (grants on ${servers.join(", ")}); registered ${shown}\n`,
+      `seed: ${made} on ${baseUrl} (grants on ${servers.join(", ")}); in-app channel ${channel}; registered ${shown}\n`,
     );
     return 0;
   } catch (error) {

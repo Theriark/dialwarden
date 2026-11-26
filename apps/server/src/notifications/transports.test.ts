@@ -26,6 +26,7 @@ import {
   discordBody,
   MAX_ATTEMPTS,
   sendDiscord,
+  sendSmtp,
   sendWebhook,
   type SendContext,
   type WebhookBody,
@@ -301,6 +302,72 @@ describe("network policy at send time (SSRF)", () => {
     ]) {
       expect((await send(url, policy)).code, url).toBe("url_refused");
     }
+  });
+
+  // P10-A G2.1: the SMTP host is checked at send time like a URL host.
+  it("G2.1 refuses an SMTP host that resolves to metadata or a private address", async () => {
+    const target = {
+      host: "mail.example.test",
+      port: 587,
+      security: "starttls" as const,
+      username: null,
+      password: null,
+      from: "dialwarden@dialwarden.test",
+      to: ["ops@dialwarden.test"],
+    };
+    const resolving = (address: string, allowPrivate: boolean) =>
+      policyOf(allowPrivate, { resolve: async () => [address] });
+    const cases: [string, boolean][] = [
+      ["169.254.169.254", true],
+      ["169.254.169.254", false],
+      ["10.0.0.5", false],
+    ];
+    for (const [address, allowPrivate] of cases) {
+      const policy = resolving(address, allowPrivate);
+      const error = await failure(sendSmtp(target, MESSAGE, context(policy)));
+      expect(error.code, address).toBe("host_refused");
+    }
+    // Nothing was retried, so no connection was even tried.
+    expect(slept).toEqual([]);
+  });
+
+  // P10-A G2.2: an answer past the cap is refused once, never retried.
+  it("G2.2 refuses an answer over 512 KiB without a retry", async () => {
+    sink.script({ status: 200, body: "x".repeat(600 * 1024) });
+    const error = await failure(
+      sendWebhook(
+        { url: `${sink.base}/h`, signingSecret: null },
+        body(),
+        "change.applied",
+        context(),
+      ),
+    );
+    expect(error.code).toBe("url_refused");
+    expect(sink.received).toHaveLength(1);
+  });
+
+  // P10-A G2.3: the name is resolved once; the connection goes to the
+  // address that was checked, whatever the name resolves to later.
+  it("G2.3 connects only to the checked address of a rebinding name", async () => {
+    const answers = [["127.0.0.1"], ["169.254.169.254"]];
+    let calls = 0;
+    const policy = policyOf(false, {
+      allowLoopback: true,
+      allowHttp: true,
+      resolve: async () => {
+        const found = answers[Math.min(calls, answers.length - 1)] ?? [];
+        calls += 1;
+        return found;
+      },
+    });
+    await sendWebhook(
+      { url: `http://rebind.example.test:${sink.port}/h`, signingSecret: null },
+      body(),
+      "change.applied",
+      context(policy),
+    );
+    expect(calls).toBe(1);
+    expect(sink.received).toHaveLength(1);
   });
 
   it("refuses http and credentials in the URL", async () => {

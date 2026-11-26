@@ -5,7 +5,13 @@
 import { connect, type AddressInfo } from "node:net";
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { setupOwner, testApp, type TestApp } from "../../test/helpers.js";
+import {
+  headersOf,
+  setupOwner,
+  testApp,
+  type TestApp,
+} from "../../test/helpers.js";
+import { onSlug } from "./scope.js";
 
 let current: TestApp | undefined;
 
@@ -140,5 +146,33 @@ describe("request guard", () => {
     } finally {
       app.ctx.maintenance = false;
     }
+  });
+
+  // P10-A I5 and G7.3: a scoped route without a schema still fails closed.
+  it("G7.3 answers a malformed scoped id as missing, before the handler", async () => {
+    let called = 0;
+    current = await testApp({
+      extend: (app) => {
+        app.get(
+          "/api/v1/test/scoped/:slug",
+          { config: onSlug("read") },
+          async () => {
+            called += 1;
+            return { ok: true };
+          },
+        );
+      },
+    });
+    const owner = await setupOwner(current.app);
+    for (const slug of ["NOT_A_SLUG", "a%2Fb", "x".repeat(80)]) {
+      const response = await current.app.inject({
+        method: "GET",
+        url: `/api/v1/test/scoped/${slug}`,
+        headers: headersOf(owner),
+      });
+      expect(response.statusCode, slug).toBe(404);
+      expect(response.json(), slug).toEqual({ error: "server_not_found" });
+    }
+    expect(called).toBe(0);
   });
 });

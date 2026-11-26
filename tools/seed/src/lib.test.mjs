@@ -18,6 +18,7 @@ import {
 import { paidApp } from "../../../apps/server/test/team.ts";
 import {
   checkBaseUrl,
+  ensureInAppChannel,
   generatePassword,
   main,
   PASSWORD_ALPHABET,
@@ -246,12 +247,92 @@ describe("seed-accounts", () => {
     );
     expect(grantsOf("admin")).toEqual([]);
 
+    // phase-report-09 G3: the in-app channel is made once.
+    expect(text()).toContain("in-app channel made");
+    const inApp = () =>
+      app.ctx.channels.list().filter((channel) => channel.kind === "in_app");
+    expect(inApp()).toHaveLength(1);
+
     // A second run leaves the accounts alone and registers nothing.
     const again = harness(app);
     again.deps.env = deps.env;
     expect(await main(args, again.deps)).toBe(0);
     expect(again.calls).toHaveLength(0);
     expect(again.text()).toContain("exists already");
+    expect(again.text()).toContain("in-app channel present");
+    expect(inApp()).toHaveLength(1);
+  });
+
+  // phase-report-08 F6: the owner pair passed in, the password on stdin.
+  it("takes the owner pair from --owner-email and standard input", async () => {
+    current = await paidApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const { calls, deps, text } = harness(app);
+    deps.env = {};
+    deps.readStdin = async () => owner.password;
+    const args = [
+      "--base-url",
+      DEV_URL,
+      "--env",
+      "dev",
+      "--team",
+      "--owner-email",
+      owner.email,
+      "--owner-password-stdin",
+    ];
+    expect(await main(args, deps), text()).toBe(0);
+    expect(calls.map((sent) => valueOf(sent, "--label"))).toEqual([
+      "admin",
+      "editor",
+      "viewer",
+    ]);
+    expect(text()).not.toContain(owner.password);
+    // The flags belong to --team, and the password needs the address.
+    const plain = harness(null);
+    const stray = ["--base-url", DEV_URL, "--env", "dev", "--owner-email", "x"];
+    expect(await main(stray, plain.deps)).toBe(2);
+    expect(plain.text()).toContain("need --team");
+    const alone = harness(null);
+    const noEmail = ["--base-url", DEV_URL, "--env", "dev", "--team"];
+    noEmail.push("--owner-password-stdin");
+    expect(await main(noEmail, alone.deps)).toBe(2);
+    expect(alone.requests).toHaveLength(0);
+  });
+
+  // The Free fallback of --team: invitations and channels are Paid. The run
+  // stops at the first invitation with exit 1 and its reason, registers and
+  // makes nothing; the channel step on its own answers skipped (Free plan)
+  // and sends no POST (phase-report-09 G3).
+  it("makes nothing on Free: --team stops, the channel step is skipped", async () => {
+    current = await testApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const { calls, deps, text } = harness(app);
+    deps.env = {
+      DIALWARDEN_DEV_OWNER_EMAIL: owner.email,
+      DIALWARDEN_DEV_OWNER_PASSWORD: owner.password,
+    };
+    const args = ["--base-url", DEV_URL, "--env", "dev", "--team"];
+    expect(await main(args, deps), text()).toBe(1);
+    expect(text()).toContain("inviting admin answered 402 (payment_required)");
+    expect(calls).toHaveLength(0);
+    expect(text()).not.toContain(owner.password);
+
+    const sent = [];
+    const call = async (method, path, payload) => {
+      sent.push(method);
+      const res = await app.inject({
+        method,
+        url: path,
+        headers: headersOf(owner),
+        ...(payload === undefined ? {} : { payload }),
+      });
+      return { status: res.statusCode, body: res.json() };
+    };
+    expect(await ensureInAppChannel(call)).toBe("skipped (Free plan)");
+    expect(sent).toEqual(["GET"]);
+    expect(app.ctx.channels.list()).toEqual([]);
   });
 
   it("needs the registered owner variables for --team", async () => {

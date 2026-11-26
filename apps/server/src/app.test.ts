@@ -230,6 +230,37 @@ describe("logs", () => {
     expect(text).toContain("SQLITE_BUSY");
   });
 
+  it("G4.8 redact the OIDC secret, SSH key, hook command and Enc fields", async () => {
+    const log = logCapture();
+    current = await testApp({
+      logStream: log.stream,
+      extraEnv: { LOG_LEVEL: "info" },
+    });
+    const fields = [
+      "clientSecret",
+      "privateKey",
+      "command",
+      "passwordEnc",
+      "password_enc",
+      "privateKeyEnc",
+      "payloadEnc",
+      "revertEnc",
+      "secretEnc",
+    ];
+    const probe = Object.fromEntries(
+      fields.map((field) => [field, `probe-${field}-value`]),
+    );
+    current.app.log.info(
+      { top: probe, a: { b: { c: probe } } },
+      "redaction probe",
+    );
+    const text = log.text();
+    expect(text).toContain("redaction probe");
+    for (const field of fields) {
+      expect(text).not.toContain(`probe-${field}-value`);
+    }
+  });
+
   // Code review M4: a handler that returns the wrong shape is a server bug.
   it("answer a response that breaks its schema with a logged 500", async () => {
     const log = logCapture();

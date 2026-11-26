@@ -11,7 +11,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { apiTokens, auditEvents } from "../db/schema.js";
 import type { RouteInfo } from "../http/context.js";
 import { tokenAllowed } from "../http/guard.js";
-import { setupOwner, type SignedIn } from "../../test/helpers.js";
+import {
+  randomPassword,
+  setupOwner,
+  type SignedIn,
+} from "../../test/helpers.js";
+import { base32Decode, hotp, totpStep } from "../auth/totp.js";
 import {
   call,
   INT_SETTING,
@@ -184,6 +189,33 @@ describe("API tokens", () => {
     expect(audit.statusCode).toBe(200);
   });
 
+  it("G5.6 never makes an owner token; an admin token stays off OIDC", async () => {
+    const owner = await create(fixture.owner, "owner");
+    expect(owner.statusCode).toBe(400);
+    expect(owner.json()).toMatchObject({ error: "validation" });
+    const admin = await makeToken(fixture.owner, "admin");
+    const oidc = await bearer(admin.token, "PUT", "/api/v1/settings/oidc", {});
+    expect(oidc.statusCode).toBe(403);
+    expect(oidc.json()).toMatchObject({ error: "token_not_allowed" });
+  });
+
+  it("I4 an admin token cannot set a hook command", async () => {
+    const admin = await makeToken(fixture.owner, "admin");
+    const url = `/api/v1/servers/${fixture.servers.a}/hooks`;
+    const put = await bearer(admin.token, "PUT", url, {
+      hook: {
+        kind: "dockerProxy",
+        url: "http://proxy:2375",
+        containerLabel: "x",
+      },
+    });
+    expect(put.statusCode).toBe(403);
+    expect(put.json()).toMatchObject({ error: "token_not_allowed" });
+    const read = await bearer(admin.token, "GET", url);
+    expect(read.statusCode).toBe(200);
+    expect(read.json()).toMatchObject({ hook: null });
+  });
+
   it("never reaches an identity route (D15)", async () => {
     const admin = await makeToken(fixture.owner, "admin");
     const denied = fixture.app.ctx.routes.filter(deniedRoute);
@@ -314,10 +346,11 @@ describe("API tokens", () => {
     // A fresh admin: the fixture admin was demoted by the test before.
     const admin = await inviteAndAccept(app, owner, "admin");
     const made = await makeToken(admin, "admin");
-    const hooks = `/api/v1/servers/${servers.a}/hooks`;
+    // An admin-only server route (PUT hooks is closed to every token, I4).
+    const adminRoute = `/api/v1/servers/${servers.a}/files/settings`;
     const urlA = changeSetsOf(servers.a);
     const urlB = changeSetsOf(servers.b);
-    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(200);
+    expect((await bearer(made.token, "GET", adminRoute)).statusCode).toBe(200);
     const written = await bearer(made.token, "POST", urlA, editsOf(21));
     expect(written.statusCode).toBe(201);
     const grants = `/api/v1/users/${admin.userId}/grants`;
@@ -329,7 +362,7 @@ describe("API tokens", () => {
       (await call(app, owner, "PUT", grants, { servers: [] })).statusCode,
     ).toBe(200);
     // No grant on demo-a any more: the server answers as missing.
-    expect((await bearer(made.token, "PUT", hooks, {})).statusCode).toBe(404);
+    expect((await bearer(made.token, "GET", adminRoute)).statusCode).toBe(404);
     const onB = await bearer(made.token, "POST", urlB, editsOf(22));
     expect(onB.statusCode).toBe(404);
     expect(onB.json()).toMatchObject({ error: "server_not_found" });
@@ -501,5 +534,110 @@ describe("API tokens", () => {
     } finally {
       await current.close();
     }
+  });
+});
+
+describe("T-14 a credential change ends the API tokens (P10-A M1)", () => {
+  let clockAt = Date.parse("2026-11-26T10:00:00Z");
+  const now = () => new Date(clockAt);
+  let team: TeamFixture;
+
+  beforeAll(async () => {
+    team = await teamFixture({ now });
+  });
+
+  afterAll(async () => {
+    await team.current.close();
+  });
+
+  const servers = (token: string) =>
+    team.app.inject({
+      method: "GET",
+      url: "/api/v1/servers",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+  async function tokenOf(user: SignedIn, role: string): Promise<string> {
+    const response = await call(team.app, user, "POST", "/api/v1/tokens", {
+      name: role,
+      role,
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json<{ token: string }>().token;
+  }
+
+  async function expectEnded(token: string, user: SignedIn): Promise<void> {
+    const after = await servers(token);
+    expect(after.statusCode).toBe(401);
+    expect(after.json()).toMatchObject({ error: "invalid_token" });
+    const list = await call(team.app, user, "GET", "/api/v1/tokens");
+    expect(list.statusCode).toBe(200);
+    expect(list.json<{ items: unknown[] }>().items).toEqual([]);
+  }
+
+  const codeAt = (secret: string): string =>
+    hotp(base32Decode(secret), totpStep(now()));
+
+  it("(a) a password change", async () => {
+    const { app, admin, editor } = team;
+    const other = await tokenOf(editor, "editor");
+    const token = await tokenOf(admin, "admin");
+    expect((await servers(token)).statusCode).toBe(200);
+    const newPassword = randomPassword();
+    const change = await call(app, admin, "POST", "/api/v1/auth/password", {
+      currentPassword: admin.password,
+      newPassword,
+    });
+    expect(change.statusCode).toBe(204);
+    admin.password = newPassword;
+    await expectEnded(token, admin);
+    // Positive control: another user's token keeps working.
+    expect((await servers(other)).statusCode).toBe(200);
+  });
+
+  it("(b) TOTP enable and (c) TOTP disable", async () => {
+    const { app, admin, editor } = team;
+    const other = await tokenOf(editor, "viewer");
+    const before = await tokenOf(admin, "editor");
+    const enrol = await call(app, admin, "POST", "/api/v1/auth/totp/enrol", {
+      password: admin.password,
+    });
+    expect(enrol.statusCode).toBe(200);
+    const { secret } = enrol.json<{ secret: string }>();
+    const enable = await call(app, admin, "POST", "/api/v1/auth/totp/enable", {
+      code: codeAt(secret),
+    });
+    expect(enable.statusCode).toBe(200);
+    await expectEnded(before, admin);
+
+    const during = await tokenOf(admin, "viewer");
+    expect((await servers(during)).statusCode).toBe(200);
+    clockAt += 30_000;
+    const disable = await call(
+      app,
+      admin,
+      "POST",
+      "/api/v1/auth/totp/disable",
+      { password: admin.password, code: codeAt(secret) },
+    );
+    expect(disable.statusCode).toBe(204);
+    await expectEnded(during, admin);
+    expect((await servers(other)).statusCode).toBe(200);
+  });
+
+  it("records how many tokens each change ended", () => {
+    const actions = team.app.ctx.activity
+      .list({ limit: 200, type: "user.changed" })
+      .items.map((item) => item.data)
+      .filter((data) => data["tokensRevoked"] !== undefined)
+      .map((data) => [data["action"], data["tokensRevoked"]]);
+    expect(actions).toHaveLength(3);
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        ["password_changed", 1],
+        ["totp_enabled", 1],
+        ["totp_disabled", 1],
+      ]),
+    );
   });
 });

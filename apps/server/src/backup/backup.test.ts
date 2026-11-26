@@ -3,7 +3,8 @@
 // of a non-empty or locked target, the restore drill, the CLI, the daily job,
 // and the passphrase export with the first-run import.
 /* eslint-disable security/detect-non-literal-fs-filename -- test folders under the system temporary folder */
-import { createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes, scrypt } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   cp,
   link,
@@ -17,8 +18,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { PassThrough } from "node:stream";
+import { dirname, join } from "node:path";
+import { PassThrough, Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { gzipSync } from "node:zlib";
 import Database from "better-sqlite3";
 import { customerLicence, testKeyRing } from "@dialwarden/entitlement/testing";
 import type { FastifyInstance } from "fastify";
@@ -51,7 +54,12 @@ import {
   sha256File,
   verifyBackup,
 } from "./engine.js";
-import { exportArchive, MAX_ARCHIVE_BYTES } from "./archive.js";
+import {
+  ArchiveError,
+  byteLimit,
+  exportArchive,
+  MAX_ARCHIVE_BYTES,
+} from "./archive.js";
 
 const DAY_MS = 86_400_000;
 const DRILL_PREFIX = "dialwarden-drill-";
@@ -733,5 +741,126 @@ describe("first-run import", () => {
     } finally {
       await fresh.close();
     }
+  });
+});
+
+/** One ustar entry; type, link name and declared size may be crafted. */
+function tarEntry(
+  name: string,
+  data: string,
+  crafted: { type?: string; link?: string; size?: number } = {},
+): Buffer {
+  const body = Buffer.from(data, "utf8");
+  const header = Buffer.alloc(512);
+  const size = crafted.size ?? body.length;
+  header.write(name, 0, 100, "utf8");
+  header.write("0000644\0", 100, 8, "ascii");
+  header.write("0000000\0", 108, 8, "ascii");
+  header.write("0000000\0", 116, 8, "ascii");
+  header.write(`${size.toString(8).padStart(11, "0")}\0`, 124, 12, "ascii");
+  header.write("00000000000\0", 136, 12, "ascii");
+  header.write("        ", 148, 8, "ascii");
+  header.write(crafted.type ?? "0", 156, 1, "ascii");
+  header.write(crafted.link ?? "", 157, 100, "utf8");
+  header.write("ustar\0", 257, 6, "ascii");
+  header.write("00", 263, 2, "ascii");
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(`${sum.toString(8).padStart(6, "0")}\0 `, 148, 8, "ascii");
+  const rest = body.length % 512;
+  const pad = Buffer.alloc(rest === 0 ? 0 : 512 - rest);
+  return Buffer.concat([header, body, pad]);
+}
+
+/** A tar sealed as an export: the exporter's header, gzip, AES-256-GCM. */
+async function sealed(entries: Buffer[]): Promise<Buffer> {
+  const tar = Buffer.concat([...entries, Buffer.alloc(1024)]);
+  const salt = randomBytes(16);
+  const iv = randomBytes(12);
+  const header = Buffer.concat([
+    Buffer.from("DWBX", "ascii"),
+    Buffer.from([1, 15, 8, 1]),
+    salt,
+    iv,
+  ]);
+  const key = await new Promise<Buffer>((resolve, reject) => {
+    scrypt(
+      PASSPHRASE,
+      salt,
+      32,
+      { N: 2 ** 15, r: 8, p: 1, maxmem: 256 * 1024 * 1024 },
+      (error, derived) => (error === null ? resolve(derived) : reject(error)),
+    );
+  });
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(header);
+  const body = Buffer.concat([cipher.update(gzipSync(tar)), cipher.final()]);
+  return Buffer.concat([header, body, cipher.getAuthTag()]);
+}
+
+describe("first-run import of crafted archives (P10-A G1.5)", () => {
+  it("refuses each crafted archive and writes nothing outside staging", async () => {
+    current = await testApp();
+    const { app, dataDir } = current;
+    const escape = `escape-${randomBytes(6).toString("hex")}`;
+    const manifest = JSON.stringify({
+      format: 1,
+      blobs: [{ path: "../x", sha256: "0".repeat(64), size: 1 }],
+    });
+    const cases: [string, Buffer[]][] = [
+      ["a ../ entry", [tarEntry(`../${escape}`, "pwned")]],
+      [
+        "a symlink entry",
+        [tarEntry("manifest.json", "", { type: "2", link: "/etc/passwd" })],
+      ],
+      [
+        "a hard link entry",
+        [tarEntry("dialwarden.db", "", { type: "1", link: `../${escape}` })],
+      ],
+      [
+        "a duplicate manifest.json",
+        [tarEntry("manifest.json", "{}"), tarEntry("manifest.json", "{}")],
+      ],
+      ["an oversized key entry", [tarEntry("app-secret.key", "a".repeat(300))]],
+      [
+        "a size field past the end",
+        [tarEntry("manifest.json", "{}", { size: 1_000_000 })],
+      ],
+      ["a manifest blob path ../x", [tarEntry("manifest.json", manifest)]],
+    ];
+    for (const [name, entries] of cases) {
+      const response = await importInto(app, await sealed(entries), PASSPHRASE);
+      expect(response.statusCode, name).toBe(422);
+      expect(response.json(), name).toMatchObject({ error: "import_failed" });
+      // The seal is right: each archive fails on its crafted part.
+      const reason = response.json<{ reason?: string }>().reason;
+      expect(reason, name).not.toBe("wrong passphrase or damaged file");
+      const staging = (await readdir(dataDir)).filter((entry) =>
+        entry.startsWith(".import-"),
+      );
+      expect(staging, name).toEqual([]);
+      for (const folder of [dataDir, dirname(dataDir)]) {
+        expect(existsSync(join(folder, escape)), name).toBe(false);
+        expect(existsSync(join(folder, "x")), name).toBe(false);
+      }
+    }
+    const setup = await app.inject({ method: "GET", url: "/api/v1/setup" });
+    expect(setup.json()).toEqual({ required: true });
+  });
+
+  it("byteLimit fails once more bytes than its limit went by", async () => {
+    const run = pipeline(
+      Readable.from([Buffer.alloc(11)]),
+      byteLimit(10),
+      new PassThrough().resume(),
+    );
+    await expect(run).rejects.toBeInstanceOf(ArchiveError);
+    await expect(
+      pipeline(
+        Readable.from([Buffer.alloc(10)]),
+        byteLimit(10),
+        new PassThrough().resume(),
+      ),
+    ).resolves.toBeUndefined();
   });
 });

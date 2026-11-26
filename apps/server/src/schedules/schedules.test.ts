@@ -19,6 +19,7 @@ import {
 import {
   call,
   INT_SETTING,
+  inviteAndAccept,
   teamFixture,
   toFree,
   toPaid,
@@ -355,6 +356,8 @@ describe("cron schedules", () => {
     };
     const cases: Record<string, unknown>[] = [
       { cron: "* * * * *" },
+      // P9 R4: an hour between the next three runs, one minute later on.
+      { cron: "0,59 0,12,23 * * *", timezone: "UTC" },
       { cron: "not a pattern" },
       { cron: "0 * * * *", timezone: "Mars/Olympus" },
       { cron: "0 * * * *", revertAt: iso(90) },
@@ -539,5 +542,146 @@ describe("who a schedule acts as", () => {
     );
     expect(again.statusCode).toBe(404);
     expect(again.json()).toEqual({ error: "schedule_not_found" });
+  });
+});
+
+describe("P10-A regression guards for schedules", () => {
+  const launchText = () => fileText(t.servers.rootA, "dialwarden-args.txt");
+
+  // G3.6: a scheduled value with a command never reaches the launch file.
+  it("G3.6 writes no command a schedule carries into a launch value", async () => {
+    const before = await launchText();
+    const response = await apiOf(t.app, t.owner).post("/api/v1/schedules", {
+      server: t.servers.a,
+      name: "shell",
+      edits: [{ settingKey: "Launch.ServerName", value: "Name; touch /x" }],
+      runAt: iso(10),
+    });
+    if (response.statusCode === 201) {
+      const id = response.json<{ id: string }>().id;
+      await tickAt(11);
+      expect(stateOf(id)).toMatchObject({ lastResult: "failed" });
+      const events = await scheduleEvents();
+      expect(events[0]?.data).toMatchObject({ result: "failed" });
+    } else {
+      expect(response.statusCode).toBe(422);
+    }
+    expect(await launchText()).toBe(before);
+  });
+
+  // G4.1 (P9-C B1): a secret that comes back as its mask is no edit, so the
+  // mask is never written into the file.
+  it("G4.1 never schedules or writes a secret's mask", async () => {
+    const onlyMask = await apiOf(t.app, t.owner).post("/api/v1/schedules", {
+      server: t.servers.a,
+      name: "mask",
+      edits: [{ settingKey: "AdminPassword", value: SECRET_MASK }],
+      runAt: iso(10),
+    });
+    expect(onlyMask.statusCode).toBe(422);
+    expect(onlyMask.json()).toMatchObject({ error: "no_change" });
+    const both = await schedule({
+      runAt: iso(10),
+      edits: [
+        { settingKey: "AdminPassword", value: SECRET_MASK },
+        { settingKey: INT_SETTING, value: 9 },
+      ],
+    });
+    expect(both.edits.map((edit) => edit.settingKey)).toEqual([INT_SETTING]);
+    await tickAt(11);
+    expect(await maxPlayers()).toBe("9");
+    const text = await fileText(t.servers.rootA, PALWORLD_SETTINGS);
+    expect(text).not.toContain(SECRET_MASK);
+  });
+
+  // G6.2: on Free a schedule is neither made nor removed.
+  it("G6.2 makes and removes no schedule on Free", async () => {
+    const kept = await schedule({ runAt: iso(30) });
+    const rows = () =>
+      (
+        t.app.ctx.store.sqlite
+          .prepare("SELECT count(*) AS n FROM schedules")
+          .get() as { n: number }
+      ).n;
+    await toFree(t.app, t.owner);
+    try {
+      const made = await call(t.app, t.owner, "POST", "/api/v1/schedules", {
+        server: t.servers.a,
+        name: "free",
+        edits: [{ settingKey: INT_SETTING, value: 7 }],
+        runAt: iso(10),
+      });
+      expect(made.statusCode).toBe(402);
+      expect(rows()).toBe(1);
+      const removed = await call(
+        t.app,
+        t.owner,
+        "DELETE",
+        `/api/v1/schedules/${kept.id}`,
+      );
+      expect(removed.statusCode).toBe(402);
+      expect(rows()).toBe(1);
+    } finally {
+      await toPaid(t.app, t.owner);
+    }
+  });
+
+  // G7.4: a schedule runs as its author of the moment: a deleted author or
+  // one demoted to viewer changes nothing.
+  it("G7.4 runs nothing for a deleted or demoted author", async () => {
+    const byEditor = async (name: string) => {
+      const response = await call(
+        t.app,
+        t.editor,
+        "POST",
+        "/api/v1/schedules",
+        {
+          server: t.servers.a,
+          name,
+          edits: [{ settingKey: INT_SETTING, value: 7 }],
+          runAt: iso(10),
+        },
+      );
+      expect(response.statusCode).toBe(201);
+      return response.json<{ id: string }>().id;
+    };
+    const demoted = await byEditor("demoted");
+    const role = await call(
+      t.app,
+      t.owner,
+      "PUT",
+      `/api/v1/users/${t.editor.userId}/role`,
+      { role: "viewer" },
+    );
+    expect(role.statusCode).toBe(200);
+    await tickAt(11);
+    expect(stateOf(demoted)).toMatchObject({ lastResult: "failed" });
+    expect(await maxPlayers()).toBe("32");
+
+    const author = await inviteAndAccept(t.app, t.owner, "editor", [
+      { server: t.servers.a, level: "write" },
+    ]);
+    const response = await call(t.app, author, "POST", "/api/v1/schedules", {
+      server: t.servers.a,
+      name: "gone",
+      edits: [{ settingKey: INT_SETTING, value: 8 }],
+      runAt: iso(20),
+    });
+    expect(response.statusCode).toBe(201);
+    const gone = response.json<{ id: string }>().id;
+    const removed = await call(
+      t.app,
+      t.owner,
+      "DELETE",
+      `/api/v1/users/${author.userId}`,
+    );
+    expect(removed.statusCode).toBe(204);
+    await tickAt(21);
+    const after = t.app.ctx.schedules.get(gone) as unknown as
+      ScheduleBody | undefined;
+    if (after !== undefined) {
+      expect(after).toMatchObject({ lastResult: "failed" });
+    }
+    expect(await maxPlayers()).toBe("32");
   });
 });

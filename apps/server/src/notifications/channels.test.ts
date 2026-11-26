@@ -208,6 +208,55 @@ describe("channel configuration", () => {
     await app.ctx.notifications.idle();
     expect(sink.received).toEqual([]);
   });
+
+  // P10-A L10: the stored SMTP password goes only to the server it was given
+  // for; pointing the channel at another host needs it sent again.
+  it("L10 keeps the SMTP password only for the same host, port and user", async () => {
+    const { app, owner, admin } = fixture;
+    const smtp = (settings: Record<string, unknown>) => ({
+      name: "Mail",
+      enabled: true,
+      types: ["backup.done"],
+      settings: {
+        kind: "smtp",
+        host: "smtp-a.dialwarden.test",
+        port: 587,
+        security: "starttls",
+        username: "dialwarden",
+        from: "dialwarden@dialwarden.test",
+        to: ["ops@dialwarden.test"],
+        allowPrivateHost: false,
+        ...settings,
+      },
+    });
+    const made = await create(owner, smtp({ password: "mail-pass-1234" }));
+    const url = `${CHANNELS}/${made.id}`;
+    const elsewhere = [
+      { host: "smtp.attacker.example" },
+      { port: 2525 },
+      { username: "someone-else" },
+    ];
+    for (const change of elsewhere) {
+      const moved = await call(app, admin, "PUT", url, smtp(change));
+      expect(moved.statusCode, JSON.stringify(change)).toBe(422);
+      expect(moved.json()).toEqual({ error: "password_required" });
+    }
+    const same = await call(app, admin, "PUT", url, smtp({}));
+    expect(same.statusCode).toBe(200);
+    expect(same.json()).toMatchObject({ settings: { hasPassword: true } });
+    const resent = await call(
+      app,
+      admin,
+      "PUT",
+      url,
+      smtp({ host: "smtp-b.dialwarden.test", password: "mail-pass-5678" }),
+    );
+    expect(resent.statusCode).toBe(200);
+    expect(resent.json()).toMatchObject({
+      settings: { host: "smtp-b.dialwarden.test", hasPassword: true },
+    });
+    await call(app, owner, "DELETE", url);
+  });
 });
 
 describe("roles", () => {
@@ -410,6 +459,67 @@ describe("Free plan", () => {
     await app.ctx.notifications.idle();
     expect(sink.received).toHaveLength(1);
   });
+
+  // P10-A G6.3: on Free a channel is neither made, changed nor tested.
+  it("G6.3 makes, changes and tests no channel on Free", async () => {
+    const { app, owner } = fixture;
+    const made = await create(owner, webhookInput());
+    const stored = () => JSON.stringify(app.ctx.channels.list());
+    const before = stored();
+    await toFree(app, owner);
+    try {
+      const routes: ["POST" | "PUT", string, object?][] = [
+        ["POST", CHANNELS, { ...webhookInput(), name: "Free" }],
+        ["PUT", `${CHANNELS}/${made.id}`, { ...webhookInput(), name: "Free" }],
+        ["POST", `${CHANNELS}/${made.id}/test`],
+      ];
+      for (const [method, url, payload] of routes) {
+        const answer = await call(app, owner, method, url, payload);
+        expect(answer.statusCode, `${method} ${url}`).toBe(402);
+      }
+      expect(stored()).toBe(before);
+      expect(sink.received).toEqual([]);
+    } finally {
+      await toPaid(app, owner);
+    }
+  });
+});
+
+describe("secrets in deliveries", () => {
+  // P10-A G4.3: a secret edit reaches every channel as changed and hidden.
+  it("G4.3 sends a secret edit as hidden to webhook, Discord and in-app", async () => {
+    const { app, owner, servers } = fixture;
+    const types = ["change.applied"];
+    await create(owner, { ...webhookInput(), types });
+    await create(owner, {
+      name: "Discord",
+      enabled: true,
+      types,
+      settings: {
+        kind: "discord",
+        url: `${sink.base}/api/webhooks/123/${TOKEN}`,
+        allowPrivateHost: false,
+      },
+    });
+    await create(owner, {
+      name: "Bell",
+      enabled: true,
+      types,
+      settings: { kind: "in_app" },
+    });
+    const secret = `MARKER-${randomBytes(6).toString("hex")}`;
+    const api = apiOf(app, owner);
+    const made = await draft(api, servers.a, { AdminPassword: secret });
+    await apply(api, made.id);
+    await app.ctx.notifications.idle();
+    expect(sink.received).toHaveLength(2);
+    const inbox = await call(app, owner, "GET", "/api/v1/notifications");
+    const bodies = [...sink.received.map((r) => r.body), inbox.body];
+    for (const body of bodies) {
+      expect(body).toContain("changed (secret, hidden)");
+      expect(body).not.toContain(secret);
+    }
+  });
 });
 
 describe("in-app notifications", () => {
@@ -562,6 +672,92 @@ describe("address checks when saving (SSRF)", () => {
       });
       expect(smtp.statusCode).toBe(422);
       expect(smtp.json<{ error: string }>().error).toBe("host_refused");
+    } finally {
+      await strict.close();
+    }
+  });
+
+  // P10-A G2.4: a failed send test answers a code, never the server's
+  // answer or the secret part of the URL.
+  it("G2.4 answers a failed send test with its code only", async () => {
+    const { app, owner } = fixture;
+    const made = await create(owner, webhookInput());
+    const leak = { status: 500, body: "LEAKME server answer" };
+    sink.script(leak, leak, leak);
+    const test = await call(app, owner, "POST", `${CHANNELS}/${made.id}/test`);
+    expect(test.json()).toEqual({ ok: false, error: "http_500" });
+    expect(test.body).not.toContain("LEAKME");
+    expect(test.body).not.toContain(TOKEN);
+    expect(test.body).not.toContain("/hooks/");
+    await call(app, owner, "DELETE", `${CHANNELS}/${made.id}`);
+  });
+
+  // P10-A G2.5 and G2.6, on an app without the loopback test seam.
+  it("G2.5 and G2.6 check stored and numeric addresses again", async () => {
+    const strict = await paidApp();
+    try {
+      const owner = await setupOwner(strict.app);
+      const send = (method: "POST" | "PUT", url: string, settings: object) =>
+        strict.app.inject({
+          method,
+          url,
+          headers: headersOf(owner),
+          payload: {
+            name: "x",
+            enabled: true,
+            types: ["backup.done"],
+            settings,
+          },
+        });
+      // G2.5: switching the private-host setting off checks the stored URL.
+      const lan = await send("POST", CHANNELS, {
+        kind: "webhook",
+        url: "https://10.0.0.5/h",
+        allowPrivateHost: true,
+      });
+      expect(lan.statusCode).toBe(201);
+      const id = lan.json<{ id: string }>().id;
+      const off = await send("PUT", `${CHANNELS}/${id}`, {
+        kind: "webhook",
+        allowPrivateHost: false,
+      });
+      expect(off.statusCode).toBe(422);
+      expect(off.json()).toMatchObject({ error: "url_refused" });
+      // G2.6: numeric and mapped spellings of loopback and metadata.
+      for (const url of [
+        "https://2130706433/h",
+        "https://0x7f.1/h",
+        "https://[::ffff:a9fe:a9fe]/h",
+      ]) {
+        const answer = await send("POST", CHANNELS, {
+          kind: "webhook",
+          url,
+          allowPrivateHost: true,
+        });
+        expect(answer.statusCode, url).toBe(422);
+        expect(answer.json(), url).toMatchObject({ error: "url_refused" });
+      }
+      const smtp = (host: string) => ({
+        kind: "smtp",
+        host,
+        port: 587,
+        security: "starttls",
+        username: null,
+        from: "dialwarden@dialwarden.test",
+        to: ["ops@dialwarden.test"],
+        allowPrivateHost: true,
+      });
+      const numeric = await send("POST", CHANNELS, smtp("2130706433"));
+      expect(numeric.statusCode).toBe(422);
+      expect(numeric.json()).toMatchObject({ error: "host_refused" });
+      const named = await send("POST", CHANNELS, smtp("localhost"));
+      expect(named.statusCode).toBe(201);
+      const tested = await strict.app.inject({
+        method: "POST",
+        url: `${CHANNELS}/${named.json<{ id: string }>().id}/test`,
+        headers: headersOf(owner),
+      });
+      expect(tested.json()).toEqual({ ok: false, error: "host_refused" });
     } finally {
       await strict.close();
     }

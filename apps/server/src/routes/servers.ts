@@ -11,8 +11,11 @@
 // gets the answer of a missing server, and the list shows only the servers
 // the user may see. The raw file read is owner and admin only (D14): the raw
 // text shows the values of secret settings that the typed view masks.
+// Every server answer says the caller's access to it, read or write (P10-A
+// L22, the per-server grant of the moment), so the editor can turn its
+// controls off where the server would refuse the write.
 import { isPackId, type Detection, type Os } from "@dialwarden/packs-schema";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { detectServer, serverOs } from "../connectors/detect.js";
 import type { ConnectionSpec } from "../connectors/service.js";
@@ -22,6 +25,7 @@ import { onSlug } from "../http/scope.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 import { SERVER_ID } from "../plan/editable.js";
 import type { ServerRecord, ServerService } from "../servers/service.js";
+import { serverLevel } from "../team/roles.js";
 import {
   actorOf,
   changeSetSchema,
@@ -59,6 +63,8 @@ const storedSpecSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+const accessSchema = z.enum(["read", "write"]);
+
 const serverSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -70,6 +76,8 @@ const serverSchema = z.object({
   demo: z.boolean(),
   /** False for a server beyond the editable three on Free (read-only). */
   editable: z.boolean(),
+  /** What the caller may do on it: read, or write (P10-A L22). */
+  access: accessSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   lastEditedAt: z.string().nullable(),
@@ -95,6 +103,7 @@ const settingsSchema = z.object({
   packId: z.string(),
   packVersion: z.string(),
   editable: z.boolean(),
+  access: accessSchema,
   files: z.array(
     z.object({
       fileId: z.string(),
@@ -205,11 +214,23 @@ export function serverRoutes(app: FastifyInstance): void {
   const user = { auth: "user" as const };
   const servers = () => app.ctx.servers;
 
-  const view = (server: ServerRecord) => {
+  /** The caller's access to a server; read when nothing grants a write. */
+  const accessOf = (
+    request: FastifyRequest,
+    serverId: string,
+  ): "read" | "write" => {
+    const principal = request.principal;
+    if (principal === null) return "read";
+    const grant = app.ctx.team.grantLevel(principal.userId, serverId);
+    return serverLevel(principal, grant) === "write" ? "write" : "read";
+  };
+
+  const view = (request: FastifyRequest, server: ServerRecord) => {
     const pack = app.ctx.packs.get(server.packId);
     const displayName = pack?.displayName ?? server.packId;
     const editable = servers().isEditable(server.id);
-    return { ...server, displayName, editable };
+    const access = accessOf(request, server.id);
+    return { ...server, displayName, editable, access };
   };
 
   api.get(
@@ -224,7 +245,8 @@ export function serverRoutes(app: FastifyInstance): void {
     async (request) => {
       const visible = app.ctx.team.visibleServers(request.principal);
       const all = servers().list();
-      return { items: all.filter((server) => visible(server.id)).map(view) };
+      const items = all.filter((server) => visible(server.id));
+      return { items: items.map((server) => view(request, server)) };
     },
   );
 
@@ -261,7 +283,7 @@ export function serverRoutes(app: FastifyInstance): void {
       }
       request.log.info({ server: id, packId: found.packId }, "server added");
       void reply.code(201);
-      return view(servers().require(id));
+      return view(request, servers().require(id));
     },
   );
 
@@ -275,7 +297,7 @@ export function serverRoutes(app: FastifyInstance): void {
         response: { 200: serverSchema },
       },
     },
-    async (request) => view(servers().require(request.params.slug)),
+    async (request) => view(request, servers().require(request.params.slug)),
   );
 
   api.patch(
@@ -294,7 +316,7 @@ export function serverRoutes(app: FastifyInstance): void {
       servers().assertEditable(server.id);
       const { name, connector } = request.body;
       if (connector === undefined) {
-        return view(servers().update(server.id, name ? { name } : {}));
+        return view(request, servers().update(server.id, name ? { name } : {}));
       }
       const spec = specOf(connector);
       await withSpec(app, spec, async (opened) => {
@@ -307,7 +329,7 @@ export function serverRoutes(app: FastifyInstance): void {
         }
       });
       const change = name ? { name, spec } : { spec };
-      return view(servers().update(server.id, change));
+      return view(request, servers().update(server.id, change));
     },
   );
 
@@ -382,7 +404,8 @@ export function serverRoutes(app: FastifyInstance): void {
       try {
         const settings = await app.ctx.changes.settings(server);
         const editable = servers().isEditable(server.id);
-        return { serverId: server.id, editable, ...settings };
+        const access = accessOf(request, server.id);
+        return { serverId: server.id, editable, access, ...settings };
       } catch (error) {
         throw connectorFailure(error);
       }

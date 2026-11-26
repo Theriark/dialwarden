@@ -414,9 +414,46 @@ describe("Local connector: atomic writes", () => {
           "Connection",
         );
         expect(await readdir(join(root, "Config"))).toEqual(["game.ini"]);
+        // P9 L1: the refused write says so, not that the file is missing.
+        const refused = await local.writeAtomic(FILE, text("x")).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(refused).toBeInstanceOf(ConnectorError);
+        expect((refused as Error).message).toContain("cannot be written");
       } finally {
         await chmod(join(root, "Config"), 0o755);
       }
+    },
+  );
+
+  // P10-A G1.1: a percent-encoded .. is a file name, never a step up.
+  it("G1.1 reads %2e%2e/secret as a missing file inside the root", async () => {
+    expect(await codeOf(local.read("%2e%2e/secret.txt"))).toBe("NotFound");
+    expect(await codeOf(local.read("%2e%2e/outside/secret.txt"))).toBe(
+      "NotFound",
+    );
+  });
+
+  // P9 L1: a file system that refuses new files (/proc answers ENOENT for a
+  // file it does not know) is a refused write, not a missing file.
+  it.skipIf(process.platform !== "linux")(
+    "reports a write the file system refuses as a refused write",
+    async () => {
+      const proc = new LocalConnector({ root: "/proc", deny: [] });
+      const refused = await proc
+        .writeAtomic("dialwarden-args.txt", text("x"))
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+      expect(refused).toBeInstanceOf(ConnectorError);
+      expect((refused as ConnectorError).code).toBe("Connection");
+      expect((refused as Error).message).toContain("cannot be written");
+      expect((refused as Error).message).not.toContain("does not exist");
+      // A folder that is really missing stays NotFound.
+      const missing = local.writeAtomic("No/Such/Folder/x.ini", text("x"));
+      expect(await codeOf(missing)).toBe("NotFound");
     },
   );
 });

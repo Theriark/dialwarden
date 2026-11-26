@@ -40,6 +40,21 @@ const SECRET_FIELDS = [
   "secretEnc",
   "secret_enc",
   "webhookUrl",
+  // P10-A G4.8: the OIDC credential, the instance SSH key, the hook command
+  // and the encrypted column names. Not url: req.url is the request line of
+  // every access log; no call site logs a hook or proxy URL.
+  "clientSecret",
+  "privateKey",
+  "command",
+  "passwordEnc",
+  "password_enc",
+  "clientSecretEnc",
+  "privateKeyEnc",
+  "private_key_enc",
+  "payloadEnc",
+  "payload_enc",
+  "revertEnc",
+  "revert_enc",
   "DEV_SEED_OWNER_PASSWORD",
   "key",
 ];

@@ -1,11 +1,12 @@
 // The role matrix (dev-work-plan P8-A tests; p8-threat-specs A-01 and A-02):
 // every API route, every role. EXPECTED_ACCESS is the reviewable record of
 // who may do what: one policy per route, expanded below into the answer of
-// each principal on demo-a (E writes, V reads) and demo-b (no grant for E,
-// E2 or V). A route missing from the table, or a table row without a route,
-// fails the test. The app runs with the authProbe seam: a request that
-// passes every check answers 299 and its handler never runs, so the matrix
-// changes nothing and needs no valid body.
+// each principal on demo-a (E writes, ER, an editor with a read grant, and
+// V read) and demo-b (no grant for E, ER, E2 or V). A route missing from
+// the table, or a table row without a route, fails the test. The app runs
+// with the authProbe seam: a request that passes every check answers 299
+// and its handler never runs, so the matrix changes nothing and needs no
+// valid body.
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -155,44 +156,48 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "POST /api/v1/notifications/read": "user",
 };
 
-const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
+/** ER is an editor whose grant on demo-a is read only (P10-A G7.1). */
+const PRINCIPALS = ["O", "A", "E", "ER", "E2", "V", "anon"] as const;
 type Who = (typeof PRINCIPALS)[number];
 
 const ALLOWED = 299;
 
-/** The answers of O, A, E, E2, V and anonymous, in that order. */
+/** The answers of O, A, E, ER, E2, V and anonymous, in that order. */
 function expected(policy: Policy, server: "a" | "b"): number[] {
   const ok = ALLOWED;
   const onB = server === "b";
+  const noGrant = [ok, ok, 404, 404, 404, 404, 401];
   switch (policy) {
     case "public":
-      return [ok, ok, ok, ok, ok, ok];
+      return [ok, ok, ok, ok, ok, ok, ok];
     case "setupDone":
-      return [409, 409, 409, 409, 409, 409];
+      return [409, 409, 409, 409, 409, 409, 409];
     case "user":
-      return [ok, ok, ok, ok, ok, 401];
+      return [ok, ok, ok, ok, ok, ok, 401];
     case "editor":
-      return [ok, ok, ok, ok, 403, 401];
+      return [ok, ok, ok, ok, ok, 403, 401];
     case "admin":
-      return [ok, ok, 403, 403, 403, 401];
+      return [ok, ok, 403, 403, 403, 403, 401];
     case "owner":
-      return [ok, 403, 403, 403, 403, 401];
+      return [ok, 403, 403, 403, 403, 403, 401];
     case "serverRead":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, ok, 404, ok, 401];
+      return onB ? noGrant : [ok, ok, ok, ok, 404, ok, 401];
     case "serverWrite":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, ok, 404, 403, 401];
+      return onB ? noGrant : [ok, ok, ok, 403, 404, 403, 401];
     case "serverAdmin":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, 403, 404, 403, 401];
+      return onB ? noGrant : [ok, ok, 403, 403, 404, 403, 401];
     case "serverOwner":
       return onB
-        ? [ok, 403, 404, 404, 404, 401]
-        : [ok, 403, 403, 404, 403, 401];
+        ? [ok, 403, 404, 404, 404, 404, 401]
+        : [ok, 403, 403, 403, 404, 403, 401];
   }
 }
 
 const isServerPolicy = (policy: Policy): boolean => policy.startsWith("server");
 
 let fixture: TeamFixture;
+/** ER: an editor with a read grant on demo-a and none on demo-b. */
+let reader: SignedIn;
 let ids: {
   changeSet: { a: string; b: string };
   snapshot: { a: string; b: string };
@@ -221,6 +226,13 @@ beforeAll(async () => {
   fixture = await teamFixture({ authProbe: true });
   const { app, owner, servers } = fixture;
   const api = apiOf(app, owner);
+  reader = await inviteAndAccept(
+    app,
+    owner,
+    "editor",
+    [{ server: servers.a, level: "read" }],
+    "reader",
+  );
   const onA = await draft(api, servers.a, { [INT_SETTING]: 20 });
   const onB = await draft(api, servers.b, { [INT_SETTING]: 21 });
   const snap = (serverId: string): string => {
@@ -281,6 +293,7 @@ function principal(who: Who): SignedIn | null {
     ["O", fixture.owner],
     ["A", fixture.admin],
     ["E", fixture.editor],
+    ["ER", reader],
     ["E2", fixture.loner],
     ["V", fixture.viewer],
   ]);
@@ -341,21 +354,67 @@ describe("role matrix (A-01, A-02)", () => {
       .filter((r) => r.server === null)
       .map((r) => `${r.method} ${r.url}`);
     expect(missing).toEqual([]);
-    const scoped = [
-      "GET /api/v1/change-sets/:id",
-      "POST /api/v1/change-sets/:id/apply",
-      "POST /api/v1/snapshots/:id/restore",
+    // P10-A G7.2: every /:id route on a table of one server (change sets,
+    // snapshots, schedules) is scoped, by rule rather than by a list.
+    const owned = /^\/api\/v1\/(change-sets|snapshots|schedules)\/:id(\/|$)/;
+    const unscoped = fixture.app.ctx.routes
+      .filter((r) => r.method !== "HEAD" && owned.test(r.url))
+      .filter((r) => r.server === null)
+      .map((r) => `${r.method} ${r.url}`);
+    expect(unscoped).toEqual([]);
+    for (const key of [
       "POST /api/v1/presets/:id/apply",
       "POST /api/v1/schedules",
-      "GET /api/v1/schedules/:id",
-      "DELETE /api/v1/schedules/:id",
-    ];
-    for (const key of scoped) {
+    ]) {
       const route = fixture.app.ctx.routes.find(
         (r) => `${r.method} ${r.url}` === key,
       );
       expect(route?.server, key).not.toBeNull();
     }
+  });
+
+  // P10-A G7.2: the source a scoped route reads its server from is checked
+  // by its schema: a server id by SERVER_ID, an object id as a UUID.
+  it("G7.2 validates the server source of every scoped route", () => {
+    interface Schema {
+      safeParse(value: unknown): {
+        success: boolean;
+        error?: { issues: { path: PropertyKey[] }[] };
+      };
+    }
+    const isSchema = (value: unknown): value is Schema =>
+      typeof (value as Partial<Schema> | null)?.safeParse === "function";
+    const SLUGS = ["../etc", "Demo A", "a/b", "x".repeat(70), ""];
+    const IDS = ["not-a-uuid", "../x", "1"];
+    const problems: string[] = [];
+    for (const route of fixture.app.ctx.routes) {
+      const scope = route.server;
+      if (scope === null || route.method === "HEAD") continue;
+      const key = `${route.method} ${route.url}`;
+      const fromBody = scope.from === "bodyServer";
+      const schema = fromBody ? route.body : route.params;
+      if (!isSchema(schema)) {
+        problems.push(
+          `${key} declares no ${fromBody ? "body" : "params"} schema`,
+        );
+        continue;
+      }
+      const field = fromBody ? "server" : scope.from === "slug" ? "slug" : "id";
+      const good = field === "id" ? randomUUID() : "demo-a";
+      const bad = field === "id" ? IDS : SLUGS;
+      const onField = (value: string) => {
+        const parsed = schema.safeParse({ [field]: value });
+        return (parsed.error?.issues ?? []).some(
+          (issue) => issue.path[0] === field,
+        );
+      };
+      if (onField(good)) problems.push(`${key} refuses ${good}`);
+      for (const value of bad) {
+        if (!onField(value))
+          problems.push(`${key} takes ${JSON.stringify(value)}`);
+      }
+    }
+    expect(problems).toEqual([]);
   });
 });
 
@@ -857,6 +916,175 @@ describe("privilege escalation (A-03 to A-18)", () => {
       expect(items.some((row) => row.serverId === servers.b)).toBe(true);
       expect(items.some((row) => row.type === "licence.changed")).toBe(true);
       expect(items.some((row) => row.type === "user.changed")).toBe(true);
+    }
+  });
+
+  it("L24 lets only the owner shorten the audit retention", async () => {
+    const { app, owner, admin } = fixture;
+    const url = "/api/v1/settings/audit";
+    const stored = () => app.ctx.audit.settingsOf().retentionDays;
+    expect(
+      (await call(app, owner, "PUT", url, { retentionDays: 90 })).statusCode,
+    ).toBe(200);
+    // Shorter, or from 90 days to 1: refused for an admin, nothing stored.
+    for (const retentionDays of [30, 1]) {
+      const lower = await call(app, admin, "PUT", url, { retentionDays });
+      expect(lower.statusCode).toBe(403);
+      expect(lower.json()).toEqual({ error: "forbidden" });
+      expect(stored()).toBe(90);
+    }
+    // Longer, or kept forever: an admin may.
+    const longer = await call(app, admin, "PUT", url, { retentionDays: 365 });
+    expect(longer.statusCode).toBe(200);
+    const forever = await call(app, admin, "PUT", url, { retentionDays: null });
+    expect(forever.statusCode).toBe(200);
+    expect(stored()).toBeNull();
+    // From forever to any number of days is shorter too.
+    const any = await call(app, admin, "PUT", url, { retentionDays: 3650 });
+    expect(any.statusCode).toBe(403);
+    const byOwner = await call(app, owner, "PUT", url, { retentionDays: 1 });
+    expect(byOwner.statusCode).toBe(200);
+    expect(stored()).toBe(1);
+    // The IP setting alone stays open to admins.
+    const ip = await call(app, admin, "PUT", url, { ipMode: "full" });
+    expect(ip.statusCode).toBe(200);
+  });
+
+  // P10-A L22 and G7.1: an editor with a read grant (ER) reads demo-a and
+  // writes nothing there; every server answer names the caller's access.
+  it("A-20 keeps an editor with a read grant to reading", async () => {
+    const { app, owner, admin, editor, servers } = fixture;
+    const reader = await inviteAndAccept(app, owner, "editor", [
+      { server: servers.a, level: "read" },
+    ]);
+    const server = (who: SignedIn, slug: string) =>
+      call(app, who, "GET", `/api/v1/servers/${slug}`);
+    const onA = await server(reader, servers.a);
+    expect(onA.statusCode).toBe(200);
+    expect(onA.json()).toMatchObject({ id: servers.a, access: "read" });
+    expect((await server(reader, servers.b)).statusCode).toBe(404);
+    const list = await call(app, reader, "GET", "/api/v1/servers");
+    expect(list.json<{ items: unknown[] }>().items).toEqual([
+      expect.objectContaining({ id: servers.a, access: "read" }),
+    ]);
+    const settings = await call(
+      app,
+      reader,
+      "GET",
+      `/api/v1/servers/${servers.a}/settings`,
+    );
+    expect(settings.json()).toMatchObject({ access: "read" });
+    for (const who of [owner, admin, editor]) {
+      expect((await server(who, servers.a)).json()).toMatchObject({
+        access: "write",
+      });
+    }
+
+    const before = await fileText(servers.rootA, PALWORLD_SETTINGS);
+    const count = () =>
+      app.ctx.store.sqlite
+        .prepare("SELECT count(*) AS n FROM change_sets WHERE server_id = ?")
+        .get(servers.a) as { n: number };
+    const sets = count().n;
+    const drafted = await call(
+      app,
+      reader,
+      "POST",
+      `/api/v1/servers/${servers.a}/change-sets`,
+      { edits: [{ settingKey: INT_SETTING, value: 7 }] },
+    );
+    expect(drafted.statusCode).toBe(403);
+    expect(drafted.json()).toEqual({ error: "forbidden" });
+    expect(count().n).toBe(sets);
+    expect(await fileText(servers.rootA, PALWORLD_SETTINGS)).toBe(before);
+    const scheduled = await call(app, reader, "POST", "/api/v1/schedules", {
+      server: servers.a,
+      name: "reader",
+      edits: [{ settingKey: INT_SETTING, value: 7 }],
+      runAt: new Date(Date.now() + 86_400_000).toISOString(),
+    });
+    expect(scheduled.statusCode).toBe(403);
+    const bulk = await call(
+      app,
+      reader,
+      "POST",
+      `/api/v1/presets/${ids.preset}/bulk-drafts`,
+      { servers: [servers.a] },
+    );
+    expect(bulk.statusCode).toBe(200);
+    expect(bulk.json()).toMatchObject({
+      items: [{ server: servers.a, error: { code: "server_not_found" } }],
+    });
+  });
+
+  // P10-A G7.5: an admin's viewer-scoped API token reads the feed and the
+  // inbox as a viewer of every server: server rows only, no user, licence
+  // or backup rows.
+  it("G7.5 scopes the feed and inbox of a viewer token like a viewer", async () => {
+    const { app, owner, admin, viewer, servers } = fixture;
+    const types = ["drift.detected", "licence.changed", "backup.done"];
+    const channel = await call(
+      app,
+      owner,
+      "POST",
+      "/api/v1/notifications/channels",
+      { name: "Bell", enabled: true, types, settings: { kind: "in_app" } },
+    );
+    expect(channel.statusCode).toBe(201);
+    const made = await call(app, admin, "POST", "/api/v1/tokens", {
+      name: "g75",
+      role: "viewer",
+    });
+    expect(made.statusCode).toBe(201);
+    const bearer = {
+      authorization: `Bearer ${made.json<{ token: string }>().token}`,
+    };
+    try {
+      app.ctx.activity.record("licence.changed", { data: {} });
+      app.ctx.activity.record("backup.done", { data: { id: "g75" } });
+      app.ctx.activity.record("drift.detected", { serverId: servers.b });
+      await app.ctx.notifications.idle();
+      const read = async (url: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url,
+          headers: bearer,
+        });
+        expect(response.statusCode, url).toBe(200);
+        return response.json<{
+          items: { type: string; serverId: string | null }[];
+        }>().items;
+      };
+      for (const url of ["/api/v1/activity", "/api/v1/notifications"]) {
+        const items = await read(url);
+        expect(
+          items.some((row) => row.serverId === servers.b),
+          url,
+        ).toBe(true);
+        expect(
+          items.every((row) => row.serverId !== null),
+          url,
+        ).toBe(true);
+        for (const type of ["licence.changed", "user.changed", "backup.done"]) {
+          expect(
+            items.some((row) => row.type === type),
+            url,
+          ).toBe(false);
+        }
+      }
+      // The viewer itself sees no server-less row either.
+      const inbox = await call(app, viewer, "GET", "/api/v1/notifications");
+      const rows = inbox.json<{ items: { serverId: string | null }[] }>().items;
+      expect(rows.every((row) => row.serverId === servers.a)).toBe(true);
+      // The admin's own session still sees every row.
+      const full = await call(app, admin, "GET", "/api/v1/notifications");
+      const all = full.json<{ items: { type: string }[] }>().items;
+      expect(all.map((row) => row.type)).toEqual(
+        expect.arrayContaining(["licence.changed", "backup.done"]),
+      );
+    } finally {
+      const id = channel.json<{ id: string }>().id;
+      await call(app, owner, "DELETE", `/api/v1/notifications/channels/${id}`);
     }
   });
 });

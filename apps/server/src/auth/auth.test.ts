@@ -17,6 +17,10 @@ import {
   MAX_FAILURES_PER_ADDRESS,
   WINDOW_MS,
 } from "./limiter.js";
+import {
+  CHALLENGE_MAX_ATTEMPTS,
+  MAX_SECOND_FACTOR_FAILURES,
+} from "./service.js";
 import { base32Decode, hotp, totpStep } from "./totp.js";
 
 let current: TestApp | undefined;
@@ -585,5 +589,169 @@ describe("password change", () => {
       401,
     );
     expect((await login(app, owner.email, next)).statusCode).toBe(200);
+  });
+});
+
+// P10-A G5.3: a second factor works once, and none survives a disable.
+describe("second factors are single use", () => {
+  it("refuses a replayed code or recovery code and drops codes on disable", async () => {
+    const clock = manualClock();
+    current = await testApp({ now: clock.now });
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const post = (url: string, payload: Record<string, string>) =>
+      app.inject({ method: "POST", url, headers: headersOf(owner), payload });
+    const enrol = await post("/api/v1/auth/totp/enrol", {
+      password: owner.password,
+    });
+    const { secret } = enrol.json<{ secret: string }>();
+    const enable = await post("/api/v1/auth/totp/enable", {
+      code: codeAt(secret, clock.now()),
+    });
+    const { recoveryCodes } = enable.json<{ recoveryCodes: string[] }>();
+    const [used = "", spare = ""] = recoveryCodes;
+
+    clock.advance(30_000);
+    const code = codeAt(secret, clock.now());
+    const first = await challengeOf(app, owner.email, owner.password);
+    expect((await secondFactor(app, first, { code })).statusCode).toBe(200);
+    const twice = await challengeOf(app, owner.email, owner.password);
+    const replay = await secondFactor(app, twice, { code });
+    expect(replay.statusCode).toBe(401);
+    expect(replay.json()).toEqual({ error: "invalid_code" });
+    const recovered = await secondFactor(app, twice, { recoveryCode: used });
+    expect(recovered.statusCode).toBe(200);
+    const third = await challengeOf(app, owner.email, owner.password);
+    const again = await secondFactor(app, third, { recoveryCode: used });
+    expect(again.statusCode).toBe(401);
+    expect(again.json()).toEqual({ error: "invalid_code" });
+
+    const disable = await post("/api/v1/auth/totp/disable", {
+      password: owner.password,
+      recoveryCode: spare,
+    });
+    expect(disable.statusCode).toBe(204);
+    const left = app.ctx.store.sqlite
+      .prepare("SELECT count(*) AS n FROM recovery_codes")
+      .get() as { n: number };
+    expect(left.n).toBe(0);
+  });
+});
+
+// P10-A L15: the current-password check of a signed-in user is rate-limited
+// like a sign-in, so a stolen session cannot guess the password.
+describe("rate-limits the current-password check", () => {
+  const routes = [
+    [
+      "/api/v1/auth/password",
+      (password: string) => ({
+        currentPassword: password,
+        newPassword: randomPassword(),
+      }),
+    ],
+    ["/api/v1/auth/totp/enrol", (password: string) => ({ password })],
+  ] as const;
+
+  for (const [url, body] of routes) {
+    it(`on ${url}`, async () => {
+      current = await testApp();
+      const { app } = current;
+      const owner = await setupOwner(app);
+      const post = (password: string) =>
+        app.inject({
+          method: "POST",
+          url,
+          headers: headersOf(owner),
+          payload: body(password),
+        });
+      for (let i = 0; i < MAX_FAILURES_PER_ACCOUNT; i += 1) {
+        expect((await post(randomPassword())).statusCode).toBe(401);
+      }
+      const right = await post(owner.password);
+      expect(right.statusCode).toBe(429);
+      expect(right.json()).toMatchObject({ error: "rate_limited" });
+    });
+  }
+
+  it("on /api/v1/auth/totp/disable", async () => {
+    const clock = manualClock();
+    current = await testApp({ now: clock.now });
+    const { app } = current;
+    const { owner, secret } = await ownerWithTotp(app, clock);
+    clock.advance(30_000);
+    const disable = (password: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/auth/totp/disable",
+        headers: headersOf(owner),
+        payload: { password, code: codeAt(secret, clock.now()) },
+      });
+    for (let i = 0; i < MAX_FAILURES_PER_ACCOUNT; i += 1) {
+      expect((await disable(randomPassword())).statusCode).toBe(401);
+    }
+    const right = await disable(owner.password);
+    expect(right.statusCode).toBe(429);
+    clock.advance(WINDOW_MS);
+    expect((await disable(owner.password)).statusCode).toBe(204);
+  });
+});
+
+// P10-A L16: consecutive second-factor failures of an account are counted
+// across windows and addresses; only a success clears them.
+describe("second-factor failures across windows", () => {
+  it(`waits after ${MAX_SECOND_FACTOR_FAILURES} failures, longer each time`, async () => {
+    const clock = manualClock();
+    current = await testApp({ now: clock.now });
+    const { app } = current;
+    const { owner, secret } = await ownerWithTotp(app, clock);
+    const attempt = (challenge: string, code: string, at: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login/totp",
+        payload: { challenge, code },
+        remoteAddress: at,
+      });
+    const rounds = MAX_SECOND_FACTOR_FAILURES / CHALLENGE_MAX_ATTEMPTS;
+    for (let round = 0; round < rounds; round += 1) {
+      clock.advance(WINDOW_MS + 1000);
+      const at = `203.0.113.${round + 1}`;
+      const challenge = await challengeOf(app, owner.email, owner.password);
+      const wrong = otherCode(codeAt(secret, clock.now()));
+      for (let i = 0; i < CHALLENGE_MAX_ATTEMPTS; i += 1) {
+        expect((await attempt(challenge, wrong, at)).statusCode).toBe(401);
+      }
+    }
+    const locked = await challengeOf(app, owner.email, owner.password);
+    const right = await attempt(
+      locked,
+      codeAt(secret, clock.now()),
+      "198.51.100.1",
+    );
+    expect(right.statusCode).toBe(429);
+    const first = right.json<{ error: string; retryAfter: number }>();
+    expect(first.error).toBe("rate_limited");
+    expect(first.retryAfter).toBeGreaterThan(0);
+
+    clock.advance(first.retryAfter * 1000);
+    const again = await challengeOf(app, owner.email, owner.password);
+    const wrong = otherCode(codeAt(secret, clock.now()));
+    expect((await attempt(again, wrong, "198.51.100.9")).statusCode).toBe(401);
+    const second = await attempt(
+      again,
+      codeAt(secret, clock.now()),
+      "198.51.100.2",
+    );
+    expect(second.statusCode).toBe(429);
+    const longer = second.json<{ retryAfter: number }>().retryAfter;
+    expect(longer).toBeGreaterThan(first.retryAfter);
+
+    // A success clears the count.
+    clock.advance(longer * 1000 + 30_000);
+    const last = await challengeOf(app, owner.email, owner.password);
+    const ok = await attempt(last, codeAt(secret, clock.now()), "198.51.100.3");
+    expect(ok.statusCode).toBe(200);
+    const after = await challengeOf(app, owner.email, owner.password);
+    const miss = otherCode(codeAt(secret, clock.now()));
+    expect((await attempt(after, miss, "198.51.100.4")).statusCode).toBe(401);
   });
 });

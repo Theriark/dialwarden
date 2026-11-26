@@ -151,6 +151,23 @@ describe("SSH command hook in process (shape and host key)", () => {
     ).toThrowError(/not usable/);
   });
 
+  // P10-A G3.1: a CR or a NUL ends the line too; the refusal is one line.
+  it.each(["restart\rrm -rf /", "restart\0rm -rf /"])(
+    "G3.1 refuses %j as a ControlError Refused",
+    (command) => {
+      let caught: unknown;
+      try {
+        new SshCommand({ ...options, command });
+      } catch (error) {
+        caught = error;
+      }
+      expect(isControlError(caught)).toBe(true);
+      expect(caught).toMatchObject({ code: "Refused" });
+      expect((caught as Error).message).not.toMatch(/[\r\n\0]/);
+      expect((caught as Error).message).not.toContain("rm -rf");
+    },
+  );
+
   it("says unknown for its probe, because it cannot see the game", async () => {
     const probe = new SshCommand({ ...options, command: COMMAND });
     expect(await probe.probe()).toEqual({ state: "unknown" });

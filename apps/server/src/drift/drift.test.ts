@@ -7,8 +7,10 @@
 // result and the others are still checked. On Free the job checks nothing,
 // while the outside-edit detection on open stays Always Free (contract C1).
 // The SFTP side runs in drift.integration.test.ts.
+import { randomUUID } from "node:crypto";
 import { chmod } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activityOf,
@@ -139,6 +141,43 @@ describe("background drift checks", () => {
       lastChangeSetId: view.lastChangeSetId,
     });
     expect(await driftEvents(t.servers.a)).toHaveLength(1);
+  });
+
+  // P10-A G4.4: an outside edit of a secret shows masked chips and diff.
+  it("G4.4 masks an outside edit of a secret in history and its diff", async () => {
+    const secret = `outside-${randomUUID()}`;
+    await tickAt(0);
+    await editOutside(
+      t.servers.rootA,
+      PALWORLD_SETTINGS,
+      'AdminPassword=""',
+      `AdminPassword="${secret}"`,
+    );
+    await tickAt(15);
+    const view = viewOf(t.servers.a);
+    expect(view.lastResult).toBe("drift");
+    const api = apiOf(t.app, t.owner);
+    const entries = (await history(api, t.servers.a)).entries;
+    const entry = entries.find(
+      (item) => item.changeSetId === view.lastChangeSetId,
+    );
+    expect(entry?.chips).toEqual([
+      expect.objectContaining({
+        kind: "masked",
+        settingKey: "AdminPassword",
+        to: SECRET_MASK,
+      }),
+    ]);
+    const shown = await api.get(
+      `/api/v1/change-sets/${view.lastChangeSetId ?? ""}`,
+    );
+    expect(shown.statusCode).toBe(200);
+    const bodies = [
+      shown.body,
+      JSON.stringify(entries),
+      JSON.stringify(await driftEvents(t.servers.a)),
+    ];
+    for (const body of bodies) expect(body).not.toContain(secret);
   });
 
   it("follows each server's own interval and skips a server turned off", async () => {

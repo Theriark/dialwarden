@@ -6,6 +6,7 @@ import {
   FormatError,
   getAdapter,
   launchShellIssues,
+  shellVarAssignments,
   type FormatAdapter,
   type LintIssue,
   type ParsedDoc,
@@ -14,6 +15,7 @@ import {
 } from "@dialwarden/formats";
 import { fromFileValue } from "./coerce.js";
 import { lintPackFile, withoutKeyedDuplicates } from "./lint.js";
+import { hasShellCharacters } from "./validate.js";
 import type { JsonValue, Pack, PackFile, Setting } from "./types.js";
 
 /** One edit of a setting value; null removes the value from the file. */
@@ -36,17 +38,47 @@ export const APP_ARGS_FILE = "dialwarden-args.txt";
  * Whether a pack file is an app-managed args file: its text is run through
  * eval at game start, so a shell character anywhere in it is an error that
  * blocks the write, raw patches and restores included. A file that lists the
- * args launch source is one whatever its name (THE-2605 L5); a launch file
- * without launchSources is one by its name, since a start script the user
- * owns (a comment line, then the command) is a launch file too.
+ * args launch source is one whatever its name (THE-2605 L5), and so is a
+ * launch file without launchSources, whatever its name (P10-A L8): the
+ * launch source views give such a file the args eval view, so the lint
+ * checks it the same way.
  */
 function evaluatedArgsFile(file: PackFile): boolean {
   if (file.adapter !== "launch") return false;
-  if (file.launchSources?.some((source) => source.kind === "args")) {
-    return true;
+  if (file.launchSources === undefined) return true;
+  return file.launchSources.some((source) => source.kind === "args");
+}
+
+/** The variable files a start script sources (LinuxGSM cfg, systemd env). */
+const SOURCED_ADAPTERS = new Set(["shellvar", "shellvar-systemd"]);
+
+const SOURCED_MESSAGE =
+  "the value holds a shell character the start script would run when it reads this file";
+
+/**
+ * Every assignment of a sourced file whose value a shell would act on (P10-A
+ * L7): a raw patch or a restore of such a file is refused like a typed
+ * edit, which validate() already checks. Each assignment counts, an earlier
+ * duplicate too, since the shell runs every line and not only the one that
+ * wins. Plain $NAME and ${NAME} references pass.
+ */
+function sourcedShellIssues(
+  adapter: FormatAdapter,
+  bytes: Uint8Array,
+): LintIssue[] {
+  const issues: LintIssue[] = [];
+  for (const assignment of shellVarAssignments(adapter.parse(bytes))) {
+    if (!hasShellCharacters(assignment.value)) continue;
+    issues.push({
+      code: "shell-character",
+      severity: "error",
+      line: assignment.line,
+      column: 1,
+      message: SOURCED_MESSAGE,
+      locator: { kind: "shellvar", name: assignment.name },
+    });
   }
-  const paths = [...(file.paths.linux ?? []), ...(file.paths.windows ?? [])];
-  return paths.some((path) => path.split("/").at(-1) === APP_ARGS_FILE);
+  return issues;
 }
 
 /** A file of a pack by id; throws when the pack has no such file. */
@@ -177,10 +209,15 @@ export function lintFile(
 ): LintIssue[] {
   const file = packFileOf(pack, fileId);
   const adapter = adapterOf(file);
+  const syntax = adapter.lint(adapter.parse(bytes));
   const parsed = [
-    ...adapter.lint(adapter.parse(bytes)),
+    ...syntax,
     ...(evaluatedArgsFile(file) ? launchShellIssues(bytes) : []),
   ];
+  const broken = syntax.some((issue) => issue.severity === "error");
+  if (!broken && SOURCED_ADAPTERS.has(file.adapter)) {
+    parsed.push(...sourcedShellIssues(adapter, bytes));
+  }
   if (parsed.some((issue) => issue.severity === "error")) return parsed;
   const issues = withoutKeyedDuplicates(pack, fileId, parsed);
   return [...issues, ...lintPackFile(pack, fileId, bytes)];

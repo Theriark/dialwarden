@@ -41,6 +41,19 @@ describe("relativeParts", () => {
     expect(codeOf(() => relativeParts("a/../b"))).toBe("PathEscape");
   });
 
+  // P10-A G1.1: Windows spellings and a DEL byte are refused; a
+  // percent-encoded dot is no dot (nothing here decodes a path).
+  it.each(["\\\\server\\share\\x", "D:\\games\\x.ini", "a\x7fb", "a/..\\b"])(
+    "G1.1 refuses %j with PathEscape",
+    (rel) => {
+      expect(codeOf(() => relativeParts(rel))).toBe("PathEscape");
+    },
+  );
+
+  it("G1.1 keeps %2e%2e as two literal parts, never a step up", () => {
+    expect(relativeParts("%2e%2e/x")).toEqual(["%2e%2e", "x"]);
+  });
+
   it.each([
     ["", []],
     [".", []],

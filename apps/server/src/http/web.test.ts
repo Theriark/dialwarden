@@ -629,4 +629,66 @@ describe("web app threat tests (security review THE-2250)", () => {
       expect(signed.headers["content-type"], name).not.toContain("text/html");
     }
   });
+
+  // P10-A G5.1: the page policy, directive by directive.
+  it("G5.1 allows no eval, blob, outside source or outside font", async () => {
+    const { dist } = await fixture([THEME, SECOND]);
+    current = await testApp({ extraEnv: { WEB_DIST: dist } });
+    const response = await get("/");
+    const policy = String(response.headers["content-security-policy"]);
+    const directives = new Map(
+      policy.split("; ").map((part) => {
+        const [name = "", ...sources] = part.split(" ");
+        return [name, sources] as const;
+      }),
+    );
+    expect([...directives.keys()]).toEqual([
+      "default-src",
+      "script-src",
+      "style-src",
+      "img-src",
+      "font-src",
+      "connect-src",
+      "worker-src",
+      "manifest-src",
+      "object-src",
+      "base-uri",
+      "form-action",
+      "frame-ancestors",
+    ]);
+    expect(directives.get("font-src")).toEqual(["'self'"]);
+    expect(directives.get("script-src")).toEqual([
+      "'self'",
+      hashOf(THEME),
+      hashOf(SECOND),
+    ]);
+    for (const [name, sources] of directives) {
+      for (const source of sources) {
+        expect(source, name).not.toBe("'unsafe-eval'");
+        expect(source, name).not.toMatch(/^(blob|https?):/);
+      }
+    }
+  });
+
+  // P10-A L19: HSTS only when the app knows it is reached over https.
+  it("L19 sends HSTS with an https BASE_URL, and none with http", async () => {
+    const { dist } = await fixture();
+    const extraEnv = { WEB_DIST: dist, BASE_URL: "https://dw.example" };
+    current = await testApp({ extraEnv });
+    for (const url of ["/", "/api/v1/setup", "/healthz"]) {
+      const response = await get(url);
+      expect(response.headers["strict-transport-security"], url).toBe(
+        "max-age=31536000",
+      );
+    }
+    await current.close();
+    const plain = { WEB_DIST: dist, BASE_URL: "http://dw.lan:8080" };
+    current = await testApp({ extraEnv: plain });
+    for (const url of ["/", "/api/v1/setup"]) {
+      const response = await get(url);
+      expect(response.headers["strict-transport-security"], url).toBe(
+        undefined,
+      );
+    }
+  });
 });

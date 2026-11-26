@@ -447,6 +447,24 @@ function connectorFailure(error: ConnectorError): ChangeSetError {
   return { code: error.code, message: error.message };
 }
 
+/** Change sets that are not history entries yet, so never hidden on Free. */
+const WAITING_OR_DRAFT: ReadonlySet<string> = new Set([
+  "draft",
+  "pending",
+  "scheduled",
+]);
+
+/**
+ * A rollback that wrote nothing: the file already held the version (one
+ * file of a multi-file restore that the change never touched, F10). It is
+ * answered as applied but is not a history entry.
+ */
+function emptyRollback(row: ChangeSetRow): boolean {
+  if (row.cause !== "rollback" || row.status !== "applied") return false;
+  const diff = JSON.parse(row.diff) as Diff;
+  return diff.semantic.length === 0 && diff.text.length === 0;
+}
+
 interface Finish {
   readonly diff?: Diff;
   readonly lint?: readonly LintEntry[];
@@ -455,7 +473,19 @@ interface Finish {
   readonly appliedAt?: string;
   /** The hook mode a change parked as pending asked for (P6-B). */
   readonly runHooks?: RunHooks;
+  /** Who applied a change that was parked as pending (P10-A L21). */
+  readonly parkedBy?: string;
 }
+
+/**
+ * True while a user may still write on a server (the grant of the moment);
+ * needsAdmin when the change is raw text only an admin may write (P10-B N2).
+ */
+export type WriterCheck = (
+  userId: string,
+  serverId: string,
+  needsAdmin: boolean,
+) => boolean;
 
 interface NewChangeSet {
   readonly serverId: string;
@@ -488,6 +518,7 @@ export class ChangeSetService {
   readonly #now: () => Date;
   readonly #locks = new Map<string, Promise<void>>();
   #lastStamp = 0;
+  #canWrite: WriterCheck | null = null;
 
   constructor(options: ChangeSetServiceOptions) {
     this.#store = options.store;
@@ -498,6 +529,15 @@ export class ChangeSetService {
     this.#entitlement = options.entitlement;
     this.#hooks = options.hooks ?? null;
     this.#now = options.now ?? (() => new Date());
+  }
+
+  /**
+   * The team rule a parked change is checked against when it is finally
+   * written (P10-A L21). app.ts wires it once the team service exists;
+   * without it (unit tests of P6) a parked change is written as before.
+   */
+  setWriterCheck(check: WriterCheck): void {
+    this.#canWrite = check;
   }
 
   /** A time stamp later than every one before it, so history keeps order. */
@@ -600,6 +640,7 @@ export class ChangeSetService {
       conflict: null,
       error: null,
       runHooks: null,
+      parkedBy: null,
       restoreOf: input.restoreOf,
       createdAt: at,
       updatedAt: at,
@@ -625,6 +666,9 @@ export class ChangeSetService {
     if (fields.appliedAt) values.appliedAt = fields.appliedAt;
     if (status === "pending" && fields.runHooks !== undefined) {
       values.runHooks = fields.runHooks;
+    }
+    if (status === "pending" && fields.parkedBy !== undefined) {
+      values.parkedBy = fields.parkedBy;
     }
     if (from === "pending") values.runHooks = null;
     const where = eq(changeSets.id, row.id);
@@ -959,8 +1003,17 @@ export class ChangeSetService {
     });
   }
 
+  /**
+   * One change set. On Free a history entry past the visible 5 answers 402
+   * like the history page hides it (P10-A L20); drafts and the change sets
+   * that still wait (pending, scheduled) are not hidden.
+   */
   get(id: string): ChangeSetView {
-    return this.#view(this.#require(id));
+    const row = this.#require(id);
+    if (!WAITING_OR_DRAFT.has(row.status) && !emptyRollback(row)) {
+      this.#assertEntryVisible(this.#servers.require(row.serverId), row.id);
+    }
+    return this.#view(row);
   }
 
   /** The raw scope of a change set (rnd-decision-p8a Q2). */
@@ -1006,6 +1059,15 @@ export class ChangeSetService {
       const status = row.status as ChangeSetStatus;
       if (!isApplicable(status)) {
         throw new ApiError(409, "invalid_state", { status });
+      }
+      // A failed rollback applied again writes snapshot bytes: on Free only
+      // a version of the visible 5, as a restore (P10-A L20). Its payload
+      // keeps the bytes after retention pruned the snapshot, so the rollback
+      // entry itself must then be visible (P10-B N1).
+      if (row.restoreOf !== null) {
+        const snapshot = this.#snapshots.find(row.restoreOf);
+        if (snapshot !== null) this.#assertVisible(server, snapshot);
+        else this.#assertEntryVisible(server, row.id);
       }
       await this.#apply(row, server, pack, actor, runHooks);
       return this.#view(this.#require(id));
@@ -1171,7 +1233,7 @@ export class ChangeSetService {
     actor: string,
     runHooks: RunHooks,
   ): void {
-    this.#finish(row, "pending", { runHooks });
+    this.#finish(row, "pending", { runHooks, parkedBy: actor });
     this.#activity.record("change.pending", {
       serverId: server.id,
       actor,
@@ -1195,12 +1257,39 @@ export class ChangeSetService {
     let start = false;
     for (const row of this.#pendingRows(server.id)) {
       const mode = (row.runHooks ?? "none") as RunHooks;
+      if (!this.#parkerCanWrite(row, server)) {
+        // The user who applied it lost the right to write here meanwhile
+        // (P10-A L21): the change is not written on their behalf.
+        this.#finish(row, "failed", {
+          error: {
+            code: "author_cannot_write",
+            message: "The user who applied this change can no longer write.",
+          },
+        });
+        written?.push(this.#view(this.#require(row.id)));
+        continue;
+      }
       const result = await this.#run(row, server, pack, actor);
       written?.push(this.#view(this.#require(row.id)));
       // A change set parked as none keeps the server down.
       if (mode !== "none" && result === "applied") start = true;
     }
     return start;
+  }
+
+  /**
+   * True when the user who parked a change may still write on its server.
+   * A change parked by the system (a schedule run, P9) or before parked_by
+   * existed has no user to check and is written as before. A raw patch, or
+   * a restore into a shell-read file, also needs the parker to be an admin
+   * still, the rule the apply route checks (P10-B N2).
+   */
+  #parkerCanWrite(row: ChangeSetRow, server: ServerRecord): boolean {
+    const by = row.parkedBy;
+    if (this.#canWrite === null || by === null || by === "system") return true;
+    const scope = this.rawScope(row.id);
+    const needsAdmin = scope.restore ? scope.shellFile : scope.patches;
+    return this.#canWrite(by, server.id, needsAdmin);
   }
 
   /**
@@ -1238,6 +1327,9 @@ export class ChangeSetService {
   ): Promise<ChangeSetView[]> {
     const hooks = this.#hooks;
     if (hooks === null) return [];
+    // A server that is not editable on this plan keeps its pending changes
+    // until it is again (P10-A L21), like every other write path.
+    if (!this.#servers.isEditable(server.id)) return [];
     return this.#exclusive(server.id, async () => {
       const rows = this.#pendingRows(server.id);
       if (rows.length === 0) return [];
@@ -1578,7 +1670,10 @@ export class ChangeSetService {
     this.#finish(row, "reverted", {});
   }
 
-  /** History entries newest first; drafts are not history. */
+  /**
+   * History entries newest first; drafts are not history, and neither is a
+   * rollback that wrote nothing (F10).
+   */
   #historyRows(serverId: string): ChangeSetRow[] {
     const where = and(
       eq(changeSets.serverId, serverId),
@@ -1590,7 +1685,8 @@ export class ChangeSetService {
       .from(changeSets)
       .where(where)
       .orderBy(desc(at))
-      .all();
+      .all()
+      .filter((row) => !emptyRollback(row));
   }
 
   /**
@@ -1601,18 +1697,30 @@ export class ChangeSetService {
    * restored whole or not at all.
    */
   #assertVisible(server: ServerRecord, snapshot: SnapshotRecord): void {
+    const owner = snapshot.changeSetId;
+    if (owner !== null) {
+      this.#assertEntryVisible(server, owner);
+      return;
+    }
     const limit = this.#entitlement.limit("historyVisible");
     if (limit === null) return;
     const rows = this.#historyRows(server.id);
-    const refused = limitReached("historyVisible", rows.length, limit);
-    const owner = snapshot.changeSetId;
-    if (owner === null) throw refused;
-    const own = this.#snapshots.ofChangeSets([owner]).map((item) => item.id);
+    throw limitReached("historyVisible", rows.length, limit);
+  }
+
+  /**
+   * On Free, 402 unless the history entry is one of the visible 5. The
+   * rollbacks of the entry's own snapshots do not count (see #assertVisible).
+   */
+  #assertEntryVisible(server: ServerRecord, id: string): void {
+    const limit = this.#entitlement.limit("historyVisible");
+    if (limit === null) return;
+    const rows = this.#historyRows(server.id);
+    const own = this.#snapshots.ofChangeSets([id]).map((item) => item.id);
     const ownRestores = new Set(own);
     const counted = rows.filter((row) => !ownRestores.has(row.restoreOf ?? ""));
-    const visible = counted.slice(0, limit).map((row) => row.id);
-    if (visible.includes(owner)) return;
-    throw refused;
+    if (counted.slice(0, limit).some((row) => row.id === id)) return;
+    throw limitReached("historyVisible", rows.length, limit);
   }
 
   /** GET /servers/SLUG/history (contract C5), limited to 5 on Free. */

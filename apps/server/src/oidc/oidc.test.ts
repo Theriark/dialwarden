@@ -463,17 +463,40 @@ describe("OIDC redirects, settings and plans", () => {
         payload: { email, password },
       });
     expect((await login(owner.email, owner.password)).statusCode).toBe(200);
-    for (const [email, password] of [
-      [admin.email, admin.password],
-      ["nobody@dialwarden.test", randomPassword()],
-    ] as const) {
-      const response = await login(email, password);
-      expect(response.statusCode).toBe(403);
-      expect(response.json()).toMatchObject({ error: "sso_required" });
-      expect(response.cookies.find((c) => c.name === "dw_session")).toBe(
-        undefined,
-      );
+    const response = await login(admin.email, admin.password);
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ error: "sso_required" });
+    expect(response.cookies.find((c) => c.name === "dw_session")).toBe(
+      undefined,
+    );
+    // P10-A L17: an address without the right password learns nothing.
+    const unknown = await login("nobody@dialwarden.test", randomPassword());
+    expect(unknown.statusCode).toBe(401);
+    expect(unknown.json()).toMatchObject({ error: "invalid_credentials" });
+  });
+
+  it("O-32 a wrong password answers alike for the owner and anyone else", async () => {
+    const login = (email: string, remoteAddress: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/v1/auth/login",
+        payload: { email, password: randomPassword() },
+        remoteAddress,
+      });
+    const ownerProbe = await login(owner.email, "198.51.100.31");
+    const otherProbe = await login("nobody@dialwarden.test", "198.51.100.31");
+    for (const probe of [ownerProbe, otherProbe]) {
+      expect(probe.statusCode).toBe(401);
+      expect(probe.json()).toEqual({ error: "invalid_credentials" });
     }
+    // The probes are rate-limited per address: the 21st answers 429.
+    const statuses: number[] = [];
+    for (let i = 0; i < 21; i += 1) {
+      const probe = await login(`probe-${i}@dialwarden.test`, "198.51.100.32");
+      statuses.push(probe.statusCode);
+    }
+    expect(statuses.slice(0, 20).every((status) => status === 401)).toBe(true);
+    expect(statuses[20]).toBe(429);
   });
 
   it("O-29 an OIDC account has no usable password", async () => {

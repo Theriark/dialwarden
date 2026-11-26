@@ -150,13 +150,11 @@ describe("lintFile", () => {
   });
 
   it("lints a file that lists the args source as shell text", () => {
-    // The test pack's launch file is launch.txt, a start script the user
-    // owns: shell text there is the user's. Listing the args source makes
-    // it a file the snippets eval, whatever its name (THE-2605 L5).
+    // Listing the args source makes a launch file one the snippets eval,
+    // whatever its name (THE-2605 L5).
     const line = bytes("./run.sh -port=$(id)\n");
     const shell = (issues: readonly { code: string }[]) =>
       issues.filter((issue) => issue.code === "shell-character");
-    expect(shell(lintFile(pack, "launch", line))).toEqual([]);
     const args: Pack = {
       ...pack,
       files: pack.files.map((file) =>
@@ -168,6 +166,95 @@ describe("lintFile", () => {
     expect(shell(lintFile(args, "launch", line))).toContainEqual(
       expect.objectContaining({ code: "shell-character", severity: "error" }),
     );
+  });
+
+  // P10-A L8: a launch file that declares no launch source gets the args
+  // eval view (launchSourceViews), so its text is linted as shell text too,
+  // whatever its name.
+  it("L8 lints an undeclared launch file under any name as shell text", () => {
+    const named: Pack = {
+      ...pack,
+      files: pack.files.map((file) =>
+        file.id === "launch"
+          ? { ...file, paths: { linux: ["start-args.txt"] } }
+          : file,
+      ),
+    };
+    const shell = (line: string) =>
+      lintFile(named, "launch", bytes(line)).filter(
+        (issue) => issue.code === "shell-character",
+      );
+    expect(shell("-port 2456 -name $(id)\n")).toContainEqual(
+      expect.objectContaining({ code: "shell-character", severity: "error" }),
+    );
+    expect(shell("-port 2456 -name Plain\n")).toEqual([]);
+  });
+
+  // P10-A L7: a sourced variable file (LinuxGSM cfg, systemd env) is read
+  // by a shell, so a command in a value is an error in the raw text too.
+  it("L7 flags shell characters in every assignment of a shellvar file", () => {
+    const shellvar: Pack = {
+      ...pack,
+      files: [
+        ...pack.files,
+        {
+          id: "lgsm",
+          paths: { linux: ["lgsm/config-lgsm/x/x.cfg"] },
+          adapter: "shellvar",
+          encoding: "utf-8",
+          applyPolicy: "stopped-only",
+        },
+      ],
+    };
+    const issuesOf = (line: string) =>
+      lintFile(shellvar, "lgsm", bytes(line)).filter(
+        (issue) => issue.code === "shell-character",
+      );
+    const substitution = issuesOf('startparameters="-port $(id)"\n');
+    expect(substitution).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    const backticks = issuesOf('ip="0.0.0.0"\nservername="a `id` b"\n');
+    expect(backticks).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 2 }),
+    );
+    expect(issuesOf('startparameters="-port ${port} -name $name"\n')).toEqual(
+      [],
+    );
+    // The shell runs an earlier duplicate too, not only the value that wins.
+    const duplicate = issuesOf('servername="$(touch /tmp/x)"\nservername=x\n');
+    expect(duplicate).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    // A lone CR is an ordinary character to the shell, so it cannot end a
+    // value and hide the rest of the line; a CRLF file stays clean.
+    const loneCr = lintFile(
+      shellvar,
+      "lgsm",
+      bytes("servername=a\r touch /tmp/x\n"),
+    );
+    expect(loneCr).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    // A form feed, a vertical tab or a BOM is a word byte to the shell, so a
+    // # after one starts no comment.
+    const bom = String.fromCharCode(0xfeff);
+    for (const text of [
+      "servername=a\n\f#;touch /tmp/x\n",
+      "servername=a\n\v#;touch /tmp/x\n",
+      `${bom}#;touch /tmp/x\nservername=a\n`,
+    ]) {
+      const issues = lintFile(shellvar, "lgsm", bytes(text));
+      expect(issues, JSON.stringify(text)).toContainEqual(
+        expect.objectContaining({ severity: "error" }),
+      );
+    }
+    const crlf = lintFile(
+      shellvar,
+      "lgsm",
+      bytes('ip="0.0.0.0"\r\nport=2456\r\n'),
+    );
+    expect(crlf.filter((issue) => issue.severity === "error")).toEqual([]);
   });
 
   it("gives only the syntax errors of a file that does not parse", () => {

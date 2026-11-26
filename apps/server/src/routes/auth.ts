@@ -248,10 +248,17 @@ export function authRoutes(app: FastifyInstance): void {
     },
     async (request, reply) => {
       const { email, password } = request.body;
-      // While OIDC is on only the owner signs in with a password (O-28),
-      // refused before any hash check.
-      app.ctx.oidc.assertLocalLogin(email);
-      const result = await app.ctx.auth.login(email, password, request.ip);
+      // While OIDC is on only the owner signs in with a password (O-28). The
+      // rule is checked after the limit and the password (P10-A L17), so a
+      // wrong password answers the same for the owner and anyone else.
+      const result = await app.ctx.auth.login(
+        email,
+        password,
+        request.ip,
+        (checked) => {
+          app.ctx.oidc.assertLocalLogin(checked);
+        },
+      );
       if (result.status === "totp_required") {
         return result;
       }
@@ -330,6 +337,7 @@ export function authRoutes(app: FastifyInstance): void {
         session.user.id,
         currentPassword,
         newPassword,
+        request.ip,
       );
       // Every other session of this user ends; this one stays.
       app.ctx.sessions.destroyForUser(session.user.id, session.id);
@@ -350,7 +358,7 @@ export function authRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const userId = request.session?.user.id ?? "";
-      return app.ctx.auth.totpEnrol(userId, request.body.password);
+      return app.ctx.auth.totpEnrol(userId, request.body.password, request.ip);
     },
   );
 
@@ -388,6 +396,7 @@ export function authRoutes(app: FastifyInstance): void {
         session.user.id,
         request.body.password,
         answer(request.body),
+        request.ip,
       );
       app.ctx.sessions.destroyForUser(session.user.id, session.id);
       return reply.code(204).send();

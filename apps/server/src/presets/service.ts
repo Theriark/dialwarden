@@ -8,15 +8,22 @@
 // Free holds three presets (limit presets of contract C1): the fourth
 // creation answers 402 with the upgrade body the web app renders. Paid is
 // unlimited. The values come from the settings read, which masks secrets,
-// and the write path drops a masked secret, so a preset never carries a real
-// secret. The built-in pack presets of P3 stay in the pack data, not here.
+// and the write path drops a masked secret. A real secret sent through the
+// API is stored and shown as the mask too (P10-A L11), so a preset never
+// carries a real secret. The built-in pack presets of P3 stay in the pack
+// data, not here.
 //
 // P9-A adds the bulk apply of the Paid plan (presets.bulk): drafts for many
 // servers first, each with its own diff, then one apply per server with a
 // report that keeps going past a failed server.
 import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
-import type { JsonValue, Pack, SettingEdit } from "@dialwarden/packs-schema";
+import {
+  SECRET_MASK,
+  type JsonValue,
+  type Pack,
+  type SettingEdit,
+} from "@dialwarden/packs-schema";
 import { eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import type { ChangeSetService } from "../changes/service.js";
@@ -63,6 +70,24 @@ export interface PresetServiceOptions {
 
 type PresetRow = typeof presets.$inferSelect;
 
+/** The values with every non-empty secret setting replaced by the mask. */
+function maskSecrets(
+  pack: Pack | undefined,
+  values: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const secret = new Set(
+    (pack?.settings ?? [])
+      .filter((setting) => setting.secret === true)
+      .map((setting) => setting.key),
+  );
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [
+      key,
+      secret.has(key) && value !== "" && value !== null ? SECRET_MASK : value,
+    ]),
+  );
+}
+
 export class PresetService {
   readonly #store: Store;
   readonly #packs: ReadonlyMap<string, Pack>;
@@ -89,7 +114,10 @@ export class PresetService {
       description: row.description,
       packId: row.packId,
       createdAt: row.createdAt,
-      values: JSON.parse(row.values) as Record<string, unknown>,
+      values: maskSecrets(
+        this.#packs.get(row.packId),
+        JSON.parse(row.values) as Record<string, unknown>,
+      ),
     };
   }
 
@@ -138,7 +166,7 @@ export class PresetService {
       name: input.name,
       description: input.description,
       packId: input.packId,
-      values: JSON.stringify(input.values),
+      values: JSON.stringify(maskSecrets(pack, input.values)),
       createdAt: this.#now().toISOString(),
     };
     this.#store.db.insert(presets).values(row).run();

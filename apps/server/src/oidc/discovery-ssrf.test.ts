@@ -15,6 +15,7 @@ import {
 import { FakeIdp } from "../../test/oidc-idp.js";
 import { paidApp } from "../../test/team.js";
 import {
+  addressAllowed,
   checkUrl,
   pinnedLookup,
   policyOf,
@@ -143,6 +144,31 @@ describe("OIDC network policy (O-24)", () => {
     }
     const allowed = await checkUrl("https://93.184.216.34/x", policy);
     expect(allowed.addresses).toEqual(["93.184.216.34"]);
+  });
+
+  // P10-A U1: an IPv4 address written inside IPv6 is checked as that IPv4.
+  it("U1 refuses loopback and metadata in IPv4-compatible and NAT64 forms", () => {
+    const strict = policyOf(false, { resolve: stubResolver });
+    const open = policyOf(true, { resolve: stubResolver });
+    const forms = [
+      "::7f00:1",
+      "::127.0.0.1",
+      "::a9fe:a9fe",
+      "::169.254.169.254",
+      "64:ff9b:1::a9fe:a9fe",
+      "64:ff9b::7f00:1",
+    ];
+    for (const address of forms) {
+      expect(addressAllowed(address, strict), address).toBe(false);
+      expect(addressAllowed(address, open), address).toBe(false);
+    }
+    // A private address inside follows the owner's setting like itself.
+    expect(addressAllowed("::a00:8", strict)).toBe(false);
+    expect(addressAllowed("::a00:8", open)).toBe(true);
+    // Public addresses, and :: and ::1, keep their own meaning.
+    expect(addressAllowed("::5db8:d822", strict)).toBe(true);
+    expect(addressAllowed("::", open)).toBe(false);
+    expect(addressAllowed("::1", open)).toBe(false);
   });
 });
 
