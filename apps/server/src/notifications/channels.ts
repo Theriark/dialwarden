@@ -16,7 +16,7 @@
 // Deliveries of one channel run one after another (in event order), at most
 // MAX_QUEUE waiting; a full queue drops the new event with a log line. Each
 // delivery reads the channel again, so an edit, a disable or a delete applies
-// to what is still waiting.
+// to what is still waiting. The send test runs beside the queue.
 import { randomUUID } from "node:crypto";
 import type { EntitlementGate } from "@dialwarden/entitlement";
 import type { Pack } from "@dialwarden/packs-schema";
@@ -53,10 +53,17 @@ import {
 } from "../oidc/network.js";
 import type { ReportService } from "../reports/service.js";
 import type { ServerService } from "../servers/service.js";
+import { actorLabels } from "../team/labels.js";
 import { seesEveryServer, type Principal } from "../team/roles.js";
 import type { NotificationDispatcher } from "./dispatch.js";
-import { messageOf, testMessage, type NotificationMessage } from "./message.js";
 import {
+  bylineOf,
+  messageOf,
+  testMessage,
+  type NotificationMessage,
+} from "./message.js";
+import {
+  assertMaySend,
   DeliveryError,
   DiscordPace,
   realSleep,
@@ -202,11 +209,18 @@ export interface InboxPage {
 
 type Row = typeof notificationChannels.$inferSelect;
 
+/**
+ * What a channel keeps between deliveries. It lives as long as the channel:
+ * an edit only swaps the dispatcher subscription, so the queue (event
+ * order) and the Discord pace carry over.
+ */
 interface Runtime {
   unregister: () => void;
   queue: Promise<void>;
   waiting: number;
   pace: DiscordPace;
+  /** A send test is running (one at a time per channel). */
+  testing: boolean;
 }
 
 /** The URL with its path, query and fragment masked. */
@@ -284,6 +298,20 @@ export class ChannelService {
   /** Registers every stored enabled channel on the dispatcher (app start). */
   start(): void {
     for (const row of this.#rows()) this.#register(row);
+  }
+
+  /**
+   * Registers the channels of the database as it is now (after a first-run
+   * import swapped it): channels that are gone are dropped, the others
+   * registered again. Unlike stop(), the service keeps running.
+   */
+  reload(): void {
+    const rows = this.#rows();
+    const ids = new Set(rows.map((row) => row.id));
+    for (const id of [...this.#runtime.keys()]) {
+      if (!ids.has(id)) this.#unregister(id);
+    }
+    for (const row of rows) this.#register(row);
   }
 
   /** Unregisters every channel and drops what is waiting (app close). */
@@ -369,14 +397,21 @@ export class ChannelService {
       .run();
   }
 
-  /** The send test: one test message now, whatever the channel's types. */
+  /**
+   * The send test: one test message now, whatever the channel's types. It
+   * does not wait behind the queued deliveries, so a busy or failing channel
+   * answers within the bound of one send; one test runs at a time.
+   */
   async test(id: string): Promise<TestResult> {
     const row = this.#require(id);
-    const message = testMessage(row.name, this.#now());
-    const result = await this.#enqueue(row, () =>
-      this.#send(row.id, message, null),
-    );
-    return result ?? { ok: false, error: "queue_full" };
+    const runtime = this.#runtimeOf(row.id);
+    if (runtime.testing) return { ok: false, error: "test_running" };
+    runtime.testing = true;
+    try {
+      return await this.#send(row.id, testMessage(row.name, this.#now()), null);
+    } finally {
+      runtime.testing = false;
+    }
   }
 
   // ---- The in-app channel ----
@@ -401,15 +436,30 @@ export class ChannelService {
       .all();
     const page = rows.slice(0, query.limit);
     const last = page.at(-1);
+    // The byline is built here from the actor id, as the activity feed does,
+    // so an erased user shows with the erased label (D7).
+    const labels = actorLabels(
+      this.#store,
+      page.flatMap((row) => (row.actor === null ? [] : [row.actor])),
+    );
     return {
-      items: page.map((row) => ({
-        id: row.id,
-        type: row.type as ActivityType | "test",
-        serverId: row.serverId,
-        at: row.at,
-        title: row.title,
-        lines: parseJson<string[]>(row.lines, []),
-      })),
+      items: page.map((row) => {
+        const lines = parseJson<string[]>(row.lines, []);
+        return {
+          id: row.id,
+          type: row.type as ActivityType | "test",
+          serverId: row.serverId,
+          at: row.at,
+          title: row.title,
+          lines:
+            row.actor === null
+              ? lines
+              : [
+                  bylineOf(labels.get(row.actor) ?? row.actor, row.at),
+                  ...lines,
+                ],
+        };
+      }),
       unread: this.#unread(principal.userId, scope),
       nextBefore:
         rows.length > query.limit && last !== undefined ? last.id : null,
@@ -487,17 +537,16 @@ export class ChannelService {
 
   // ---- Delivery ----
 
+  /** Subscribes the channel as stored now, keeping its runtime (queue, pace). */
   #register(row: Row): void {
-    this.#unregister(row.id);
+    const existing = this.#runtime.get(row.id);
+    if (existing !== undefined) {
+      existing.unregister();
+      existing.unregister = () => undefined;
+    }
     const types = typesOf(row.types);
     if (row.enabled !== 1 || types.length === 0) return;
-    const runtime: Runtime = {
-      unregister: () => undefined,
-      queue: Promise.resolve(),
-      waiting: 0,
-      pace: new DiscordPace(),
-    };
-    this.#runtime.set(row.id, runtime);
+    const runtime = this.#runtimeOf(row.id);
     runtime.unregister = this.#dispatcher.register({
       name: `${row.kind}:${row.id}`,
       types,
@@ -514,23 +563,28 @@ export class ChannelService {
     this.#runtime.delete(id);
   }
 
-  /**
-   * Runs a job after the channel's earlier ones; undefined when the queue
-   * is full (the job is dropped and logged).
-   */
-  async #enqueue<T>(row: Row, job: () => Promise<T>): Promise<T | undefined> {
-    let runtime = this.#runtime.get(row.id);
+  /** The runtime of a channel, made on first use (not yet subscribed). */
+  #runtimeOf(id: string): Runtime {
+    let runtime = this.#runtime.get(id);
     if (runtime === undefined) {
-      // A disabled channel still answers its send test, through a runtime
-      // of its own that is not registered on the dispatcher.
       runtime = {
         unregister: () => undefined,
         queue: Promise.resolve(),
         waiting: 0,
         pace: new DiscordPace(),
+        testing: false,
       };
-      this.#runtime.set(row.id, runtime);
+      this.#runtime.set(id, runtime);
     }
+    return runtime;
+  }
+
+  /**
+   * Runs a job after the channel's earlier ones; undefined when the queue
+   * is full (the job is dropped and logged).
+   */
+  async #enqueue<T>(row: Row, job: () => Promise<T>): Promise<T | undefined> {
+    const runtime = this.#runtimeOf(row.id);
     if (runtime.waiting >= MAX_QUEUE) {
       this.#log.warn(
         { channel: row.id, kind: row.kind },
@@ -616,13 +670,16 @@ export class ChannelService {
     event: ActivityEvent | null,
   ): Promise<void> {
     const kind = row.kind as ChannelKind;
+    const context = this.#context(this.#policyOf(row));
     if (kind === "in_app") {
+      // Nothing leaves the host, but an event still queued when the plan
+      // dropped to Free is not stored either (the test route answers 402).
+      if (event !== null) assertMaySend(context);
       this.#toInbox(row.id, message, event);
       return;
     }
     const secrets = this.#open(row);
     const runtime = this.#runtime.get(row.id);
-    const context = this.#context(this.#policyOf(row));
     if (kind === "webhook") {
       if (secrets.url === undefined) throw new DeliveryError("no_url", false);
       const body: WebhookBody = {
@@ -685,8 +742,13 @@ export class ChannelService {
         type: event?.type ?? "test",
         serverId: event?.serverId ?? message.server?.id ?? null,
         at: event?.at ?? this.#now().toISOString(),
+        // An event names its actor by id; inbox() adds the byline. A test
+        // byline names the channel only, so it is stored as it is.
+        actor: event?.actor ?? null,
         title: message.title,
-        lines: JSON.stringify([message.byline, ...message.lines]),
+        lines: JSON.stringify(
+          event === null ? [message.byline, ...message.lines] : message.lines,
+        ),
       })
       .run();
     const cutoff = db
@@ -709,8 +771,7 @@ export class ChannelService {
       now: this.#now,
       sleep: this.#sleep,
       signal: this.#abort.signal,
-      maySend: () =>
-        !this.#abort.signal.aborted && this.#entitlement.can("notifications"),
+      maySend: () => this.#entitlement.can("notifications"),
     };
   }
 
