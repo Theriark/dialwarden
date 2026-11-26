@@ -424,6 +424,12 @@ CREATE TABLE notification_reads (
 );
 `;
 
+// P10-B (P10-A L21): the user who applied a change that waits as pending, so
+// the flush can check that user's write access when it finally writes.
+const parkedBy = `
+ALTER TABLE change_sets ADD COLUMN parked_by TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
@@ -435,6 +441,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: "0008_actor_ids", sql: actorIds },
   { id: "0009_fleet", sql: fleet },
   { id: "0010_notifications", sql: notifications },
+  { id: "0011_parked_by", sql: parkedBy },
 ];
 
 /** The id of the newest migration this build knows. */
