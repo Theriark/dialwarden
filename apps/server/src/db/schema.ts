@@ -1,4 +1,4 @@
-// Drizzle schema of the P1, P4, P6 and P8 tables. The SQL that creates them
+// Drizzle schema of the P1, P4, P6, P8 and P9 tables. The SQL that creates them
 // is in migrations.ts; schema.test.ts fails when the two disagree. Later
 // phases add their tables here and a new migration (never an edit of an
 // applied one).
@@ -385,6 +385,69 @@ export const auditEvents = sqliteTable(
   ],
 );
 
+/**
+ * Scheduled changes (P9-A, Paid): a run-at time or a cron pattern, the
+ * setting edits, the hook mode and the optional automatic revert.
+ */
+export const schedules = sqliteTable(
+  "schedules",
+  {
+    id: text("id").primaryKey(),
+    serverId: text("server_id")
+      .notNull()
+      .references(() => servers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** The user id of who made it; the runs act as this user. */
+    author: text("author").notNull(),
+    /** once (run_at) or cron (cron and timezone). */
+    kind: text("kind").notNull(),
+    runAt: text("run_at"),
+    cron: text("cron"),
+    timezone: text("timezone").notNull(),
+    /** The revert of a once schedule, at a set time. */
+    revertAt: text("revert_at"),
+    /** The revert of each cron run, this many minutes after it. */
+    revertAfterMinutes: integer("revert_after_minutes"),
+    runHooks: text("run_hooks").notNull(),
+    /** The setting edits as JSON, encrypted with APP_SECRET_KEY. */
+    payloadEnc: text("payload_enc").notNull(),
+    /** active, paused (Free), done or missed. */
+    state: text("state").notNull(),
+    nextRunAt: text("next_run_at"),
+    revertDueAt: text("revert_due_at"),
+    /** The values the revert writes back, encrypted like the payload. */
+    revertEnc: text("revert_enc"),
+    lastRunAt: text("last_run_at"),
+    lastResult: text("last_result"),
+    lastChangeSetId: text("last_change_set_id"),
+    lastRevertAt: text("last_revert_at"),
+    lastRevertResult: text("last_revert_result"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("schedules_server").on(table.serverId, table.createdAt),
+    index("schedules_next_run").on(table.nextRunAt),
+    check("schedules_kind", sql`${table.kind} IN ('once', 'cron')`),
+  ],
+);
+
+/** The background drift check of one server (P9-A, Paid). */
+export const driftChecks = sqliteTable("drift_checks", {
+  serverId: text("server_id")
+    .primaryKey()
+    .references(() => servers.id, { onDelete: "cascade" }),
+  enabled: integer("enabled").notNull(),
+  intervalMinutes: integer("interval_minutes").notNull(),
+  lastCheckedAt: text("last_checked_at"),
+  /** clean, drift or error. */
+  lastResult: text("last_result"),
+  lastError: text("last_error"),
+  lastChangeSetId: text("last_change_set_id"),
+  updatedAt: text("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
 export const schema = {
   users,
   recoveryCodes,
@@ -407,4 +470,6 @@ export const schema = {
   apiTokens,
   auditActors,
   auditEvents,
+  schedules,
+  driftChecks,
 };

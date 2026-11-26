@@ -331,6 +331,54 @@ UPDATE server_hooks
   WHERE updated_by LIKE '%@%';
 `;
 
+// The Paid fleet layer (P9-A). schedules holds the scheduled changes: a
+// run-at time or a cron pattern, the setting edits (encrypted, they can carry
+// a password), the hook mode, the optional automatic revert and what the last
+// run and revert did; next_run_at and revert_due_at are what the scheduler
+// looks for. drift_checks holds the background drift check of each server
+// that has its own settings (no row: on, every 15 minutes).
+const fleet = `
+CREATE TABLE schedules (
+  id TEXT PRIMARY KEY NOT NULL,
+  server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  author TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('once', 'cron')),
+  run_at TEXT,
+  cron TEXT,
+  timezone TEXT NOT NULL,
+  revert_at TEXT,
+  revert_after_minutes INTEGER,
+  run_hooks TEXT NOT NULL,
+  payload_enc TEXT NOT NULL,
+  state TEXT NOT NULL,
+  next_run_at TEXT,
+  revert_due_at TEXT,
+  revert_enc TEXT,
+  last_run_at TEXT,
+  last_result TEXT,
+  last_change_set_id TEXT,
+  last_revert_at TEXT,
+  last_revert_result TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX schedules_server ON schedules (server_id, created_at);
+CREATE INDEX schedules_next_run ON schedules (next_run_at);
+
+CREATE TABLE drift_checks (
+  server_id TEXT PRIMARY KEY NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL,
+  interval_minutes INTEGER NOT NULL,
+  last_checked_at TEXT,
+  last_result TEXT,
+  last_error TEXT,
+  last_change_set_id TEXT,
+  updated_at TEXT NOT NULL,
+  updated_by TEXT
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { id: "0001_init", sql: init },
   { id: "0002_recovery_key", sql: recoveryKey },
@@ -340,6 +388,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { id: "0006_server_hooks", sql: serverHooks },
   { id: "0007_team", sql: team },
   { id: "0008_actor_ids", sql: actorIds },
+  { id: "0009_fleet", sql: fleet },
 ];
 
 /** The id of the newest migration this build knows. */

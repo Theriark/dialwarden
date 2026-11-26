@@ -1,0 +1,90 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`report renderers > renders Markdown 1`] = `
+"# Dialwarden change report
+
+Generated 2026-12-01 12:00 UTC: 3 change sets on 2 servers, 2026-12-01T00:00:00.000Z to 2026-12-01T23:59:59.000Z.
+
+## Pal \\<main\\> \\*one\\* (Palworld)
+
+- **2026-12-01 10:15 UTC, schedule, applied** by Ana @everyone
+  - Max players: 32 to 20 (restart required)
+  - Admin password: changed (secret, hidden) (restart required)
+- **2026-12-01 09:00 UTC, external, applied** by outside the app
+  - Settings file: 3 lines (restart required)
+
+## Valheim (Valheim)
+
+- **2026-12-01 08:00 UTC, preset, pending** by Owner
+  - Public: set to true
+  - Message of the day: hi to @everyone hello
+"
+`;
+
+exports[`report renderers > renders Markdown 2`] = `
+"# Dialwarden change report
+
+Generated 2026-12-01 12:00 UTC: 0 change sets on 0 servers.
+
+No changes.
+"
+`;
+
+exports[`report renderers > renders a Discord message body that pings nobody 1`] = `
+"**Dialwarden change report** (3 change sets on 2 servers, 2026-12-01T00:00:00.000Z to 2026-12-01T23:59:59.000Z)
+**Pal \\<main\\> \\*one\\***
+- 2026-12-01 10:15 UTC, schedule: Max players: 32 to 20 (restart required); Admin password: changed (secret, hidden) (restart required)
+- 2026-12-01 09:00 UTC, external: Settings file: 3 lines (restart required)
+**Valheim**
+- 2026-12-01 08:00 UTC, preset: Public: set to true; Message of the day: hi to @<zwsp>everyone hello"
+`;
+
+exports[`report renderers > renders a Discord message body that pings nobody 2`] = `
+{
+  "content": "**Dialwarden change report** (0 change sets on 0 servers)
+No changes.",
+}
+`;
+
+exports[`report renderers > renders an HTML print view without script 1`] = `
+"<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8">
+<title>Dialwarden change report</title>
+<style>
+body { font: 14px/1.45 system-ui, sans-serif; color: #111; margin: 2rem; }
+h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+p.meta { color: #555; margin: 0 0 1rem; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 0.35rem 0.5rem; text-align: left;
+  vertical-align: top; }
+th { background: #f3f3f3; }
+ul { margin: 0; padding-left: 1.1rem; }
+@media print { body { margin: 0; } h2 { break-after: avoid; }
+  tr { break-inside: avoid; } }
+</style></head>
+<body>
+<h1>Dialwarden change report</h1>
+<p class="meta">Generated 2026-12-01 12:00 UTC: 3 change sets on 2 servers, 2026-12-01T00:00:00.000Z to 2026-12-01T23:59:59.000Z.</p>
+<h2>Pal &lt;main&gt; *one* (Palworld)</h2>
+<table><thead><tr><th>When</th><th>Cause</th><th>Status</th>
+<th>By</th><th>Changes</th></tr></thead><tbody>
+<tr><td>2026-12-01 10:15 UTC</td><td>schedule</td>
+<td>applied</td><td>Ana @everyone</td>
+<td><ul><li>Max players: 32 to 20 (restart required)</li><li>Admin password: changed (secret, hidden) (restart required)</li></ul></td></tr>
+<tr><td>2026-12-01 09:00 UTC</td><td>external</td>
+<td>applied</td><td>outside the app</td>
+<td><ul><li>Settings file: 3 lines (restart required)</li></ul></td></tr>
+</tbody></table>
+<h2>Valheim (Valheim)</h2>
+<table><thead><tr><th>When</th><th>Cause</th><th>Status</th>
+<th>By</th><th>Changes</th></tr></thead><tbody>
+<tr><td>2026-12-01 08:00 UTC</td><td>preset</td>
+<td>pending</td><td>Owner</td>
+<td><ul><li>Public: set to true</li><li>Message of the day: hi to @everyone hello</li></ul></td></tr>
+</tbody></table>
+</body>
+</html>
+"
+`;

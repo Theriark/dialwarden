@@ -100,6 +100,18 @@ export const PAYLOAD_CONTEXT = "change_sets.payload";
 /** The author of an outside edit. */
 export const OUTSIDE_AUTHOR = "outside the app";
 
+/**
+ * Who found an outside edit (P9-A): the background drift check, or the demo
+ * drift job of DEMO_SEED, which also names itself in the history entry. An
+ * open of the editor passes none, and its drift.detected data stays as it
+ * was.
+ */
+export interface DriftOrigin {
+  readonly via: "background" | "demo";
+  /** A note on the activity event and in the author label, if any. */
+  readonly note?: string;
+}
+
 /** How often a write is planned again when the file changed meanwhile. */
 const WRITE_ATTEMPTS = 3;
 
@@ -644,6 +656,7 @@ export class ChangeSetService {
     server: ServerRecord,
     pack: Pack,
     states: ReadonlyMap<string, FileState>,
+    origin?: DriftOrigin,
   ): Promise<string | null> {
     const known = this.#known(server.id);
     const changed: { state: FileState; before: Uint8Array | null }[] = [];
@@ -672,11 +685,14 @@ export class ChangeSetService {
       const unifiedDiff = maskedDiff(pack, state.fileId, before, state.bytes);
       text.push({ fileId: state.fileId, unifiedDiff });
     }
+    const note = origin?.note;
+    const author =
+      note === undefined ? OUTSIDE_AUTHOR : `${OUTSIDE_AUTHOR} (${note})`;
     const row = this.#insert({
       serverId: server.id,
       status: "applied",
       cause: "external",
-      author: OUTSIDE_AUTHOR,
+      author,
       payload: null,
       base,
       diff: { semantic, text },
@@ -697,11 +713,51 @@ export class ChangeSetService {
       this.#setKnown(server.id, state.fileId, state.path, state.sha256);
     }
     const files = changed.map(({ state }) => state.fileId);
+    const found = origin === undefined ? {} : { via: origin.via };
     this.#activity.record("drift.detected", {
       serverId: server.id,
-      data: { changeSetId: row.id, files },
+      data: {
+        changeSetId: row.id,
+        files,
+        ...found,
+        ...(note === undefined ? {} : { note }),
+      },
     });
     return row.id;
+  }
+
+  /**
+   * The background drift check (P9-A): reads every pack file of a server
+   * through its connector, as an open of the editor does, and records an
+   * outside edit as its own history entry (cause external) with the
+   * drift.detected event. Returns the entry's id, or null when the files are
+   * as the app last saw them.
+   */
+  async checkDrift(
+    server: ServerRecord,
+    origin: DriftOrigin,
+  ): Promise<string | null> {
+    const pack = this.#servers.pack(server);
+    return this.#exclusive(server.id, () =>
+      this.#servers.use(server, async (connector) => {
+        const states = await this.#readFiles(server, pack, connector);
+        return this.#recordOutside(server, pack, states, origin);
+      }),
+    );
+  }
+
+  /**
+   * Checks setting edits against a server's pack the way a change set does
+   * (known settings, one edit each, values the setting can hold) and returns
+   * the edits a change set would keep. Schedules check their edits here when
+   * they are made, long before they run.
+   */
+  checkEdits(
+    server: ServerRecord,
+    edits: readonly SettingEdit[],
+  ): SettingEdit[] {
+    const pack = this.#servers.pack(server);
+    return [...payloadOf(pack, { edits }).edits];
   }
 
   /** Reads a server's files and records any outside edit; caller locks. */

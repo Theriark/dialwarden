@@ -18,6 +18,9 @@ export const onChangeSet = (access: ServerAccess) =>
 /** A route on the server of the snapshot of the id path parameter. */
 export const onSnapshot = (access: ServerAccess) => scoped("snapshot", access);
 
+/** A route on the server of the schedule of the id path parameter. */
+export const onSchedule = (access: ServerAccess) => scoped("schedule", access);
+
 /** A route on the server named by the server field of the body. */
 export const onBodyServer = (access: ServerAccess) =>
   scoped("bodyServer", access);

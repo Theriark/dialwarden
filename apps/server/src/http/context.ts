@@ -26,11 +26,17 @@ import type { Aead } from "../crypto/aead.js";
 import type { AppKey } from "../crypto/app-key.js";
 import type { Settings } from "../db/settings.js";
 import type { Store } from "../db/store.js";
+import type { DriftService } from "../drift/service.js";
+import type { MatrixService } from "../fleet/matrix.js";
 import type { LicenceService } from "../licence/service.js";
+import type { NotificationDispatcher } from "../notifications/dispatch.js";
 import type { OidcService } from "../oidc/service.js";
 import type { EditableServers } from "../plan/editable.js";
 import type { PresetService } from "../presets/service.js";
 import type { RetentionService } from "../privacy/retention.js";
+import type { ReportService } from "../reports/service.js";
+import type { ScheduleService } from "../schedules/service.js";
+import type { DemoDriftJob } from "../servers/demo-drift.js";
 import type { ServerService } from "../servers/service.js";
 import type { SnapshotStore } from "../snapshots/store.js";
 import type { TokenService } from "../team/api-access.js";
@@ -42,9 +48,11 @@ export type AuthLevel =
 
 /**
  * Where a route finds its game server: the slug path parameter, the change
- * set or snapshot of the id path parameter, or the server field of the body.
+ * set, snapshot or schedule of the id path parameter, or the server field of
+ * the body.
  */
-export type ServerSource = "slug" | "changeSet" | "snapshot" | "bodyServer";
+export type ServerSource =
+  "slug" | "changeSet" | "snapshot" | "schedule" | "bodyServer";
 
 /**
  * The access a server-scoped route needs: read (any grant), write (an
@@ -98,6 +106,18 @@ export interface AppContext {
   retention: RetentionService;
   /** OIDC sign-in and its settings (P8-A step 5, Paid). */
   oidc: OidcService;
+  /** Scheduled changes and their scheduler job (P9-A, Paid). */
+  schedules: ScheduleService;
+  /** Background drift checks and their job (P9-A, Paid). */
+  drift: DriftService;
+  /** The settings comparison matrix (P9-A, Paid). */
+  matrix: MatrixService;
+  /** Change reports (P9-A, Paid). */
+  reports: ReportService;
+  /** The notification dispatch seam the P9-B channels register on. */
+  notifications: NotificationDispatcher;
+  /** The demo drift job of DEMO_SEED (P10 correction, demo only). */
+  demoDrift: DemoDriftJob;
   /** True while a first-run import replaces the database: the API answers 503. */
   maintenance: boolean;
   /** True while a first-run import runs (one at a time). */
