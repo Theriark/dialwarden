@@ -17,6 +17,7 @@ import {
   type KeyRing,
 } from "@dialwarden/entitlement";
 import { loadPacks } from "@dialwarden/packs-schema/node";
+import { eq } from "drizzle-orm";
 import { fastify, type FastifyInstance } from "fastify";
 import { ActivityService } from "./activity/service.js";
 import { registerAuditRecording } from "./audit/record.js";
@@ -34,6 +35,7 @@ import { ConnectorService } from "./connectors/service.js";
 import { createAead } from "./crypto/aead.js";
 import { loadAppKey } from "./crypto/app-key.js";
 import { HookService } from "./control/hooks.js";
+import { users } from "./db/schema.js";
 import { Settings } from "./db/settings.js";
 import { Store } from "./db/store.js";
 import { DriftService } from "./drift/service.js";
@@ -84,11 +86,12 @@ import { serverRoutes } from "./routes/servers.js";
 import { systemRoutes } from "./routes/system.js";
 import { userRoutes } from "./routes/users.js";
 import { ScheduleService } from "./schedules/service.js";
-import { seedDemoServers } from "./servers/demo.js";
+import { seedDemoChannel, seedDemoServers } from "./servers/demo.js";
 import { DemoDriftJob } from "./servers/demo-drift.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
 import { TokenService } from "./team/api-access.js";
+import { serverLevel } from "./team/roles.js";
 import { TeamService } from "./team/service.js";
 import { VERSION } from "./version.js";
 
@@ -156,6 +159,7 @@ async function seedDemo(app: FastifyInstance): Promise<void> {
     const created = await seedDemoServers({
       demoSeed: config.demoSeed,
       demoServersDir: config.demoServersDir,
+      dataDir: config.dataDir,
       packsDir: config.packsDir,
       packs,
       servers,
@@ -164,6 +168,11 @@ async function seedDemo(app: FastifyInstance): Promise<void> {
     });
     if (created.length > 0) {
       app.log.info({ servers: created }, "demo servers seeded");
+    }
+    const { channels, settings } = app.ctx;
+    const demoSeed = config.demoSeed;
+    if (seedDemoChannel({ demoSeed, channels, settings })) {
+      app.log.info("demo in-app notification channel seeded");
     }
   } catch (error) {
     app.log.error({ err: error }, "demo seed failed");
@@ -298,6 +307,18 @@ export async function buildApp(
     limiter,
     baseUrl: config.baseUrl,
     now,
+  });
+  // A pending change is written only while the user who applied it may
+  // still write on the server (P10-A L21), the rule schedules follow too.
+  changes.setWriterCheck((userId, serverId) => {
+    const user = store.db
+      .select({ id: users.id, email: users.email, role: users.role })
+      .from(users)
+      .where(eq(users.id, userId))
+      .get();
+    if (user === undefined) return false;
+    const grant = team.grantLevel(user.id, serverId);
+    return serverLevel(team.principalOf(user), grant) === "write";
   });
   const audit = new AuditService({ store, settings, appKey: appKey.key, now });
   const retention = new RetentionService({
@@ -441,6 +462,8 @@ export async function buildApp(
         entitlement: route.config?.entitlement ?? null,
         server: route.config?.server ?? null,
         tokens: route.config?.tokens ?? true,
+        params: route.schema?.params ?? null,
+        body: route.schema?.body ?? null,
       });
     }
   });
@@ -483,7 +506,7 @@ export async function buildApp(
   // Contract C8: the built web app (none in tests and API-only runs) and the
   // security headers of every response.
   const web = loadWebDist(config.webDist, app.log);
-  registerSecurityHeaders(app, web?.scriptHashes ?? []);
+  registerSecurityHeaders(app, web?.scriptHashes ?? [], config.baseUrl);
 
   healthRoutes(app);
   authRoutes(app);
