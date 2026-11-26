@@ -855,3 +855,323 @@ export interface OidcInput {
 export interface OidcStatus {
   readonly enabled: boolean;
 }
+
+// ---- P9: bulk presets, schedules, drift, the matrix, reports and the ----
+// ---- notification channels. The shapes the P9-A and P9-B server       ----
+// ---- declares in apps/server/src/routes/presets.ts, schedules.ts,     ----
+// ---- drift.ts, fleet.ts, reports.ts and notifications.ts at 474ef7c.  ----
+// ---- Field names are exact; every route is Paid (contract C1).        ----
+
+/** The error of one item of a bulk answer: a code and whatever it adds. */
+export interface BulkFailure {
+  readonly code: string;
+  readonly message?: string;
+  readonly [field: string]: unknown;
+}
+
+/** One item of POST /api/v1/presets/:id/bulk-drafts. */
+export interface BulkDraftItem {
+  readonly server: string;
+  readonly changeSet: ChangeSet | null;
+  readonly error: BulkFailure | null;
+}
+
+export interface BulkDraftList {
+  readonly items: readonly BulkDraftItem[];
+}
+
+export type BulkItemStatus = ChangeSetStatus | "refused";
+
+/** One item of POST /api/v1/presets/bulk-apply. */
+export interface BulkReportItem {
+  readonly changeSetId: string;
+  readonly server: string | null;
+  readonly status: BulkItemStatus;
+  readonly error: BulkFailure | null;
+}
+
+export interface BulkReport {
+  readonly items: readonly BulkReportItem[];
+  readonly applied: number;
+  readonly pending: number;
+  readonly failed: number;
+}
+
+export const SCHEDULE_STATES = ["active", "paused", "done", "missed"] as const;
+
+export type ScheduleState = (typeof SCHEDULE_STATES)[number];
+
+export const RUN_RESULTS = [
+  "applied",
+  "pending",
+  "conflict",
+  "failed",
+  "no_change",
+  "missed",
+] as const;
+
+export type RunResult = (typeof RUN_RESULTS)[number];
+
+export type ScheduleKind = "once" | "cron";
+
+export interface ScheduleEdit {
+  readonly settingKey: string;
+  /** The value; the secret mask for a secret setting. */
+  readonly value: unknown;
+}
+
+/** One schedule as GET /api/v1/schedules answers it. */
+export interface Schedule {
+  readonly id: string;
+  readonly serverId: string;
+  readonly name: string;
+  readonly author: string;
+  readonly kind: ScheduleKind;
+  readonly runAt: string | null;
+  readonly cron: string | null;
+  readonly timezone: string;
+  readonly revertAt: string | null;
+  readonly revertAfterMinutes: number | null;
+  readonly runHooks: "none" | "restart" | "stop-start";
+  readonly edits: readonly ScheduleEdit[];
+  readonly state: ScheduleState;
+  /** paid while the Free plan pauses it, else null. */
+  readonly pausedReason: "paid" | null;
+  readonly nextRunAt: string | null;
+  readonly revertDueAt: string | null;
+  readonly lastRunAt: string | null;
+  readonly lastResult: RunResult | null;
+  readonly lastChangeSetId: string | null;
+  readonly lastRevertAt: string | null;
+  readonly lastRevertResult: RunResult | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ScheduleList {
+  readonly items: readonly Schedule[];
+}
+
+/** POST /api/v1/schedules: runAt or cron, never both. */
+export interface ScheduleInput {
+  readonly server: string;
+  readonly name: string;
+  readonly edits: readonly ScheduleEdit[];
+  readonly runHooks: "none" | "restart" | "stop-start";
+  readonly runAt?: string;
+  readonly cron?: string;
+  readonly timezone?: string;
+  readonly revertAt?: string;
+  readonly revertAfterMinutes?: number;
+}
+
+export type DriftResult = "clean" | "drift" | "error";
+
+/** The background check of one server (GET /api/v1/drift items). */
+export interface Drift {
+  readonly serverId: string;
+  readonly enabled: boolean;
+  readonly intervalMinutes: number;
+  readonly lastCheckedAt: string | null;
+  readonly lastResult: DriftResult | null;
+  readonly lastError: string | null;
+  readonly lastChangeSetId: string | null;
+  readonly nextCheckAt: string | null;
+}
+
+export interface DriftList {
+  readonly items: readonly Drift[];
+}
+
+/** PUT /api/v1/servers/:slug/drift (owner or admin). */
+export interface DriftInput {
+  readonly enabled: boolean;
+  readonly intervalMinutes: number;
+}
+
+export const DRIFT_INTERVAL = { min: 5, max: 1440, default: 15 } as const;
+
+export interface MatrixServer {
+  readonly id: string;
+  readonly name: string;
+  readonly editable: boolean;
+  /** A connector error; the column holds no values then. */
+  readonly error: string | null;
+}
+
+export interface MatrixRow {
+  readonly key: string;
+  readonly label: string;
+  readonly group: string | null;
+  readonly secret: boolean;
+  readonly values: Readonly<Record<string, unknown>>;
+  readonly differs: boolean;
+}
+
+/** GET /api/v1/fleet/matrix: the settings of one game by its servers. */
+export interface Matrix {
+  readonly packId: string;
+  readonly displayName: string;
+  readonly groups: readonly string[];
+  readonly group: string | null;
+  readonly servers: readonly MatrixServer[];
+  readonly rows: readonly MatrixRow[];
+  readonly differing: number;
+}
+
+export interface ReportEntry {
+  readonly changeSetId: string;
+  readonly at: string;
+  readonly author: string;
+  readonly cause: string;
+  readonly status: string;
+  /** The chips as text, secrets redacted. */
+  readonly chips: readonly string[];
+}
+
+export interface ReportServer {
+  readonly id: string;
+  readonly name: string;
+  readonly game: string;
+  readonly entries: readonly ReportEntry[];
+}
+
+/** GET /api/v1/reports/changes. */
+export interface Report {
+  readonly generatedAt: string;
+  readonly from: string | null;
+  readonly to: string | null;
+  readonly servers: readonly ReportServer[];
+  readonly entryCount: number;
+  readonly truncated: boolean;
+  readonly markdown: string;
+  readonly discord: { readonly content: string };
+}
+
+/** The query of both report routes: change sets or a range, and servers. */
+export interface ReportSelection {
+  readonly changeSets?: readonly string[];
+  readonly from?: string;
+  readonly to?: string;
+  readonly servers?: readonly string[];
+}
+
+export const CHANNEL_KINDS = ["in_app", "webhook", "discord", "smtp"] as const;
+
+export type ChannelKind = (typeof CHANNEL_KINDS)[number];
+
+export type SmtpSecurity = "starttls" | "tls";
+
+/**
+ * The settings of a channel as sent. On an update an omitted url keeps the
+ * stored one; an omitted signingSecret or password keeps the stored one and
+ * null removes it.
+ */
+export type ChannelSettingsInput =
+  | { readonly kind: "in_app" }
+  | {
+      readonly kind: "webhook";
+      readonly url?: string;
+      readonly signingSecret?: string | null;
+      readonly allowPrivateHost: boolean;
+    }
+  | {
+      readonly kind: "discord";
+      readonly url?: string;
+      readonly allowPrivateHost: boolean;
+    }
+  | {
+      readonly kind: "smtp";
+      readonly host: string;
+      readonly port: number;
+      readonly security: SmtpSecurity;
+      readonly username: string | null;
+      readonly password?: string | null;
+      readonly from: string;
+      readonly to: readonly string[];
+      readonly allowPrivateHost: boolean;
+    };
+
+export interface ChannelInput {
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly types: readonly ActivityType[];
+  readonly settings: ChannelSettingsInput;
+}
+
+/** The settings as answered: the URL masked, secrets as a yes or no. */
+export type ChannelSettingsView =
+  | { readonly kind: "in_app" }
+  | {
+      readonly kind: "webhook";
+      readonly url: string;
+      readonly host: string;
+      readonly hasSigningSecret: boolean;
+      readonly allowPrivateHost: boolean;
+    }
+  | {
+      readonly kind: "discord";
+      readonly url: string;
+      readonly host: string;
+      readonly allowPrivateHost: boolean;
+    }
+  | {
+      readonly kind: "smtp";
+      readonly host: string;
+      readonly port: number;
+      readonly security: SmtpSecurity;
+      readonly username: string | null;
+      readonly hasPassword: boolean;
+      readonly from: string;
+      readonly to: readonly string[];
+      readonly allowPrivateHost: boolean;
+    };
+
+export interface ChannelView {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: ChannelKind;
+  readonly enabled: boolean;
+  readonly types: readonly ActivityType[];
+  readonly settings: ChannelSettingsView;
+  readonly lastDeliveryAt: string | null;
+  readonly lastResult: "ok" | "failed" | null;
+  /** An error code only, never a server answer or an address. */
+  readonly lastError: string | null;
+  readonly failures: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ChannelList {
+  readonly items: readonly ChannelView[];
+}
+
+/** POST /api/v1/notifications/channels/:id/test. */
+export interface ChannelTestResult {
+  readonly ok: boolean;
+  readonly error: string | null;
+}
+
+export interface InboxItem {
+  readonly id: number;
+  readonly type: ActivityType | "test";
+  readonly serverId: string | null;
+  readonly at: string;
+  readonly title: string;
+  readonly lines: readonly string[];
+}
+
+/** GET /api/v1/notifications: the in-app rows this user may see. */
+export interface InboxPage {
+  readonly items: readonly InboxItem[];
+  readonly unread: number;
+  readonly nextBefore: number | null;
+}
+
+/** POST /api/v1/system/demo-drift/run (owner, DEMO_SEED only). */
+export interface DemoDriftRun {
+  readonly serverId: string;
+  readonly changeSetId: string;
+  readonly line: string;
+}

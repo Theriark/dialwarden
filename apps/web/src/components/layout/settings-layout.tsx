@@ -13,6 +13,7 @@ type SettingsPath =
   | "/settings/tokens"
   | "/settings/licence"
   | "/settings/plan"
+  | "/settings/notifications"
   | "/settings/sso"
   | "/settings/privacy"
   | "/settings/backup";
@@ -22,6 +23,7 @@ const SECTIONS: readonly { to: SettingsPath; label: string }[] = [
   { to: "/settings/tokens", label: "API tokens" },
   { to: "/settings/licence", label: "Licence" },
   { to: "/settings/plan", label: "Plan" },
+  { to: "/settings/notifications", label: "Notifications" },
   { to: "/settings/sso", label: "Single sign-on" },
   { to: "/settings/privacy", label: "Privacy" },
   { to: "/settings/backup", label: "Backup" },
@@ -44,7 +46,7 @@ export function SettingsLayout() {
     <>
       <PageHeader
         title="Settings"
-        description="Your account and tokens, the licence and plan of this instance, single sign-on, privacy and backups."
+        description="Your account and tokens, the licence and plan of this instance, notifications, single sign-on, privacy and backups."
       />
       <div className="flex flex-col gap-6 md:flex-row md:gap-8">
         <nav aria-label="Settings sections" className="md:w-52 md:shrink-0">

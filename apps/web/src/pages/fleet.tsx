@@ -1,9 +1,9 @@
 // The fleet wall (screen 1 of dev-work-plan P5): one card per server with our
 // neutral game glyph, the status chip from the probe (P6-C, contract C7), the
-// plan state, the drift badge from the server's history, the pending badge
-// from the status answer and the last change with its author. The strip on
-// top counts the servers, the drift alerts and the changes scheduled this
-// week (schedules arrive with P9).
+// plan state, the drift badge from the server's history and from the P9
+// background check, the pending badge from the status answer and the last
+// change with its author. The strip on top counts the servers, the drift
+// alerts and the schedule runs due this week (P9, Paid; zero on Free).
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
@@ -18,13 +18,17 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import {
+  driftQuery,
   entitlementQuery,
   historyQuery,
+  schedulesQuery,
   serverStatusQuery,
   serversQuery,
 } from "../api/queries";
 import type {
+  Drift,
   History as ServerHistory,
+  Schedule,
   Server as ServerData,
   ServerStatus,
 } from "../api/schema";
@@ -70,14 +74,25 @@ export interface ServerPulse {
   readonly lastChange: string;
 }
 
-/** Reads drift, pending and the last change out of a history answer. */
-export function pulseOf(history: ServerHistory | undefined): ServerPulse {
+/**
+ * Reads drift, pending and the last change out of a history answer. The
+ * background check (P9) also raises the drift flag while its last result is
+ * drift, so a card warns even when a later app change tops the timeline.
+ */
+export function pulseOf(
+  history: ServerHistory | undefined,
+  check?: Drift | undefined,
+): ServerPulse {
   const [latest] = history?.entries ?? [];
   if (latest === undefined) {
-    return { drift: false, pending: false, lastChange: "No changes yet" };
+    return {
+      drift: check?.lastResult === "drift",
+      pending: false,
+      lastChange: "No changes yet",
+    };
   }
   const at = formatDateTime(latest.at);
-  const drift = latest.cause === "external";
+  const drift = latest.cause === "external" || check?.lastResult === "drift";
   const pending = latest.status === "pending";
   let lastChange: string;
   switch (latest.cause) {
@@ -157,9 +172,16 @@ function ServerCard({
           </Badge>
         )}
         {pulse.drift ? (
-          <Badge kind="warning" icon={<TriangleAlert className="size-3.5" />}>
-            Drift
-          </Badge>
+          <Link
+            to="/servers/$slug/history"
+            params={{ slug: server.id }}
+            title="Files changed outside Dialwarden; the history holds the entry"
+            className="inline-flex rounded-full"
+          >
+            <Badge kind="warning" icon={<TriangleAlert className="size-3.5" />}>
+              Drift
+            </Badge>
+          </Link>
         ) : null}
         <PendingBadge count={pendingCount} slug={server.id} />
       </div>
@@ -206,6 +228,21 @@ function ServerCard({
   );
 }
 
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** The schedule runs due within a week of now. */
+export function dueThisWeek(
+  schedules: readonly Schedule[] | undefined,
+  now = Date.now(),
+): number {
+  return (schedules ?? []).filter(
+    (schedule) =>
+      schedule.state === "active" &&
+      schedule.nextRunAt !== null &&
+      Date.parse(schedule.nextRunAt) - now < WEEK_MS,
+  ).length;
+}
+
 export function FleetPage() {
   const servers = useQuery(serversQuery());
   const entitlement = useQuery(entitlementQuery());
@@ -217,6 +254,13 @@ export function FleetPage() {
   const statuses = useQueries({
     queries: items.map((server) => serverStatusQuery(server.id)),
   });
+  // Paid answers; on Free both are 402 and the wall shows no check and no
+  // scheduled run, which is the truth of that plan.
+  const paid = entitlement.data?.plan === "paid";
+  const checks = useQuery({ ...driftQuery(), enabled: paid });
+  const schedules = useQuery({ ...schedulesQuery(), enabled: paid });
+  const checkOf = (id: string): Drift | undefined =>
+    checks.data?.items.find((item) => item.serverId === id);
 
   if (servers.isPending) {
     return (
@@ -248,13 +292,13 @@ export function FleetPage() {
     );
   }
 
-  const plan = entitlement.data?.plan === "paid" ? "Paid" : "Free";
-  const driftCount = items.filter((_, index) => {
+  const plan = paid ? "Paid" : "Free";
+  const driftCount = items.filter((server, index) => {
     // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
     const history = histories[index]?.data;
-    return history !== undefined && pulseOf(history).drift;
+    return pulseOf(history, checkOf(server.id)).drift;
   }).length;
-  const scheduledThisWeek = 0;
+  const scheduledThisWeek = dueThisWeek(schedules.data?.items);
   const runningCount = statuses.filter(
     (query) => query.data?.state === "running",
   ).length;
@@ -331,13 +375,17 @@ export function FleetPage() {
           icon={<CalendarClock className={STAT_ICON} aria-hidden="true" />}
           label="Scheduled this week"
           value={String(scheduledThisWeek)}
-          caption="Scheduled changes arrive with phase P9"
+          caption={
+            paid
+              ? "Schedule runs due in the next seven days"
+              : "Scheduled changes are part of the Paid plan"
+          }
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((server, index) => {
           // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
-          const pulse = pulseOf(histories[index]?.data);
+          const pulse = pulseOf(histories[index]?.data, checkOf(server.id));
           // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel status queries
           const status = statuses[index];
           return (

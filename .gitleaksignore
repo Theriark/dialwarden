@@ -5,3 +5,9 @@
 # longer has that line; these entries clear the commit that added it.
 76ca65a491f682b957c4a68b7db34ebd3e88d99b:apps/web/src/pages/users.tsx:generic-api-key:549
 76ca65a491f682b957c4a68b7db34ebd3e88d99b:apps/web/src/pages/users.tsx:generic-api-key:671
+# THE-2790: the generic-api-key rule read a 16-character hex test value of a
+# webhook signing secret in apps/web/src/pages/settings/notifications.test.tsx
+# as a key. The tree now uses a low-entropy test value; these entries clear
+# the commit that added the hex one.
+7d190b367da3e3ac998d0447719f0f5af6a5a482:apps/web/src/pages/settings/notifications.test.tsx:generic-api-key:257
+7d190b367da3e3ac998d0447719f0f5af6a5a482:apps/web/src/pages/settings/notifications.test.tsx:generic-api-key:264

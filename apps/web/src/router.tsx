@@ -17,14 +17,16 @@ import { SettingsLayout } from "./components/layout/settings-layout";
 import { AboutPage } from "./pages/about";
 import { ActivityPage } from "./pages/activity";
 import { AuditPage } from "./pages/audit";
-import { MatrixPage, ReportsPage, SchedulesPage } from "./pages/coming-soon";
 import { InvitePage } from "./pages/invite";
+import { MatrixPage } from "./pages/matrix";
 import { PresetsPage } from "./pages/presets";
 import { LoginPage, type LoginSearch } from "./pages/login";
 import { TwoFactorPage } from "./pages/login-2fa";
 import { NotFoundPage } from "./pages/not-found";
 import { FleetPage } from "./pages/fleet";
+import { ReportsPage } from "./pages/reports";
 import { ResetPage } from "./pages/reset";
+import { SchedulesPage } from "./pages/schedules";
 import { NewServerPage } from "./pages/server-new";
 import { ServerHistoryPage } from "./pages/server-history";
 import { ServerHooksPage } from "./pages/server-hooks";
@@ -35,6 +37,7 @@ import { SetupPage } from "./pages/setup";
 import { ApiAccessPage } from "./pages/settings/api-access";
 import { BackupPage } from "./pages/settings/backup";
 import { LicencePage } from "./pages/settings/licence";
+import { NotificationsPage } from "./pages/settings/notifications";
 import { PlanPage } from "./pages/settings/plan";
 import { PrivacyPage } from "./pages/settings/privacy";
 import { ProfilePage } from "./pages/settings/profile";
@@ -303,6 +306,13 @@ const backupRoute = createRoute({
   component: BackupPage,
 });
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/notifications",
+  staticData: { title: "Notifications" },
+  component: NotificationsPage,
+});
+
 const ssoRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/sso",
@@ -354,6 +364,7 @@ const routeTree = rootRoute.addChildren([
       licenceRoute,
       planRoute,
       backupRoute,
+      notificationsRoute,
       ssoRoute,
       privacyRoute,
       tokensRoute,

@@ -46,6 +46,7 @@ import {
 } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { ChangeChip } from "../components/change-chip";
+import { DriftCard } from "../components/drift-card";
 import { ReadOnlyNotice } from "../components/read-only-notice";
 import {
   isServerMissing,
@@ -525,6 +526,9 @@ export function ServerHistoryPage() {
       )}
       <div className="mb-6 empty:hidden">
         <PendingList slug={slug} />
+      </div>
+      <div className="mb-6">
+        <DriftCard slug={slug} />
       </div>
       {history.isError ? (
         <ErrorState
