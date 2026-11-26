@@ -54,7 +54,7 @@ import {
 import type { ReportService } from "../reports/service.js";
 import type { ServerService } from "../servers/service.js";
 import { actorLabels } from "../team/labels.js";
-import { seesEveryServer, type Principal } from "../team/roles.js";
+import { atLeast, type Principal } from "../team/roles.js";
 import type { NotificationDispatcher } from "./dispatch.js";
 import {
   bylineOf,
@@ -497,15 +497,16 @@ export class ChannelService {
 
   /**
    * The conditions of the rows a user sees: owner and admin every row;
-   * editors and viewers only the rows of servers they hold a grant for
-   * (rows without a server, such as backups or the licence, are for owner
-   * and admin). Null: nothing at all.
+   * editors and viewers only the rows of the servers they see (rows without
+   * a server, such as backups or the licence, are for owner and admin). An
+   * admin's viewer-scoped API token is a viewer of every server (P10-A
+   * G7.5). Null: nothing at all.
    */
   #inboxScope(
     principal: Principal,
     visible: (serverId: string) => boolean,
   ): SQL[] | null {
-    if (seesEveryServer(principal)) return [];
+    if (atLeast(principal.role, "admin")) return [];
     const ids = this.#servers
       .list()
       .map((server) => server.id)
@@ -929,10 +930,20 @@ export class ChannelService {
             reason: "address not allowed",
           });
         }
+        // The stored password goes only to the server it was given for
+        // (P10-A L10): a new host, port or user name needs it sent again,
+        // so an admin cannot point the channel elsewhere and capture it.
+        const before = parseJson<Partial<SmtpConfig>>(row?.config ?? "{}", {});
+        const sameTarget =
+          before.host === config.host &&
+          before.port === config.port &&
+          before.username === config.username;
+        const kept = stored.password ?? null;
+        if (settings.password === undefined && kept !== null && !sameTarget) {
+          throw new ApiError(422, "password_required");
+        }
         const password =
-          settings.password === undefined
-            ? (stored.password ?? null)
-            : settings.password;
+          settings.password === undefined ? kept : settings.password;
         return { config, secrets: { password } };
       }
     }

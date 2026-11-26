@@ -136,6 +136,9 @@ export interface RouteInfo {
   entitlement: FeatureKey | null;
   server: ServerScope | null;
   tokens: boolean;
+  /** The params and body schemas, as declared (the role matrix checks them). */
+  params: unknown;
+  body: unknown;
 }
 
 declare module "fastify" {
