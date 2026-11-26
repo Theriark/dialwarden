@@ -36,7 +36,13 @@ import { cn } from "../lib/cn";
 export const PAGE_SIZE = 20;
 
 export type ActivityTab =
-  "all" | "applies" | "failures" | "pending" | "scheduled" | "backups";
+  | "all"
+  | "applies"
+  | "failures"
+  | "pending"
+  | "scheduled"
+  | "drift"
+  | "backups";
 
 const TAB_ITEMS: readonly { id: ActivityTab; label: string }[] = [
   { id: "all", label: "All" },
@@ -44,6 +50,7 @@ const TAB_ITEMS: readonly { id: ActivityTab; label: string }[] = [
   { id: "failures", label: "Failures" },
   { id: "pending", label: "Pending" },
   { id: "scheduled", label: "Scheduled" },
+  { id: "drift", label: "Drift" },
   { id: "backups", label: "Backups" },
 ];
 
@@ -60,6 +67,8 @@ export function typeOfTab(tab: ActivityTab): ActivityType | null {
       return "change.pending";
     case "scheduled":
       return "schedule.run";
+    case "drift":
+      return "drift.detected";
     case "backups":
       return "backup.done";
     default:
@@ -67,9 +76,22 @@ export function typeOfTab(tab: ActivityTab): ActivityType | null {
   }
 }
 
+const RESULT_WORDS: Readonly<Record<string, string>> = {
+  applied: "applied",
+  pending: "saved as pending",
+  conflict: "ended in a conflict",
+  failed: "failed",
+  no_change: "found the values already in place",
+  missed: "was missed",
+};
+
 export function isFailure(event: ActivityEvent): boolean {
   if (event.type === "change.conflict" || event.type === "backup.failed") {
     return true;
+  }
+  if (event.type === "schedule.run" || event.type === "schedule.reverted") {
+    const result = event.data["result"];
+    return result === "failed" || result === "conflict" || result === "missed";
   }
   return event.type === "hook.run" && event.data["ok"] === false;
 }
@@ -155,27 +177,50 @@ export function describeEvent(event: ActivityEvent): {
       const files = Array.isArray(data["files"])
         ? data["files"].map(String).join(", ")
         : "";
+      const via = text(data["via"]);
+      const how =
+        via === "background"
+          ? " (found by the background check)"
+          : via === "demo"
+            ? " (demo simulation, simulated)"
+            : "";
       return {
         icon: FileWarning,
         kind: "warning",
         word: "Drift",
-        sentence: `Files changed outside Dialwarden${files === "" ? "" : `: ${files}`}`,
+        sentence: `Files changed outside Dialwarden${files === "" ? "" : `: ${files}`}${how}`,
       };
     }
-    case "schedule.run":
+    case "schedule.run": {
+      const result = RESULT_WORDS[text(data["result"])];
+      const failed =
+        data["result"] === "failed" ||
+        data["result"] === "conflict" ||
+        data["result"] === "missed";
       return {
-        icon: CalendarClock,
-        kind: "info",
+        icon: failed ? CircleX : CalendarClock,
+        kind: failed ? "error" : "info",
         word: "Scheduled",
-        sentence: "A scheduled change ran",
+        sentence: `A scheduled change ${result ?? "ran"}${
+          text(data["error"]) === "" ? "" : `: ${text(data["error"])}`
+        }`,
       };
-    case "schedule.reverted":
+    }
+    case "schedule.reverted": {
+      const result = RESULT_WORDS[text(data["result"])];
+      const failed =
+        data["result"] === "failed" ||
+        data["result"] === "conflict" ||
+        data["result"] === "missed";
       return {
-        icon: Undo2,
-        kind: "info",
+        icon: failed ? CircleX : Undo2,
+        kind: failed ? "error" : "info",
         word: "Reverted",
-        sentence: "A scheduled change was reverted",
+        sentence: `A scheduled change's revert ${result ?? "ran"}${
+          text(data["error"]) === "" ? "" : `: ${text(data["error"])}`
+        }`,
       };
+    }
     case "backup.done": {
       const size = data["sizeBytes"];
       const pruned = data["pruned"];
@@ -351,7 +396,9 @@ export function ActivityPage() {
             ? "Saves, hook runs, pending changes and backups appear here as they happen."
             : tab === "failures"
               ? "No failed save, hook run or backup among the loaded events."
-              : "No event of this kind has been recorded yet."
+              : tab === "drift"
+                ? "No file has changed outside Dialwarden; the background check (Paid) and every editor open look for it."
+                : "No event of this kind has been recorded yet."
         }
         action={
           tab === "all" && fleetEmpty && isOwner ? (

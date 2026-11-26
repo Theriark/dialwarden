@@ -46,7 +46,7 @@ describe("AppShell", () => {
     // narrowest width.
     stubSignedIn();
     const { router } = startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(router.state.location.pathname).toBe("/schedules");
     const nav = mainNav();
     for (const label of ["Fleet", "Activity", "Settings", "More"]) {
@@ -67,7 +67,7 @@ describe("AppShell", () => {
     stubViewport(1440);
     stubSignedIn();
     startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     const links = within(mainNav()).getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
       "Fleet",
@@ -102,7 +102,7 @@ describe("AppShell", () => {
     stubViewport(1440);
     stubSignedIn();
     startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(
       screen.getByRole("button", { name: "Expand navigation" }),
     ).toBeDefined();
@@ -112,7 +112,7 @@ describe("AppShell", () => {
     stubViewport(768);
     stubSignedIn();
     const { router } = startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(screen.queryByRole("button", { name: "More" })).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Open navigation" }));
@@ -145,7 +145,7 @@ describe("AppShell", () => {
       return undefined;
     });
     const { router, client } = startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     const user = userEvent.setup();
     await user.click(
       screen.getByRole("button", { name: "Account menu for Owner Person" }),
@@ -168,7 +168,7 @@ describe("AppShell", () => {
       return undefined;
     });
     const { router } = startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     const user = userEvent.setup();
     await user.click(
       screen.getByRole("button", { name: "Account menu for Owner Person" }),
@@ -181,7 +181,7 @@ describe("AppShell", () => {
   it("switches the theme from the menu and stores the choice", async () => {
     stubSignedIn();
     startRouter("/schedules");
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Theme" }));

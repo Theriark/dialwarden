@@ -30,6 +30,7 @@ import { isThemePreference, type ThemePreference } from "../../theme/theme";
 import { pageTitle } from "../../title";
 import { Logo } from "../brand/logo";
 import { DevLicenceBanner } from "../dev-licence-banner";
+import { InboxBell } from "../inbox-bell";
 import { IconButton } from "../ui/button";
 import { Sheet } from "../ui/dialog";
 import { Tip } from "../ui/tooltip";
@@ -353,6 +354,7 @@ export function AppShell() {
           )}
         </div>
         <div className="flex items-center gap-1">
+          <InboxBell />
           <ThemeMenu />
           <UserMenu />
         </div>
