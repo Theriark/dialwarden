@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { customerLicence } from "@dialwarden/entitlement/testing";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   setupOwner,
@@ -351,5 +352,35 @@ describe("saved user presets (P5 screen 7)", () => {
     });
     expect(toNothing.statusCode).toBe(404);
     expect(toNothing.json()).toEqual({ error: "server_not_found" });
+  });
+
+  it("L11 store and show a real secret only as the mask", async () => {
+    const api = await ownerApp();
+    const marker = "MARKER-preset-secret-4b1e";
+    const created = await make(api, "With a secret", {
+      AdminPassword: marker,
+      ServerPlayerMaxNum: 12,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json<PresetBody>().values).toEqual({
+      AdminPassword: SECRET_MASK,
+      ServerPlayerMaxNum: 12,
+    });
+    const listed = await api.get("/api/v1/presets");
+    expect(listed.body).not.toContain(marker);
+    const rows = current?.app.ctx.store.sqlite
+      .prepare('SELECT "values" FROM presets')
+      .all();
+    expect(JSON.stringify(rows)).not.toContain(marker);
+  });
+
+  it("G6.4 let only one of two parallel creations past the Free limit", async () => {
+    const api = await ownerApp();
+    expect((await make(api, "One")).statusCode).toBe(201);
+    expect((await make(api, "Two")).statusCode).toBe(201);
+    const both = await Promise.all([make(api, "Three"), make(api, "Four")]);
+    const codes = both.map((response) => response.statusCode).sort();
+    expect(codes).toEqual([201, 402]);
+    expect(await presets(api)).toHaveLength(3);
   });
 });
