@@ -60,6 +60,22 @@ describe("console cfg", () => {
     expect(errorCode(() => cfg.set(doc, command("nope"), 1))).toBe("not-found");
   });
 
+  // P10-A U2: a console may split a statement at ; even inside quotes, so
+  // a string value with ; or a NUL is never written.
+  it("U2 refuses a semicolon or a NUL in a value", () => {
+    const name = command("server.hostname");
+    const smuggled = 'Name"; quit; "x';
+    expect(errorCode(() => cfg.set(doc, name, smuggled))).toBe("invalid-value");
+    expect(errorCode(() => cfg.set(doc, name, "a; quit"))).toBe(
+      "invalid-value",
+    );
+    expect(errorCode(() => cfg.set(doc, name, "a\0b"))).toBe("invalid-value");
+    const add = (value: string) =>
+      errorCode(() => cfg.insert(doc, command("fresh_command"), value));
+    expect(add("x;y")).toBe("invalid-value");
+    expect(cfg.set(doc, name, "Plain name").length).toBeGreaterThan(0);
+  });
+
   it("appends new commands and refuses existing ones", () => {
     const out = edited(cfg, data, (d) =>
       cfg.insert(d, command("maxplayers"), 12),

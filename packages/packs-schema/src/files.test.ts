@@ -150,13 +150,11 @@ describe("lintFile", () => {
   });
 
   it("lints a file that lists the args source as shell text", () => {
-    // The test pack's launch file is launch.txt, a start script the user
-    // owns: shell text there is the user's. Listing the args source makes
-    // it a file the snippets eval, whatever its name (THE-2605 L5).
+    // Listing the args source makes a launch file one the snippets eval,
+    // whatever its name (THE-2605 L5).
     const line = bytes("./run.sh -port=$(id)\n");
     const shell = (issues: readonly { code: string }[]) =>
       issues.filter((issue) => issue.code === "shell-character");
-    expect(shell(lintFile(pack, "launch", line))).toEqual([]);
     const args: Pack = {
       ...pack,
       files: pack.files.map((file) =>
@@ -167,6 +165,61 @@ describe("lintFile", () => {
     };
     expect(shell(lintFile(args, "launch", line))).toContainEqual(
       expect.objectContaining({ code: "shell-character", severity: "error" }),
+    );
+  });
+
+  // P10-A L8: a launch file that declares no launch source gets the args
+  // eval view (launchSourceViews), so its text is linted as shell text too,
+  // whatever its name.
+  it("L8 lints an undeclared launch file under any name as shell text", () => {
+    const named: Pack = {
+      ...pack,
+      files: pack.files.map((file) =>
+        file.id === "launch"
+          ? { ...file, paths: { linux: ["start-args.txt"] } }
+          : file,
+      ),
+    };
+    const shell = (line: string) =>
+      lintFile(named, "launch", bytes(line)).filter(
+        (issue) => issue.code === "shell-character",
+      );
+    expect(shell("-port 2456 -name $(id)\n")).toContainEqual(
+      expect.objectContaining({ code: "shell-character", severity: "error" }),
+    );
+    expect(shell("-port 2456 -name Plain\n")).toEqual([]);
+  });
+
+  // P10-A L7: a sourced variable file (LinuxGSM cfg, systemd env) is read
+  // by a shell, so a command in a value is an error in the raw text too.
+  it("L7 flags shell characters in every assignment of a shellvar file", () => {
+    const shellvar: Pack = {
+      ...pack,
+      files: [
+        ...pack.files,
+        {
+          id: "lgsm",
+          paths: { linux: ["lgsm/config-lgsm/x/x.cfg"] },
+          adapter: "shellvar",
+          encoding: "utf-8",
+          applyPolicy: "stopped-only",
+        },
+      ],
+    };
+    const issuesOf = (line: string) =>
+      lintFile(shellvar, "lgsm", bytes(line)).filter(
+        (issue) => issue.code === "shell-character",
+      );
+    const substitution = issuesOf('startparameters="-port $(id)"\n');
+    expect(substitution).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    const backticks = issuesOf('ip="0.0.0.0"\nservername="a `id` b"\n');
+    expect(backticks).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 2 }),
+    );
+    expect(issuesOf('startparameters="-port ${port} -name $name"\n')).toEqual(
+      [],
     );
   });
 
