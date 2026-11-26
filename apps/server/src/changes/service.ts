@@ -477,8 +477,15 @@ interface Finish {
   readonly parkedBy?: string;
 }
 
-/** True while a user may still write on a server (the grant of the moment). */
-export type WriterCheck = (userId: string, serverId: string) => boolean;
+/**
+ * True while a user may still write on a server (the grant of the moment);
+ * needsAdmin when the change is raw text only an admin may write (P10-B N2).
+ */
+export type WriterCheck = (
+  userId: string,
+  serverId: string,
+  needsAdmin: boolean,
+) => boolean;
 
 interface NewChangeSet {
   readonly serverId: string;
@@ -1054,10 +1061,14 @@ export class ChangeSetService {
         throw new ApiError(409, "invalid_state", { status });
       }
       // A failed rollback applied again writes snapshot bytes: on Free only
-      // a version of the visible 5, as a restore (P10-A L20).
-      const snapshot =
-        row.restoreOf === null ? null : this.#snapshots.find(row.restoreOf);
-      if (snapshot !== null) this.#assertVisible(server, snapshot);
+      // a version of the visible 5, as a restore (P10-A L20). Its payload
+      // keeps the bytes after retention pruned the snapshot, so the rollback
+      // entry itself must then be visible (P10-B N1).
+      if (row.restoreOf !== null) {
+        const snapshot = this.#snapshots.find(row.restoreOf);
+        if (snapshot !== null) this.#assertVisible(server, snapshot);
+        else this.#assertEntryVisible(server, row.id);
+      }
       await this.#apply(row, server, pack, actor, runHooks);
       return this.#view(this.#require(id));
     });
@@ -1269,12 +1280,16 @@ export class ChangeSetService {
   /**
    * True when the user who parked a change may still write on its server.
    * A change parked by the system (a schedule run, P9) or before parked_by
-   * existed has no user to check and is written as before.
+   * existed has no user to check and is written as before. A raw patch, or
+   * a restore into a shell-read file, also needs the parker to be an admin
+   * still, the rule the apply route checks (P10-B N2).
    */
   #parkerCanWrite(row: ChangeSetRow, server: ServerRecord): boolean {
     const by = row.parkedBy;
     if (this.#canWrite === null || by === null || by === "system") return true;
-    return this.#canWrite(by, server.id);
+    const scope = this.rawScope(row.id);
+    const needsAdmin = scope.restore ? scope.shellFile : scope.patches;
+    return this.#canWrite(by, server.id, needsAdmin);
   }
 
   /**

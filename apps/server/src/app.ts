@@ -91,7 +91,7 @@ import { DemoDriftJob } from "./servers/demo-drift.js";
 import { ServerService } from "./servers/service.js";
 import { SnapshotStore } from "./snapshots/store.js";
 import { TokenService } from "./team/api-access.js";
-import { serverLevel } from "./team/roles.js";
+import { atLeast, serverLevel } from "./team/roles.js";
 import { TeamService } from "./team/service.js";
 import { VERSION } from "./version.js";
 
@@ -309,16 +309,19 @@ export async function buildApp(
     now,
   });
   // A pending change is written only while the user who applied it may
-  // still write on the server (P10-A L21), the rule schedules follow too.
-  changes.setWriterCheck((userId, serverId) => {
+  // still write on the server (P10-A L21), the rule schedules follow too;
+  // a raw patch or a shell-file restore also still needs an admin (P10-B N2).
+  changes.setWriterCheck((userId, serverId, needsAdmin) => {
     const user = store.db
       .select({ id: users.id, email: users.email, role: users.role })
       .from(users)
       .where(eq(users.id, userId))
       .get();
     if (user === undefined) return false;
+    const principal = team.principalOf(user);
+    if (needsAdmin && !atLeast(principal.role, "admin")) return false;
     const grant = team.grantLevel(user.id, serverId);
-    return serverLevel(team.principalOf(user), grant) === "write";
+    return serverLevel(principal, grant) === "write";
   });
   const audit = new AuditService({ store, settings, appKey: appKey.key, now });
   const retention = new RetentionService({
