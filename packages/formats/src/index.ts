@@ -15,6 +15,7 @@ import { textListAdapter } from "./textlist.js";
 import { luaAdapter, luaLocators } from "./lua.js";
 import {
   shellVarAdapter,
+  shellVarAssignments,
   shellVarLocators,
   systemdEnvAdapter,
 } from "./shellvar.js";
@@ -23,6 +24,7 @@ import { xmlAdapter, xmlLocators } from "./xml.js";
 
 export * from "./types.js";
 export { applySplices } from "./source.js";
+export type { ShellVarAssignment } from "./shellvar.js";
 export {
   cfgAdapter,
   cfgLocators,
@@ -38,6 +40,7 @@ export {
   luaAdapter,
   luaLocators,
   shellVarAdapter,
+  shellVarAssignments,
   shellVarLocators,
   systemdEnvAdapter,
   textListAdapter,

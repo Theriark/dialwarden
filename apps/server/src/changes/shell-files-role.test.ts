@@ -5,11 +5,15 @@
 // shell_file_requires_admin); editors keep typed edits, which pass the X1
 // value check. The Palworld launch file (adapter launch) is the shell-read
 // file here; the settings file (ueini) is a plain one.
+/* eslint-disable security/detect-non-literal-fs-filename -- temporary test folders */
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ConnectorError } from "../connectors/types.js";
 import { changeSets } from "../db/schema.js";
-import type { TestApp } from "../../test/helpers.js";
+import { setupOwner, tempDir, type TestApp } from "../../test/helpers.js";
 import {
+  addServer,
   apiOf,
   apply,
   draft,
@@ -19,6 +23,8 @@ import {
 import {
   call,
   INT_SETTING,
+  inviteAndAccept,
+  paidApp,
   teamFixture,
   type TeamFixture,
 } from "../../test/team.js";
@@ -26,6 +32,45 @@ import {
 const LAUNCH = "dialwarden-args.txt";
 const PLAYERS = "Launch.Players";
 const PWN = '\nextra="$(touch /tmp/dw-pwn)"\nother=`touch /tmp/dw-pwn`\n';
+
+// SYNTHETIC: a pack written here by Theriark with one LinuxGSM-style cfg
+// (adapter shellvar); no game or LinuxGSM file is copied.
+const SHELL_CFG = "lgsm/config-lgsm/shellgameserver/common.cfg";
+const SHELL_MARKER = "shellgameserver";
+const SHELL_PACK = {
+  id: "shellgame",
+  version: "1.0.0",
+  displayName: "Synthetic shellvar game",
+  steamAppId: 4000401,
+  builds: { from: 0, to: null },
+  os: ["linux"],
+  detection: { markers: [{ path: SHELL_MARKER }] },
+  files: [
+    {
+      id: "lgsm",
+      paths: { linux: [SHELL_CFG] },
+      adapter: "shellvar",
+      encoding: "utf-8",
+      applyPolicy: "anytime",
+    },
+  ],
+  settings: [
+    {
+      key: "ServerName",
+      file: "lgsm",
+      locator: { kind: "shellvar", name: "servername" },
+      type: "string",
+      group: "Server",
+      description:
+        "The synthetic server name variable of the shellvar test pack.",
+    },
+  ],
+  rules: [],
+  presets: [],
+  probes: [],
+  hooksSupported: [],
+  sources: ["https://example.com/dialwarden/shellgame"],
+};
 
 let current: TestApp | undefined;
 
@@ -297,5 +342,57 @@ describe("raw patches and shell-read files (H-01 to H-04)", () => {
     }
     const full = await call(t.app, t.admin, "GET", hooksUrl);
     expect(full.json()).toMatchObject({ hook: { command } });
+  });
+
+  // P10-A L7: a sourced LinuxGSM cfg (adapter shellvar) is read by bash, so
+  // an admin's raw patch that puts a command in it is linted like a typed
+  // edit and never written: an earlier duplicate and a lone CR included.
+  it("L7 never writes an admin raw patch with a command into a shellvar file", async () => {
+    const base = await tempDir("dialwarden-shellvar-");
+    try {
+      const packDir = join(base, "packs", SHELL_PACK.id);
+      await mkdir(packDir, { recursive: true });
+      await writeFile(join(packDir, "pack.json"), JSON.stringify(SHELL_PACK));
+      const root = join(base, "server");
+      for (const path of [SHELL_CFG, SHELL_MARKER]) {
+        await mkdir(dirname(join(root, path)), { recursive: true });
+      }
+      await writeFile(join(root, SHELL_MARKER), "");
+      const before = 'servername="Synthetic"\nport="2456"\n';
+      await writeFile(join(root, SHELL_CFG), before);
+
+      current = await paidApp({ config: { packsDir: join(base, "packs") } });
+      const owner = await setupOwner(current.app);
+      const slug = await addServer(apiOf(current.app, owner), "Shell", root);
+      const admin = await inviteAndAccept(current.app, owner, "admin");
+      const url = `/api/v1/servers/${slug}/change-sets`;
+      const patches = [
+        `servername="$(touch /tmp/dw-pwn)"\nport="2456"\n`,
+        `servername="$(touch /tmp/dw-pwn)"\nservername=x\nport="2456"\n`,
+        `servername=a\r touch /tmp/dw-pwn\nport="2456"\n`,
+      ];
+      for (const text of patches) {
+        const made = await call(current.app, admin, "POST", url, {
+          patches: [{ fileId: "lgsm", text }],
+        });
+        expect(made.statusCode, JSON.stringify(text)).toBe(201);
+        const id = made.json<{ id: string }>().id;
+        const applied = await call(
+          current.app,
+          admin,
+          "POST",
+          `/api/v1/change-sets/${id}/apply`,
+          { runHooks: "none" },
+        );
+        expect(applied.statusCode).toBe(200);
+        expect(applied.json(), JSON.stringify(text)).toMatchObject({
+          status: "failed",
+          error: { code: "validation" },
+        });
+        expect(await fileText(root, SHELL_CFG)).toBe(before);
+      }
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
   });
 });

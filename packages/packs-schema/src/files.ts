@@ -6,7 +6,7 @@ import {
   FormatError,
   getAdapter,
   launchShellIssues,
-  shellVarLocators,
+  shellVarAssignments,
   type FormatAdapter,
   type LintIssue,
   type ParsedDoc,
@@ -55,41 +55,27 @@ const SOURCED_ADAPTERS = new Set(["shellvar", "shellvar-systemd"]);
 const SOURCED_MESSAGE =
   "the value holds a shell character the start script would run when it reads this file";
 
-/** The 1-based line of the first assignment of a variable, or 1. */
-function assignmentLine(text: string, name: string): number {
-  const lines = text.split("\n");
-  const index = lines.findIndex((line) => {
-    const body = line.trimStart().replace(/^export[ \t]+/, "");
-    return body.startsWith(`${name}=`);
-  });
-  return index < 0 ? 1 : index + 1;
-}
-
 /**
- * Every variable of a sourced file whose value a shell would act on (P10-A
+ * Every assignment of a sourced file whose value a shell would act on (P10-A
  * L7): a raw patch or a restore of such a file is refused like a typed
- * edit, which validate() already checks. Plain $NAME and ${NAME} references
- * pass.
+ * edit, which validate() already checks. Each assignment counts, an earlier
+ * duplicate too, since the shell runs every line and not only the one that
+ * wins. Plain $NAME and ${NAME} references pass.
  */
 function sourcedShellIssues(
   adapter: FormatAdapter,
   bytes: Uint8Array,
 ): LintIssue[] {
-  const doc = adapter.parse(bytes);
-  const text = new TextDecoder().decode(bytes);
   const issues: LintIssue[] = [];
-  for (const locator of shellVarLocators(doc)) {
-    const value = adapter.get(doc, locator);
-    if (value === undefined || !hasShellCharacters(value as JsonValue)) {
-      continue;
-    }
+  for (const assignment of shellVarAssignments(adapter.parse(bytes))) {
+    if (!hasShellCharacters(assignment.value)) continue;
     issues.push({
       code: "shell-character",
       severity: "error",
-      line: assignmentLine(text, locator.name),
+      line: assignment.line,
       column: 1,
       message: SOURCED_MESSAGE,
-      locator,
+      locator: { kind: "shellvar", name: assignment.name },
     });
   }
   return issues;

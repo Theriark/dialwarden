@@ -145,12 +145,27 @@ function doubleQuoted(
   }
 }
 
+/**
+ * A CR ends a line only before a LF or at the end of the file. The shell
+ * reads any other CR as an ordinary character, so a lone CR would hide the
+ * rest of its line from this parser while the shell runs it (P10-A L7).
+ */
+function loneCr(text: string, at: number): boolean {
+  if (text.charAt(at) !== "\r") return false;
+  const next = text.charAt(at + 1);
+  return next !== "\n" && next !== "";
+}
+
 function parseShell(src: Source): Assignment[] {
   const text = src.text;
   const out: Assignment[] = [];
   let i = src.begin;
   for (;;) {
-    while (/[ \t\n\r\f\v]/.test(text.charAt(i))) i++;
+    while (/[ \t\n\r\f\v]/.test(text.charAt(i))) {
+      if (loneCr(text, i))
+        throw new ParseFail(i, "a CR must be followed by a line break");
+      i++;
+    }
     if (i >= text.length) return out;
     const line = src.lineAt(i);
     if (text.charAt(i) === "#") {
@@ -168,6 +183,9 @@ function parseShell(src: Source): Assignment[] {
     const word = shellWord(text, nameEnd + 1);
     const after = src.skipBlank(word.end, text.length);
     const rest = text.charAt(after);
+    if (loneCr(text, after)) {
+      throw new ParseFail(after, "a CR must be followed by a line break");
+    }
     if (rest !== "" && rest !== "#" && rest !== "\n" && rest !== "\r") {
       throw new ParseFail(after, "only one NAME=value per line is supported");
     }
@@ -194,6 +212,11 @@ function parseSystemd(src: Source): Assignment[] {
   const text = src.text;
   const out: Assignment[] = [];
   for (const line of src.lines) {
+    for (let at = line.start; at < line.end; at++) {
+      if (loneCr(text, at)) {
+        throw new ParseFail(at, "a CR must be followed by a line break");
+      }
+    }
     const start = src.skipBlank(line.start, line.end);
     const first = text.charAt(start);
     if (start === line.end || first === "#" || first === ";") continue;
@@ -405,6 +428,27 @@ export const systemdEnvAdapter = createShellVarAdapter({
   id: "shellvar-systemd",
   systemd: true,
 });
+
+/** One assignment of a parsed document, in file order. */
+export interface ShellVarAssignment {
+  readonly name: string;
+  readonly value: string;
+  /** 1-based line of the assignment. */
+  readonly line: number;
+}
+
+/**
+ * Every assignment of a parsed document, earlier duplicates included: the
+ * shell runs each of them when it sources the file, not only the last.
+ */
+export function shellVarAssignments(doc: ParsedDoc): ShellVarAssignment[] {
+  const shell = doc as ShellDoc;
+  return shell.assignments.map((a) => ({
+    name: a.name,
+    value: a.value,
+    line: shell.source.position(a.start).line,
+  }));
+}
 
 /** Every variable locator of a parsed document, for tests and fuzzing. */
 export function shellVarLocators(doc: ParsedDoc): ShellVarLocator[] {

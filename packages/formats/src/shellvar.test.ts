@@ -230,6 +230,21 @@ describe("shell variables: malformed files", () => {
     expect(shell.get(shell.parse(bytes("A=x\\\ny\n")), name("A"))).toBe("xy");
   });
 
+  // P10-A L7: the shell and systemd read a CR as an ordinary character, so
+  // a CR that does not end a CRLF line is a syntax error, not a line end.
+  it("accepts a CR only before a line break or at the file end", () => {
+    const codes = (adapter: typeof shell, input: string) =>
+      adapter.lint(adapter.parse(bytes(input))).map((issue) => issue.code);
+    for (const adapter of [shell, systemd]) {
+      expect(codes(adapter, "A=a\r touch /tmp/x\n")).toEqual(["syntax"]);
+      expect(codes(adapter, "A=a\rB=b\n")).toEqual(["syntax"]);
+      expect(codes(adapter, "A=a\r\nB=b\r\n")).toEqual([]);
+      expect(codes(adapter, "A=a\r")).toEqual([]);
+    }
+    expect(codes(shell, "A=a\n\r touch /tmp/x\n")).toEqual(["syntax"]);
+    expect(shell.get(shell.parse(bytes("A=a\r\n")), name("A"))).toBe("a");
+  });
+
   it("ends a line continuation before appending a variable", () => {
     const out = edited(shell, "A=x\\\n", (d) => shell.insert(d, name("B"), 1));
     expect(out).toBe('A=x\\\n\nB="1"\n');

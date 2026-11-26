@@ -221,6 +221,27 @@ describe("lintFile", () => {
     expect(issuesOf('startparameters="-port ${port} -name $name"\n')).toEqual(
       [],
     );
+    // The shell runs an earlier duplicate too, not only the value that wins.
+    const duplicate = issuesOf('servername="$(touch /tmp/x)"\nservername=x\n');
+    expect(duplicate).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    // A lone CR is an ordinary character to the shell, so it cannot end a
+    // value and hide the rest of the line; a CRLF file stays clean.
+    const loneCr = lintFile(
+      shellvar,
+      "lgsm",
+      bytes("servername=a\r touch /tmp/x\n"),
+    );
+    expect(loneCr).toContainEqual(
+      expect.objectContaining({ severity: "error", line: 1 }),
+    );
+    const crlf = lintFile(
+      shellvar,
+      "lgsm",
+      bytes('ip="0.0.0.0"\r\nport=2456\r\n'),
+    );
+    expect(crlf.filter((issue) => issue.severity === "error")).toEqual([]);
   });
 
   it("gives only the syntax errors of a file that does not parse", () => {
