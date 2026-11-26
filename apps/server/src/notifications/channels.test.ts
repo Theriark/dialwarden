@@ -24,6 +24,7 @@ import { apiOf, apply, draft } from "../../test/servers.js";
 import {
   call,
   INT_SETTING,
+  inviteAndAccept,
   paidApp,
   teamFixture,
   toFree,
@@ -312,6 +313,47 @@ describe("delivery", () => {
     expect(lines.join("")).not.toContain(TOKEN);
   });
 
+  // Code review L1: an edit keeps the channel's queue, so deliveries that
+  // wait across it go out once each and in event order.
+  it("keeps event order across an edit", async () => {
+    const { app, owner } = fixture;
+    const made = await create(owner, {
+      ...webhookInput(),
+      types: ["backup.done"],
+    });
+    const ids = [1, 2, 3].map(
+      (n) => app.ctx.activity.record("backup.done", { data: { n } }).id,
+    );
+    const edited = await call(app, owner, "PUT", `${CHANNELS}/${made.id}`, {
+      ...webhookInput(),
+      name: "Ops webhook, renamed",
+      types: ["backup.done"],
+    });
+    expect(edited.statusCode).toBe(200);
+    ids.push(app.ctx.activity.record("backup.done", { data: { n: 4 } }).id);
+    await app.ctx.notifications.idle();
+    const sent = sink.received.map(
+      (r) => (JSON.parse(r.body) as { event: { id: number } }).event.id,
+    );
+    expect(sent).toEqual(ids);
+  });
+
+  // Code review L3: the send test runs beside the queue, one at a time.
+  it("runs one send test at a time per channel", async () => {
+    const { app, owner } = fixture;
+    const made = await create(owner, webhookInput());
+    // The first try fails with 503, so the first test waits for its retry.
+    sink.script({ status: 503 });
+    const url = `${CHANNELS}/${made.id}/test`;
+    const first = call(app, owner, "POST", url).then((r) => r);
+    for (let i = 0; i < 200 && sink.received.length === 0; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const second = await call(app, owner, "POST", url);
+    expect(second.json()).toEqual({ ok: false, error: "test_running" });
+    expect((await first).json()).toEqual({ ok: true, error: null });
+  });
+
   it("sends a Discord test message to the configured webhook", async () => {
     const { app, owner } = fixture;
     const made = await create(owner, {
@@ -414,6 +456,39 @@ describe("in-app notifications", () => {
     );
     expect(marked.json()).toEqual({ unread: 0 });
     expect((await read(viewer)).unread).toBe(1);
+  });
+
+  // Code review M1: the inbox names the actor by id (D7), so erasing a user
+  // leaves no e-mail address behind.
+  it("stops showing an erased user's address", async () => {
+    const { app, owner } = fixture;
+    await create(owner, {
+      name: "Bell",
+      enabled: true,
+      types: ["backup.done"],
+      settings: { kind: "in_app" },
+    });
+    const gone = await inviteAndAccept(app, owner, "editor", [], "gone");
+    app.ctx.activity.record("backup.done", {
+      actor: gone.userId,
+      data: { id: "b-6" },
+    });
+    await app.ctx.notifications.idle();
+    const read = async () =>
+      (await call(app, owner, "GET", "/api/v1/notifications")).body;
+    expect(await read()).toContain(`By ${gone.email}, `);
+    const stored = app.ctx.store.sqlite
+      .prepare("SELECT actor, lines FROM notification_inbox")
+      .all() as { actor: string | null; lines: string }[];
+    expect(stored).toEqual([{ actor: gone.userId, lines: "[]" }]);
+    const erased = await call(
+      app,
+      owner,
+      "DELETE",
+      `/api/v1/users/${gone.userId}`,
+    );
+    expect(erased.statusCode).toBe(204);
+    expect(await read()).not.toContain(gone.email);
   });
 });
 
