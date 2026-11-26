@@ -84,13 +84,43 @@ export function sourceWord(source: string): string {
   }
 }
 
+/**
+ * The words of a control error code (control/hooks.ts controlFailure):
+ * since P10-B every one answers in the 4xx range with its code in the body,
+ * so a proxy keeps the body and the UI can say what the game server did.
+ */
+export function controlWords(code: string): string {
+  switch (code) {
+    case "Connection":
+      return "The game server could not be reached";
+    case "Timeout":
+      return "The game server did not answer in time";
+    case "Auth":
+      return "The game server refused the credentials";
+    case "HostKey":
+      return "The host key of the game server does not match the pinned one";
+    case "Protocol":
+      return "The game server answered something the client did not expect";
+    case "Refused":
+      return "The game server refused the command";
+    case "Unsupported":
+      return "This action is not supported through the configured client";
+    case "Failed":
+      return "The game server reported a failure";
+    default:
+      return "The game server could not be reached";
+  }
+}
+
+function bodyText(error: ApiError, field: string): string {
+  const value = error.body?.[field as keyof typeof error.body];
+  return typeof value === "string" ? value : "";
+}
+
 /** One sentence for a 422 of PUT hooks (routes/hooks.ts), else the default. */
 export function hooksErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    const kind =
-      typeof error.body?.["kind" as keyof typeof error.body] === "string"
-        ? String(error.body?.["kind" as keyof typeof error.body])
-        : "";
+    const kind = bodyText(error, "kind");
     switch (error.code) {
       case "hook_needs_sftp":
         return "An SSH command hook needs a server connected over SFTP with a pinned host key.";
@@ -106,12 +136,16 @@ export function hooksErrorMessage(error: unknown): string {
         return "The probe password must be one line.";
       case "hook_not_configured":
         return "No hook can run this action. Set one up first.";
-      case "control_error":
+      case "control_error": {
+        const message = bodyText(error, "message");
+        const words = controlWords(bodyText(error, "code"));
+        return message === "" ? `${words}.` : `${words}: ${message}.`;
+      }
       case "connector_error": {
-        const message = error.body?.["message" as keyof typeof error.body];
-        return typeof message === "string"
-          ? `The server could not be reached: ${message}.`
-          : "The server could not be reached.";
+        const message = bodyText(error, "message");
+        return message === ""
+          ? "The server files could not be reached."
+          : `The server files could not be reached: ${message}.`;
       }
       default:
         break;
@@ -588,7 +622,11 @@ export function ServerHooksPage() {
   const hooks = useQuery(hooksQuery(slug));
   const status = useQuery(serverStatusQuery(slug));
   const canConfigure = useCanConfigureHooks();
-  const canRun = useCanRunHooks();
+  // The role, then the server's word on this caller's grant (P10-A L22): an
+  // editor with a read grant sees the actions and runs none.
+  const runRole = useCanRunHooks();
+  const readGrant = server.data?.access === "read";
+  const canRun = runRole && !readGrant;
   const [confirming, setConfirming] = useState<HookAction | null>(null);
 
   // The hook form starts from the stored configuration; a fresh answer that
@@ -773,8 +811,9 @@ export function ServerHooksPage() {
         >
           {canRun ? null : (
             <Alert kind="info">
-              A viewer can see the actions; running one needs the editor role or
-              above.
+              {runRole && readGrant
+                ? "Your grant on this server is read-only: you can see the actions; running one needs write access, which the owner or an admin gives."
+                : "A viewer can see the actions; running one needs the editor role or above."}
             </Alert>
           )}
           <ul className="grid gap-3 sm:grid-cols-2">

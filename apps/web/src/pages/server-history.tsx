@@ -36,8 +36,10 @@ import type {
   ChangeSetStatus,
   HistoryEntry as Entry,
   HistorySnapshot,
+  ServerAccess,
 } from "../api/schema";
 import {
+  readGrantOnly,
   RESTORE_ROLES,
   SHELL_RESTORE_ROLES,
   useCanRestore,
@@ -149,13 +151,18 @@ export function shellFileIds(files: readonly PackFile[]): ReadonlySet<string> {
   );
 }
 
-/** The access of one role to one entry, given the shell-read files. */
+/**
+ * The access of one role to one entry, given the shell-read files and the
+ * server's own word on this caller's grant (P10-A L22): a read grant reads,
+ * whatever the role.
+ */
 export function restoreAccessOf(
   role: string | null,
   entry: Entry,
   shellFiles: ReadonlySet<string>,
+  access?: ServerAccess | undefined,
 ): RestoreAccess {
-  if (role === null || !RESTORE_ROLES.includes(role)) {
+  if (role === null || !RESTORE_ROLES.includes(role) || access === "read") {
     return "read-only";
   }
   if (SHELL_RESTORE_ROLES.includes(role)) {
@@ -252,10 +259,17 @@ export function TimelineRow({
  * server waiting for it to stop, oldest first, from GET pending (contract
  * C5), with the stop hook at hand when one can run it.
  */
-export function PendingList({ slug }: { slug: string }) {
+export function PendingList({
+  slug,
+  access,
+}: {
+  slug: string;
+  /** The server's word on this caller's grant; a read grant runs nothing. */
+  access?: ServerAccess | undefined;
+}) {
   const pending = useQuery(pendingQuery(slug));
   const hooks = useQuery(hooksQuery(slug));
-  const canRun = useCanRunHooks();
+  const canRun = useCanRunHooks() && access !== "read";
   const client = useQueryClient();
   const toast = useToast();
   const [confirming, setConfirming] = useState(false);
@@ -361,7 +375,13 @@ export function PendingList({ slug }: { slug: string }) {
             disabled={!canRun}
             loading={stop.isPending}
             icon={<Square className="size-4" aria-hidden="true" />}
-            title={canRun ? undefined : "Running a hook needs the editor role"}
+            title={
+              canRun
+                ? undefined
+                : access === "read"
+                  ? "Running a hook needs write access to this server"
+                  : "Running a hook needs the editor role"
+            }
             onClick={() => {
               setConfirming(true);
             }}
@@ -394,7 +414,10 @@ export function ServerHistoryPage() {
   const client = useQueryClient();
   const toast = useToast();
   const user = useSessionUser();
-  const canRestore = useCanRestore();
+  // The role, then the server's word on the grant (P10-A L22).
+  const access = server.data?.access;
+  const canRestore = useCanRestore() && access !== "read";
+  const grantOnly = readGrantOnly(user, access);
   // The pack's file list tells which snapshots hold a shell-read file; while
   // it is unknown (loading, or a failed read) the server's own check answers
   // a click, and the toast says why (live check F2).
@@ -521,11 +544,12 @@ export function ServerHistoryPage() {
           role={user?.role ?? "viewer"}
           reads="this history"
           writes="restores a version"
+          grant={grantOnly}
           className="mb-4"
         />
       )}
       <div className="mb-6 empty:hidden">
-        <PendingList slug={slug} />
+        <PendingList slug={slug} access={access} />
       </div>
       <div className="mb-6">
         <DriftCard slug={slug} />
@@ -555,7 +579,12 @@ export function ServerHistoryPage() {
                   restore.mutate(item);
                 }}
                 restoring={restoringId === entry.changeSetId}
-                access={restoreAccessOf(user?.role ?? null, entry, shellFiles)}
+                access={restoreAccessOf(
+                  user?.role ?? null,
+                  entry,
+                  shellFiles,
+                  access,
+                )}
               />
             ))}
           </ol>
