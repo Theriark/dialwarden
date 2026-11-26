@@ -222,6 +222,9 @@ function discord(text: string): string {
   return md(text).replace(/@/g, `@${ZERO_WIDTH_SPACE}`);
 }
 
+/** The same escape for the Discord notification channel (P9-B). */
+export const discordText = discord;
+
 /** The report as a Discord message body: { content }, at most 2000 long. */
 export function reportDiscord(report: Report): { content: string } {
   const lines = [`**Dialwarden change report** (${discord(summary(report))})`];

@@ -29,6 +29,7 @@ import type { Store } from "../db/store.js";
 import type { DriftService } from "../drift/service.js";
 import type { MatrixService } from "../fleet/matrix.js";
 import type { LicenceService } from "../licence/service.js";
+import type { ChannelService } from "../notifications/channels.js";
 import type { NotificationDispatcher } from "../notifications/dispatch.js";
 import type { OidcService } from "../oidc/service.js";
 import type { EditableServers } from "../plan/editable.js";
@@ -116,6 +117,8 @@ export interface AppContext {
   reports: ReportService;
   /** The notification dispatch seam the P9-B channels register on. */
   notifications: NotificationDispatcher;
+  /** The notification channels and the in-app notifications (P9-B, Paid). */
+  channels: ChannelService;
   /** The demo drift job of DEMO_SEED (P10 correction, demo only). */
   demoDrift: DemoDriftJob;
   /** True while a first-run import replaces the database: the API answers 503. */

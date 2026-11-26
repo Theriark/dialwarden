@@ -113,7 +113,20 @@ export async function checkUrl(
   if (url.username !== "" || url.password !== "") {
     throw new UrlRefusedError("credentials in the URL");
   }
-  const host = hostOf(url);
+  const addresses = await checkHost(hostOf(url), policy);
+  return { url, addresses };
+}
+
+/**
+ * Resolves a host name (or takes an IP literal) and checks every address
+ * under the policy; returns the addresses a connection must use. The SMTP
+ * notification channel checks its host with it (P9-B). Throws
+ * UrlRefusedError.
+ */
+export async function checkHost(
+  host: string,
+  policy: NetworkPolicy,
+): Promise<string[]> {
   let addresses: string[];
   if (isIP(host) !== 0) {
     addresses = [host];
@@ -132,7 +145,7 @@ export async function checkUrl(
   if (!addresses.every((address) => addressAllowed(address, policy))) {
     throw new UrlRefusedError("address not allowed");
   }
-  return { url, addresses };
+  return addresses;
 }
 
 /** A lookup that answers the checked addresses only (no second DNS query). */

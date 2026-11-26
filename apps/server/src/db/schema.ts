@@ -448,6 +448,66 @@ export const driftChecks = sqliteTable("drift_checks", {
   updatedBy: text("updated_by"),
 });
 
+/** One notification channel (P9-B, Paid). */
+export const notificationChannels = sqliteTable(
+  "notification_channels",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    /** in_app, webhook, discord or smtp. */
+    kind: text("kind").notNull(),
+    enabled: integer("enabled").notNull(),
+    /** The C6 activity types it receives, as a JSON array. */
+    types: text("types").notNull(),
+    /** The settings that are not secret, as JSON. */
+    config: text("config").notNull(),
+    /** URL, signing secret or SMTP password as JSON, encrypted. */
+    secretEnc: text("secret_enc"),
+    lastDeliveryAt: text("last_delivery_at"),
+    /** ok or failed. */
+    lastResult: text("last_result"),
+    /** A code (for example http_500), never a server answer. */
+    lastError: text("last_error"),
+    failures: integer("failures").notNull().default(0),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "notification_channels_kind",
+      sql`${table.kind} IN ('in_app', 'webhook', 'discord', 'smtp')`,
+    ),
+  ],
+);
+
+/** What the in-app channel shows (P9-B). */
+export const notificationInbox = sqliteTable(
+  "notification_inbox",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => notificationChannels.id, { onDelete: "cascade" }),
+    eventId: integer("event_id").notNull(),
+    type: text("type").notNull(),
+    serverId: text("server_id"),
+    at: text("at").notNull(),
+    title: text("title").notNull(),
+    /** The message lines as a JSON array. */
+    lines: text("lines").notNull(),
+  },
+  (table) => [index("notification_inbox_server").on(table.serverId)],
+);
+
+/** How far each user has read the in-app notifications (P9-B). */
+export const notificationReads = sqliteTable("notification_reads", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  lastReadId: integer("last_read_id").notNull(),
+});
+
 export const schema = {
   users,
   recoveryCodes,
@@ -472,4 +532,7 @@ export const schema = {
   auditEvents,
   schedules,
   driftChecks,
+  notificationChannels,
+  notificationInbox,
+  notificationReads,
 };
