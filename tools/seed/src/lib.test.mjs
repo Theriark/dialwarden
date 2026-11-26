@@ -246,12 +246,57 @@ describe("seed-accounts", () => {
     );
     expect(grantsOf("admin")).toEqual([]);
 
+    // phase-report-09 G3: the in-app channel is made once.
+    expect(text()).toContain("in-app channel made");
+    const inApp = () =>
+      app.ctx.channels.list().filter((channel) => channel.kind === "in_app");
+    expect(inApp()).toHaveLength(1);
+
     // A second run leaves the accounts alone and registers nothing.
     const again = harness(app);
     again.deps.env = deps.env;
     expect(await main(args, again.deps)).toBe(0);
     expect(again.calls).toHaveLength(0);
     expect(again.text()).toContain("exists already");
+    expect(again.text()).toContain("in-app channel present");
+    expect(inApp()).toHaveLength(1);
+  });
+
+  // phase-report-08 F6: the owner pair passed in, the password on stdin.
+  it("takes the owner pair from --owner-email and standard input", async () => {
+    current = await paidApp();
+    const { app } = current;
+    const owner = await setupOwner(app);
+    const { calls, deps, text } = harness(app);
+    deps.env = {};
+    deps.readStdin = async () => owner.password;
+    const args = [
+      "--base-url",
+      DEV_URL,
+      "--env",
+      "dev",
+      "--team",
+      "--owner-email",
+      owner.email,
+      "--owner-password-stdin",
+    ];
+    expect(await main(args, deps), text()).toBe(0);
+    expect(calls.map((sent) => valueOf(sent, "--label"))).toEqual([
+      "admin",
+      "editor",
+      "viewer",
+    ]);
+    expect(text()).not.toContain(owner.password);
+    // The flags belong to --team, and the password needs the address.
+    const plain = harness(null);
+    const stray = ["--base-url", DEV_URL, "--env", "dev", "--owner-email", "x"];
+    expect(await main(stray, plain.deps)).toBe(2);
+    expect(plain.text()).toContain("need --team");
+    const alone = harness(null);
+    const noEmail = ["--base-url", DEV_URL, "--env", "dev", "--team"];
+    noEmail.push("--owner-password-stdin");
+    expect(await main(noEmail, alone.deps)).toBe(2);
+    expect(alone.requests).toHaveLength(0);
   });
 
   it("needs the registered owner variables for --team", async () => {
