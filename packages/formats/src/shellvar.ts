@@ -156,12 +156,20 @@ function loneCr(text: string, at: number): boolean {
   return next !== "\n" && next !== "";
 }
 
+/**
+ * The shell reads a form feed, a vertical tab and a BOM as word bytes, so
+ * none of them is skipped: a # after one would be a comment to this parser
+ * only while the shell runs the rest of the line (P10-A L7).
+ */
 function parseShell(src: Source): Assignment[] {
   const text = src.text;
   const out: Assignment[] = [];
+  if (src.bom) {
+    throw new ParseFail(0, "the shell reads a byte order mark as text");
+  }
   let i = src.begin;
   for (;;) {
-    while (/[ \t\n\r\f\v]/.test(text.charAt(i))) {
+    while (/[ \t\n\r]/.test(text.charAt(i))) {
       if (loneCr(text, i))
         throw new ParseFail(i, "a CR must be followed by a line break");
       i++;
