@@ -211,7 +211,7 @@ test("schedules: a run-at schedule, its replacement, a cron pattern and the cale
     page.getByText("Scheduled", { exact: true }).first(),
   ).toBeVisible();
   await expect(page.getByRole("grid", { name: /Schedules in/ })).toBeVisible();
-  await expect(page.getByText("Runs due this week")).toBeVisible();
+  await expect(page.getByText("Runs and reverts due this week")).toBeVisible();
 
   // Editing replaces: the old one goes, the new one carries the new name.
   await page.getByRole("button", { name: "Edit" }).first().click();
@@ -700,10 +700,13 @@ test("the Free fallback of every P9 screen, then back to Paid and a clean instan
     page.getByText("The fleet settings matrix is part of the Paid plan."),
   ).toBeVisible();
   await nav.getByRole("link", { name: "Reports" }).click();
-  await page.getByRole("button", { name: "Build the report" }).click();
+  // The hint shows before any build (P9 live check L6); Build is off.
   await expect(
     page.getByText("Reports is part of the Paid plan."),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Build the report" }),
+  ).toBeDisabled();
   await page.goto("/settings/notifications");
   await expect(
     page.getByText("Notification channels is part of the Paid plan."),
@@ -747,7 +750,6 @@ test("the Free fallback of every P9 screen, then back to Paid and a clean instan
     page,
     "reports-free",
     async (p) => {
-      await p.getByRole("button", { name: "Build the report" }).click();
       await expect(
         p.getByText("Reports is part of the Paid plan."),
       ).toBeVisible();
