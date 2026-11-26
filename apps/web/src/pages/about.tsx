@@ -10,6 +10,7 @@ import {
   healthQuery,
   registryQuery,
 } from "../api/queries";
+import { ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
 import type { ChannelView } from "../api/schema";
 import { useCanManageUsers } from "../api/session";
@@ -176,10 +177,15 @@ export function outboundHost(channel: ChannelView): string | null {
   }
 }
 
+export const OUTBOUND_FOR_MANAGERS =
+  "The owner and admins see the configured notification channels here. There is no telemetry and no update check.";
+
 /**
  * The outbound list (P9-B follow-up): the hosts of the configured
- * notification channels, read by the owner and admins; everyone else, and a
- * Free instance (402), sees the no-outbound sentence, which is then true.
+ * notification channels, read by the owner and admins. A Free instance
+ * (402) sees the no-outbound sentence, which is then true; another failure
+ * shows the error with a retry instead of claiming there is nothing (P9-C
+ * review N5), and a reader below admin is told who sees the list.
  */
 function OutboundCard() {
   const canManage = useCanManageUsers();
@@ -190,12 +196,25 @@ function OutboundCard() {
       (item): item is { channel: ChannelView; host: string } =>
         item.host !== null,
     );
+  const failed =
+    channels.isError &&
+    !(channels.error instanceof ApiError && channels.error.status === 402);
   return (
     <Card
       title="Outbound connections"
       description="Everything this instance may talk to. Nothing is on by default."
     >
-      {outbound.length === 0 ? (
+      {!canManage ? (
+        <p className="text-sm text-fg">{OUTBOUND_FOR_MANAGERS}</p>
+      ) : failed ? (
+        <ErrorState
+          message={errorMessage(channels.error)}
+          onRetry={() => {
+            void channels.refetch();
+          }}
+          retrying={channels.isFetching}
+        />
+      ) : outbound.length === 0 ? (
         <ul className="text-sm text-fg">
           <li className="flex items-center gap-2">
             <Badge kind="neutral">none</Badge>

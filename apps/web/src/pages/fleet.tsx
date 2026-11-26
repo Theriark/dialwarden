@@ -33,6 +33,7 @@ import type {
   ServerStatus,
 } from "../api/schema";
 import { useIsOwner } from "../api/session";
+import { dueWithinWeek } from "./schedules";
 import { PageHeader } from "../components/layout/page-header";
 import { PendingBadge } from "../components/pending-badge";
 import { StatusChip } from "../components/status-chip";
@@ -143,7 +144,9 @@ function ServerCard({
             <Gamepad2 className="size-6" />
           </span>
           <div className="flex min-w-0 flex-col">
-            <h2 className="truncate font-heading text-lg font-semibold text-fg">
+            {/* Two lines before an ellipsis: three columns at 1440 cut
+                "Demo Project Zomboid" short (phase-report-07 F-P7-3). */}
+            <h2 className="line-clamp-2 font-heading text-lg leading-tight font-semibold wrap-anywhere text-fg">
               <Link
                 to="/servers/$slug/settings"
                 params={{ slug: server.id }}
@@ -204,7 +207,7 @@ function ServerCard({
           params={{ slug: server.id }}
           className="inline-flex h-8 items-center gap-2 rounded-control border border-transparent bg-primary px-3 text-sm font-medium text-primary-fg transition-colors duration-150 hover:opacity-90"
         >
-          Edit settings
+          {server.access === "read" ? "View settings" : "Edit settings"}
         </Link>
         <Link
           to="/servers/$slug/history"
@@ -228,19 +231,31 @@ function ServerCard({
   );
 }
 
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** The schedule runs due within a week of now. */
+/** The schedules with a run or a revert due within a week of now. */
 export function dueThisWeek(
   schedules: readonly Schedule[] | undefined,
   now = Date.now(),
 ): number {
-  return (schedules ?? []).filter(
-    (schedule) =>
-      schedule.state === "active" &&
-      schedule.nextRunAt !== null &&
-      Date.parse(schedule.nextRunAt) - now < WEEK_MS,
-  ).length;
+  return (schedules ?? []).filter((schedule) => dueWithinWeek(schedule, now))
+    .length;
+}
+
+/**
+ * The caption of the Servers tile (P9 live check L11): the plan and what it
+ * allows, never "50 on Free" on a Paid instance.
+ */
+export function serversCaption(
+  paid: boolean,
+  limit: number | null | undefined,
+  running: number,
+  stopped: number,
+): string {
+  const plan = paid
+    ? limit === null
+      ? "Paid plan: no server limit"
+      : `Paid plan: up to ${limit ?? 50} servers`
+    : `Free plan: ${limit ?? 3} editable servers`;
+  return `${plan} · ${running} running, ${stopped} stopped`;
 }
 
 export function FleetPage() {
@@ -292,7 +307,6 @@ export function FleetPage() {
     );
   }
 
-  const plan = paid ? "Paid" : "Free";
   const driftCount = items.filter((server, index) => {
     // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel history queries
     const history = histories[index]?.data;
@@ -359,11 +373,12 @@ export function FleetPage() {
           icon={<Server className={STAT_ICON} aria-hidden="true" />}
           label="Servers"
           value={String(items.length)}
-          caption={`${plan} plan: ${
-            entitlement.data?.limits.servers === null
-              ? "no limit"
-              : `${entitlement.data?.limits.servers ?? 3} on Free`
-          } · ${runningCount} running, ${stoppedCount} stopped`}
+          caption={serversCaption(
+            paid,
+            entitlement.data?.limits.servers,
+            runningCount,
+            stoppedCount,
+          )}
         />
         <StatTile
           icon={<Radar className={STAT_ICON} aria-hidden="true" />}

@@ -265,11 +265,22 @@ export function describeEvent(event: ActivityEvent): {
         password_changed: "A password was changed",
         totp_enabled: "Two-factor sign-in was turned on",
         totp_disabled: "Two-factor sign-in was turned off",
+        second_factor_locked:
+          "An account was locked after too many second-factor failures",
+        role_changed: "A user's role was changed",
+        grants_changed: "A user's server grants were changed",
+        invited: "A teammate was invited",
+        reset_link_created: "A password reset link was made",
+        password_reset: "A password was reset through a link",
+        deleted: "A user account was removed",
+        anonymised: "A user account was anonymised",
       };
+      // The lock-out is the one account event worth a second look.
+      const locked = action === "second_factor_locked";
       return {
-        icon: UserRound,
-        kind: "neutral",
-        word: "User",
+        icon: locked ? CircleX : UserRound,
+        kind: locked ? "warning" : "neutral",
+        word: locked ? "Locked" : "User",
         sentence: words[action] ?? "A user account changed",
       };
     }

@@ -248,6 +248,13 @@ export type StoredSpec =
       readonly panel: boolean;
     };
 
+/**
+ * What the caller may do with a server, from the per-server grant of the
+ * moment (P10-A L22): the owner and admins write everywhere, an editor
+ * writes where a write grant says so, a viewer reads.
+ */
+export type ServerAccess = "read" | "write";
+
 export interface Server {
   readonly id: string;
   readonly name: string;
@@ -259,6 +266,7 @@ export interface Server {
   readonly demo: boolean;
   /** False for a server beyond the editable three on Free (read-only). */
   readonly editable: boolean;
+  readonly access: ServerAccess;
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastEditedAt: string | null;
@@ -462,6 +470,7 @@ export interface ServerSettings {
   readonly packId: string;
   readonly packVersion: string;
   readonly editable: boolean;
+  readonly access: ServerAccess;
   readonly files: readonly SettingsFile[];
   readonly values: Readonly<Record<string, unknown>>;
   readonly lint: readonly LintEntry[];
