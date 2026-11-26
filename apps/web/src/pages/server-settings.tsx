@@ -56,19 +56,8 @@ import { languageOf } from "../lib/file-language";
 import { issuesOf, packOf, settingsByKey } from "../lib/pack";
 import { cn } from "../lib/cn";
 import type { ChangeSet } from "../api/schema";
-import { useSessionUser } from "../api/session";
+import { canWriteServer, readGrantOnly, useSessionUser } from "../api/session";
 import { useMediaQuery } from "../lib/use-media-query";
-
-/**
- * The roles that may change a server's settings: a viewer only reads. An
- * editor also needs a write grant on the server, which the session does not
- * carry; the server refuses a write on a read grant.
- */
-export const SETTINGS_WRITE_ROLES: readonly string[] = [
-  "owner",
-  "admin",
-  "editor",
-];
 
 interface Group {
   readonly name: string;
@@ -157,6 +146,7 @@ export function GroupSection({
                 value={value}
                 edited={edited}
                 issue={issue?.message}
+                severity={issue?.severity}
                 disabled={disabled}
                 onChange={onChange}
                 onReset={onReset}
@@ -182,7 +172,10 @@ export function ServerSettingsPage() {
   const phone = !useMediaQuery("(min-width: 640px)");
   const toast = useToast();
   const user = useSessionUser();
-  const canWrite = user !== null && SETTINGS_WRITE_ROLES.includes(user.role);
+  // The role and the server's own word on this caller's grant (P10-A L22):
+  // an editor with a read grant gets the same disabled fields as a viewer.
+  const canWrite = canWriteServer(user, settings.data?.access);
+  const grantOnly = readGrantOnly(user, settings.data?.access);
 
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [search, setSearch] = useState("");
@@ -392,6 +385,7 @@ export function ServerSettingsPage() {
           role={user?.role ?? "viewer"}
           reads="these settings"
           writes="changes them"
+          grant={grantOnly}
           className="mb-4"
         />
       )}

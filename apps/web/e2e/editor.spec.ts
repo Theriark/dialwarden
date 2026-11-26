@@ -55,9 +55,69 @@ async function signIn(page: Page): Promise<void> {
   await expect(page).toHaveURL("/");
 }
 
+/**
+ * The content security guard of P10-A G5.2: while the raw editor and the
+ * save-dialog diff load Monaco, nothing is refused by the page's policy and
+ * no request leaves the app's origin. Violations are read from the document
+ * (securitypolicyviolation events), the console (the browser's own refusal
+ * lines) and the request log.
+ */
+interface SecurityGuard {
+  readonly cspErrors: string[];
+  readonly offOrigin: string[];
+}
+
+declare global {
+  interface Window {
+    __cspViolations?: string[];
+  }
+}
+
+async function guardSecurity(page: Page): Promise<SecurityGuard> {
+  const origin = new URL(
+    test.info().project.use.baseURL ?? "http://127.0.0.1:8080",
+  ).origin;
+  const guard: SecurityGuard = { cspErrors: [], offOrigin: [] };
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    window.__cspViolations = seen;
+    document.addEventListener("securitypolicyviolation", (event) => {
+      seen.push(`${event.violatedDirective} ${event.blockedURI}`);
+    });
+  });
+  page.on("console", (message) => {
+    const text = message.text();
+    if (
+      message.type() === "error" &&
+      /Content Security Policy|Refused to/.test(text)
+    ) {
+      guard.cspErrors.push(text);
+    }
+  });
+  page.on("request", (request) => {
+    const url = request.url();
+    if (url.startsWith("data:")) return;
+    if (new URL(url).origin !== origin) {
+      guard.offOrigin.push(url);
+    }
+  });
+  return guard;
+}
+
+async function expectSecurityClean(
+  page: Page,
+  guard: SecurityGuard,
+): Promise<void> {
+  const violations = await page.evaluate(() => window.__cspViolations ?? []);
+  expect(violations).toEqual([]);
+  expect(guard.cspErrors).toEqual([]);
+  expect(guard.offOrigin).toEqual([]);
+}
+
 test("the Free plan: setup, add a server, edit, save, roll back", async ({
   page,
 }) => {
+  const guard = await guardSecurity(page);
   await firstRunSetup(page);
 
   // The fleet wall is empty and offers the first server.
@@ -115,6 +175,10 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(
     page.getByText("1 setting needs a server restart to take effect.").first(),
   ).toBeVisible();
+  // The text diff of the dialog loads the Monaco diff editor from the
+  // bundle: no policy violation and nothing fetched off the origin (G5.2).
+  await expect(page.locator(".monaco-diff-editor").first()).toBeVisible();
+  await expectSecurityClean(page, guard);
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Changes saved").first()).toBeVisible();
   await expect(
@@ -146,10 +210,12 @@ test("the Free plan: setup, add a server, edit, save, roll back", async ({
   await expect(page.getByLabel("Experience rate")).toHaveCount(1);
   await expect(page.getByLabel("Experience rate")).toHaveValue("1");
 
-  // The raw editor loads Monaco over the settings file, owner only.
+  // The raw editor loads Monaco over the settings file, owner only, again
+  // with nothing refused by the policy and nothing off the origin (G5.2).
   await page.goto("/servers/palworld-home/raw");
   await expect(page.locator(".monaco-editor")).toBeVisible();
   await expect(page.getByLabel("File")).toBeVisible();
+  await expectSecurityClean(page, guard);
 
   // Fast typing keeps the caret where it is (live check F13): a burst at
   // about 12 ms per key lands at the end of the first line, where the

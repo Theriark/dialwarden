@@ -16,7 +16,7 @@ import { startRouter } from "../test/start";
 
 afterEach(resetAfterEach);
 
-function server(id: string, name: string) {
+function server(id: string, name: string, access = "write") {
   return {
     id,
     name,
@@ -27,6 +27,7 @@ function server(id: string, name: string) {
     hasPassword: false,
     demo: false,
     editable: true,
+    access,
     createdAt: "2026-11-23T00:00:00Z",
     updatedAt: "2026-11-23T00:00:00Z",
     lastEditedAt: null,
@@ -90,6 +91,38 @@ describe("PresetsPage", () => {
     fireEvent.change(select, { target: { value: "away" } });
     expect(select.value).toBe("away");
     expect(apply.disabled).toBe(false);
+  });
+
+  // PR 21 review note: deleting is the owner's; P10-A L22: a server this
+  // caller's grant only reads is not offered for Apply with diff.
+  it("shows no Delete to an editor and offers only the writable servers", async () => {
+    stubViewport(1280);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/auth/session") {
+        return {
+          status: 200,
+          body: { ...OWNER, user: { ...OWNER.user, role: "editor" } },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers") {
+        return {
+          status: 200,
+          body: {
+            items: [server("home", "Home"), server("away", "Away", "read")],
+          },
+        };
+      }
+      return undefined;
+    });
+    startRouter("/presets");
+    const select = (await screen.findByLabelText(
+      "Apply to",
+    )) as HTMLSelectElement;
+    expect(
+      Array.from(select.options).map((option) => option.textContent),
+    ).toEqual(["Choose a server", "Home"]);
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create preset" })).toBeNull();
   });
 
   it("From server starts on a placeholder and Create waits for a choice", async () => {

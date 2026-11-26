@@ -80,10 +80,27 @@ export interface SettingFieldProps {
   edited: boolean;
   /** The issue of this setting, when validate() has one. */
   issue: string | undefined;
+  /**
+   * How the issue is shown: an error marks the control invalid and blocks
+   * the save; a warning or an info sits under it in the warning colour and
+   * blocks nothing (phase-report-07 F-P7-2). Error when not given.
+   */
+  severity?: string | undefined;
+  /**
+   * The help text of a secret field, when the screen keeps the stored
+   * value differently from the editor (the schedule form asks for the
+   * secret again instead of keeping it, P9-C review R2).
+   */
+  secretHelp?: string | undefined;
   /** Every control disabled: read-only server, plan limit or permission. */
   disabled: boolean;
   onChange: (key: string, value: unknown) => void;
   onReset: (key: string) => void;
+}
+
+/** A warning or an info never marks the control invalid; an error does. */
+export function soft(severity: string | undefined): boolean {
+  return severity === "warning" || severity === "info";
 }
 
 function listToText(value: unknown): string {
@@ -104,12 +121,14 @@ function ListField({
   setting,
   value,
   issue,
+  warning,
   disabled,
   onChange,
 }: {
   setting: Setting;
   value: unknown;
   issue: string | undefined;
+  warning: string | undefined;
   disabled: boolean;
   onChange: (key: string, value: unknown) => void;
 }) {
@@ -119,6 +138,7 @@ function ListField({
       label={setting.label ?? setting.key}
       help={`${setting.description} Separate items with commas.`}
       error={issue}
+      warning={warning}
       disabled={disabled}
       value={listToText(value)}
       onChange={(event) => {
@@ -138,6 +158,8 @@ export const SettingField = memo(function SettingField({
   value,
   edited,
   issue,
+  severity,
+  secretHelp,
   disabled,
   onChange,
   onReset,
@@ -145,6 +167,8 @@ export const SettingField = memo(function SettingField({
   const label = setting.label ?? setting.key;
   const locked = disabled || setting.panelManaged === true;
   const id = `setting-${setting.key}`;
+  const error = soft(severity) ? undefined : issue;
+  const warning = soft(severity) ? issue : undefined;
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -164,7 +188,8 @@ export const SettingField = memo(function SettingField({
           id={id}
           label={label}
           help={setting.description}
-          error={issue}
+          error={error}
+          warning={warning}
           disabled={locked}
           value={String(value ?? "")}
           options={(setting.enum ?? []).map((option) => ({
@@ -182,8 +207,12 @@ export const SettingField = memo(function SettingField({
         <PasswordField
           id={id}
           label={label}
-          help={`${setting.description} Leave empty to keep the stored value.`}
-          error={issue}
+          help={
+            secretHelp ??
+            `${setting.description} Leave empty to keep the stored value.`
+          }
+          error={error}
+          warning={warning}
           disabled={locked}
           value={edited ? String(value ?? "") : ""}
           placeholder={edited ? undefined : "Unchanged"}
@@ -205,7 +234,8 @@ export const SettingField = memo(function SettingField({
           setting={setting}
           value={value}
           edited={edited}
-          issue={issue}
+          issue={error}
+          warning={warning}
           disabled={locked}
           onChange={onChange}
           onReset={onReset}
@@ -214,7 +244,8 @@ export const SettingField = memo(function SettingField({
         <ListField
           setting={setting}
           value={value}
-          issue={issue}
+          issue={error}
+          warning={warning}
           disabled={locked}
           onChange={onChange}
         />
@@ -229,7 +260,8 @@ export const SettingField = memo(function SettingField({
               ? setting.description
               : `${setting.description} Unit: ${setting.unit}.`
           }
-          error={issue}
+          error={error}
+          warning={warning}
           disabled={locked}
           type="number"
           value={value === null || value === undefined ? "" : String(value)}
@@ -251,7 +283,8 @@ export const SettingField = memo(function SettingField({
           id={id}
           label={label}
           help={`${setting.description} Groups of fields are edited in the raw editor.`}
-          error={issue}
+          error={error}
+          warning={warning}
           disabled
           value={JSON.stringify(value ?? null)}
           onChange={() => {
@@ -263,7 +296,8 @@ export const SettingField = memo(function SettingField({
           id={id}
           label={label}
           help={setting.description}
-          error={issue}
+          error={error}
+          warning={warning}
           disabled={locked}
           value={value === null || value === undefined ? "" : String(value)}
           onChange={(event) => {

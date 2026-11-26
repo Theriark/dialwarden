@@ -11,6 +11,7 @@ import {
   CircleCheck,
   CircleX,
   Clock,
+  Eye,
   Layers,
   Lock,
   RotateCw,
@@ -26,6 +27,7 @@ import type {
   BulkDraftItem,
   BulkReport,
   BulkReportItem,
+  Chip,
   PaymentRequiredBody,
   Server,
   UserPreset,
@@ -115,6 +117,31 @@ export function resultWords(item: BulkReportItem): {
   }
 }
 
+/**
+ * A server takes a bulk draft when the plan lets it be edited and this
+ * caller may write it (P10-A L22); the others stay listed with the reason.
+ */
+export function bulkSelectable(server: Server): boolean {
+  return server.editable && server.access !== "read";
+}
+
+/**
+ * The chips worth reading in a review (P9 live check L2): a flag set to off
+ * where the file held nothing changes nothing the game sees, so a server
+ * without the launch file would otherwise show one such chip per flag.
+ * They are counted in one muted line instead.
+ */
+export function splitQuietChips(chips: readonly Chip[]): {
+  shown: Chip[];
+  quiet: Chip[];
+} {
+  const quiet = chips.filter(
+    (chip) => chip.kind === "added" && chip.to === false,
+  );
+  const shown = chips.filter((chip) => !quiet.includes(chip));
+  return { shown, quiet };
+}
+
 function StepList({ current }: { current: WizardStep }) {
   const index = STEPS.findIndex((step) => step.id === current);
   return (
@@ -172,7 +199,7 @@ export function BulkApplyWizard({
   const entitlement = useQuery(entitlementQuery());
   const [step, setStep] = useState<WizardStep>("servers");
   const [selected, setSelected] = useState<string[]>(() =>
-    servers.filter((server) => server.editable).map((server) => server.id),
+    servers.filter(bulkSelectable).map((server) => server.id),
   );
   const [drafts, setDrafts] = useState<readonly BulkDraftItem[]>([]);
   const [runHooks, setRunHooks] = useState<RunHooks>("none");
@@ -240,7 +267,7 @@ export function BulkApplyWizard({
   let footer: React.ReactNode;
 
   if (step === "servers") {
-    const allIds = servers.map((server) => server.id);
+    const allIds = servers.filter(bulkSelectable).map((server) => server.id);
     const every = allIds.every((id) => selected.includes(id));
     body = (
       <div className="flex flex-col gap-4">
@@ -268,11 +295,17 @@ export function BulkApplyWizard({
           <ul className="flex max-h-72 flex-col gap-1.5 overflow-auto rounded-control border border-border p-2">
             {servers.map((server) => {
               const id = `bulk-server-${server.id}`;
+              const readGrant = server.access === "read";
               return (
                 <li key={server.id}>
                   <label
                     htmlFor={id}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-control px-2 py-1.5 text-sm hover:bg-accent-soft"
+                    className={cn(
+                      "flex items-center justify-between gap-3 rounded-control px-2 py-1.5 text-sm",
+                      readGrant
+                        ? "cursor-not-allowed opacity-70"
+                        : "cursor-pointer hover:bg-accent-soft",
+                    )}
                   >
                     <span className="flex min-w-0 items-center gap-2">
                       <input
@@ -280,6 +313,7 @@ export function BulkApplyWizard({
                         type="checkbox"
                         className="size-4 accent-[var(--dw-primary)]"
                         checked={selected.includes(server.id)}
+                        disabled={readGrant}
                         onChange={() => {
                           toggle(server.id);
                         }}
@@ -291,7 +325,11 @@ export function BulkApplyWizard({
                         {server.os}
                       </span>
                     </span>
-                    {server.editable ? null : (
+                    {readGrant ? (
+                      <Badge kind="neutral" icon={<Eye className="size-3.5" />}>
+                        Read access
+                      </Badge>
+                    ) : server.editable ? null : (
                       <Badge
                         kind="neutral"
                         icon={<Lock className="size-3.5" />}
@@ -306,7 +344,8 @@ export function BulkApplyWizard({
           </ul>
           <p className="text-xs text-fg-muted">
             Each server gets its own draft from its own files; a server you
-            cannot write answers in its own line, the others go on.
+            cannot write answers in its own line, the others go on. A server
+            your grant only reads stays out.
           </p>
         </fieldset>
       </div>
@@ -340,6 +379,7 @@ export function BulkApplyWizard({
           {drafts.map((item) => {
             const restarts = restartsOf(item);
             const chips = item.changeSet?.diff.semantic ?? [];
+            const { shown, quiet } = splitQuietChips(chips);
             return (
               <li key={item.server} className="flex flex-col gap-2 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -376,10 +416,23 @@ export function BulkApplyWizard({
                   )}
                 </div>
                 {chips.length > 0 ? (
-                  <ul className="flex flex-wrap gap-1.5">
-                    {chips.map((chip, index) => (
+                  <ul className="flex flex-wrap items-center gap-1.5">
+                    {shown.map((chip, index) => (
                       <ChangeChip key={`${item.server}-${index}`} chip={chip} />
                     ))}
+                    {quiet.length > 0 ? (
+                      <li
+                        className="text-xs text-fg-muted"
+                        title={quiet
+                          .map((chip) => chip.label || chip.settingKey || "")
+                          .join(", ")}
+                      >
+                        {quiet.length}{" "}
+                        {quiet.length === 1
+                          ? "flag stays off (it was not set)"
+                          : "flags stay off (they were not set)"}
+                      </li>
+                    ) : null}
                   </ul>
                 ) : null}
               </li>

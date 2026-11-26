@@ -12,7 +12,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Plus, Repeat, Undo2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import { SECRET_MASK, type Setting } from "@dialwarden/packs-schema";
+import {
+  sameJson,
+  SECRET_MASK,
+  type JsonValue,
+  type Setting,
+} from "@dialwarden/packs-schema";
 import type { RunHooks } from "../api/changes";
 import { fieldErrors, errorMessage } from "../api/errors";
 import { serverSettingsQuery, settingsMetaQuery } from "../api/queries";
@@ -47,6 +52,36 @@ export const SECRET_RETYPE =
 /** True when a secret edit holds nothing the API would keep: the mask or nothing. */
 export function secretMissing(value: unknown): boolean {
   return value === SECRET_MASK || value === "" || value === null;
+}
+
+/**
+ * The value a setting starts from in the form: the server's current value,
+ * else the pack default; a secret starts empty, because the settings read
+ * holds only its mask, which the API would drop.
+ */
+export function startValueOf(
+  setting: Setting,
+  current: Readonly<Record<string, unknown>>,
+): unknown {
+  if (setting.secret === true) return "";
+  return current[setting.key] ?? setting.default ?? null;
+}
+
+/**
+ * Whether an edit has moved from its start value (P9 live check L4: the
+ * marker said Edited before anything was typed). A secret counts as edited
+ * once it holds something the API would keep.
+ */
+export function editMoved(
+  setting: Setting,
+  value: unknown,
+  current: Readonly<Record<string, unknown>>,
+): boolean {
+  if (setting.secret === true) return !secretMissing(value);
+  return !sameJson(
+    (value ?? null) as JsonValue,
+    (startValueOf(setting, current) ?? null) as JsonValue,
+  );
 }
 
 export interface ScheduleFormState {
@@ -342,12 +377,15 @@ export function ScheduleForm({
     if (setting === undefined) {
       return;
     }
-    // A secret starts empty: the settings read holds only its mask, which
-    // the API would drop, so the person types the value the run writes.
-    const value =
-      setting.secret === true ? "" : (current[key] ?? setting.default ?? null);
+    const value = startValueOf(setting, current);
     patch({ edits: [...state.edits, { settingKey: key, value }] });
     setAdding("");
+  };
+
+  const removeSetting = (key: string) => {
+    patch({
+      edits: state.edits.filter((item) => item.settingKey !== key),
+    });
   };
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -636,11 +674,7 @@ export function ScheduleForm({
                           variant="ghost"
                           className="h-7 px-2 text-xs"
                           onClick={() => {
-                            patch({
-                              edits: state.edits.filter(
-                                (item) => item.settingKey !== edit.settingKey,
-                              ),
-                            });
+                            removeSetting(edit.settingKey);
                           }}
                         >
                           Remove
@@ -649,14 +683,16 @@ export function ScheduleForm({
                     );
                   }
                   return (
-                    <li key={edit.settingKey}>
+                    <li key={edit.settingKey} className="flex flex-col gap-1.5">
                       <SettingField
                         setting={setting}
                         // The server's mask is not a value: the box starts
                         // empty and the issue below it asks for the secret.
                         value={edit.value === SECRET_MASK ? "" : edit.value}
-                        edited
+                        edited={editMoved(setting, edit.value, current)}
                         issue={issues.get(edit.settingKey)?.message}
+                        severity={issues.get(edit.settingKey)?.severity}
+                        secretHelp={`${setting.description} Type the secret this run writes; the stored one is never copied into a schedule.`}
                         disabled={pending}
                         onChange={(key, value) => {
                           patch({
@@ -667,14 +703,40 @@ export function ScheduleForm({
                             ),
                           });
                         }}
+                        // Reset puts the start value back; the row stays
+                        // (Remove below takes it out of the schedule).
                         onReset={(key) => {
                           patch({
-                            edits: state.edits.filter(
-                              (item) => item.settingKey !== key,
+                            edits: state.edits.map((item) =>
+                              item.settingKey === key
+                                ? {
+                                    settingKey: key,
+                                    value: startValueOf(setting, current),
+                                  }
+                                : item,
                             ),
                           });
                         }}
                       />
+                      <div className="flex justify-end">
+                        {/* The setting's name is read after the visible
+                            words, not put in an aria-label: a label holding
+                            it would make the button a second match for the
+                            field's own label. */}
+                        <Button
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          disabled={pending}
+                          onClick={() => {
+                            removeSetting(edit.settingKey);
+                          }}
+                        >
+                          Remove from the schedule
+                          <span className="sr-only">
+                            : {setting.label ?? setting.key}
+                          </span>
+                        </Button>
+                      </div>
                     </li>
                   );
                 })}

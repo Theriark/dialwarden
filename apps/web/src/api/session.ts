@@ -2,7 +2,7 @@
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, setCsrf } from "./client";
 import { keys, sessionQuery } from "./queries";
-import type { SignedIn, User } from "./schema";
+import type { ServerAccess, SignedIn, User } from "./schema";
 
 /** Remembers a fresh sign-in or setup answer as the current session. */
 export function rememberSession(client: QueryClient, session: SignedIn): void {
@@ -53,6 +53,46 @@ export function useSessionUser(): User | null {
 export function useIsOwner(): boolean {
   const user = useSessionUser();
   return user?.role === "owner";
+}
+
+/**
+ * The roles that may write a server at all (settings, launch flags, hook
+ * runs, restores, schedules): a viewer only reads. An editor also needs a
+ * write grant on that server, which every server answer carries as access
+ * (P10-A L22); the server stays the authority and refuses with 403.
+ */
+export const SERVER_WRITE_ROLES: readonly string[] = [
+  "owner",
+  "admin",
+  "editor",
+];
+
+/**
+ * Whether this session writes a server: the role allows writes and the
+ * server's own answer says write. An answer without the field (an older
+ * server) leaves the role to decide, as before.
+ */
+export function canWriteServer(
+  user: User | null,
+  access: ServerAccess | undefined,
+): boolean {
+  if (user === null || !SERVER_WRITE_ROLES.includes(user.role)) {
+    return false;
+  }
+  return access !== "read";
+}
+
+/**
+ * True when the role would write but the grant on this server says read:
+ * the read-only sentence then names the grant, not the role.
+ */
+export function readGrantOnly(
+  user: User | null,
+  access: ServerAccess | undefined,
+): boolean {
+  return (
+    user !== null && SERVER_WRITE_ROLES.includes(user.role) && access === "read"
+  );
 }
 
 /** The roles that may set or change a server's hooks (routes/hooks.ts). */

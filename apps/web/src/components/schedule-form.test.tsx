@@ -207,6 +207,7 @@ const HOME: Server = {
   hasPassword: false,
   demo: false,
   editable: true,
+  access: "write",
   createdAt: "2026-11-23T00:00:00Z",
   updatedAt: "2026-11-23T00:00:00Z",
   lastEditedAt: null,
@@ -399,6 +400,69 @@ describe("ScheduleForm", () => {
         }) as HTMLButtonElement
       ).disabled,
     ).toBe(true);
+  });
+
+  // P9 live check L4 and P9-C review R2: a setting just added is not Edited,
+  // Reset puts its start value back and keeps the row, Remove takes it out,
+  // and a secret's help text does not promise to keep a stored value.
+  it("marks a setting Edited only once it moved, resets it in place and removes it on its own button", async () => {
+    stubPack();
+    const client = testQueryClient();
+    withSession(client);
+    renderWithProviders(
+      <ScheduleForm
+        servers={[HOME]}
+        pending={false}
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />,
+      client,
+    );
+    fireEvent.change(screen.getByLabelText("Server"), {
+      target: { value: "home" },
+    });
+    const add = (await screen.findByLabelText(
+      "Add a setting",
+    )) as HTMLSelectElement;
+    fireEvent.change(add, { target: { value: "expRate" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const field = (await screen.findByLabelText(
+      "Exp rate",
+    )) as HTMLInputElement;
+    expect(field.value).toBe("1");
+    expect(screen.queryByText("Edited")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+
+    fireEvent.change(field, { target: { value: "3" } });
+    expect(screen.getByText("Edited")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Edited")).toBeNull();
+    });
+    expect((screen.getByLabelText("Exp rate") as HTMLInputElement).value).toBe(
+      "1",
+    );
+
+    // The name joins the visible words and the read-only setting name; the
+    // space before the colon depends on the name computation of the runtime.
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /^Remove from the schedule\s*:\s*Exp rate$/,
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Exp rate")).toBeNull();
+    });
+
+    fireEvent.change(screen.getByLabelText("Add a setting"), {
+      target: { value: "adminPassword" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByLabelText("Admin password");
+    expect(screen.getByText(/the stored one is never copied/)).toBeTruthy();
+    expect(
+      screen.queryByText(/Leave empty to keep the stored value/),
+    ).toBeNull();
   });
 
   it("picks a setting from the pack, types it and submits the body", async () => {

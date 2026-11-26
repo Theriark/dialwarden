@@ -15,11 +15,21 @@ import {
   testQueryClient,
   withSession,
 } from "../test/render";
-import { BulkApplyWizard, resultWords } from "./bulk-apply-wizard";
+import {
+  BulkApplyWizard,
+  bulkSelectable,
+  resultWords,
+  splitQuietChips,
+} from "./bulk-apply-wizard";
 
 afterEach(resetAfterEach);
 
-function server(id: string, name: string, editable = true): Server {
+function server(
+  id: string,
+  name: string,
+  editable = true,
+  access: "read" | "write" = "write",
+): Server {
   return {
     id,
     name,
@@ -30,6 +40,7 @@ function server(id: string, name: string, editable = true): Server {
     hasPassword: false,
     demo: false,
     editable,
+    access,
     createdAt: "2026-11-23T00:00:00Z",
     updatedAt: "2026-11-23T00:00:00Z",
     lastEditedAt: null,
@@ -244,6 +255,133 @@ describe("BulkApplyWizard", () => {
       ).toBe(true);
     });
     expect(seen.some((call) => call.includes("bulk-drafts"))).toBe(false);
+  });
+
+  // P10-A L22 and P9 live check L2: a server this caller's grant only reads
+  // cannot be chosen, and flags set to off where nothing was set are
+  // counted in one line instead of one chip each.
+  it("keeps a read-access server out and folds the quiet off flags of a review", async () => {
+    stubFetch(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/entitlement") {
+        return { status: 200, body: paidFromUi() };
+      }
+      if (
+        method === "POST" &&
+        path === `/api/v1/presets/${PRESET.id}/bulk-drafts`
+      ) {
+        const quiet = (key: string, label: string) => ({
+          kind: "added",
+          fileId: "launch",
+          settingKey: key,
+          label,
+          from: null,
+          to: false,
+          restartRequired: false,
+        });
+        const draft = changeSet("cs-home", "home");
+        return {
+          status: 200,
+          body: {
+            items: [
+              {
+                server: "home",
+                changeSet: {
+                  ...draft,
+                  diff: {
+                    semantic: [
+                      ...draft.diff.semantic,
+                      quiet("Launch.PublicLobby", "Public lobby"),
+                      quiet("Launch.UsePerfThreads", "Performance threads"),
+                    ],
+                    text: [],
+                  },
+                },
+                error: null,
+              },
+            ],
+          },
+        };
+      }
+      return undefined;
+    });
+    const client = testQueryClient();
+    withSession(client);
+    renderWithProviders(
+      <BulkApplyWizard
+        preset={PRESET}
+        servers={[server("home", "Home"), server("far", "Far", true, "read")]}
+        onClose={() => undefined}
+      />,
+      client,
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Apply Weekend rates to many servers",
+    });
+    expect(
+      within(dialog).getByText("Servers of Palworld (1 of 2 chosen)"),
+    ).toBeTruthy();
+    const far = within(dialog).getByLabelText(/Far/) as HTMLInputElement;
+    expect(far.disabled).toBe(true);
+    expect(far.checked).toBe(false);
+    expect(within(dialog).getByText("Read access")).toBeTruthy();
+    // Choose all touches the selectable servers only.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Clear" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose all" }));
+    expect(
+      within(dialog).getByText("Servers of Palworld (1 of 2 chosen)"),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Next: review the diffs" }),
+    );
+    await within(dialog).findByText("Experience rate: 1 → 2");
+    expect(within(dialog).queryByText(/Public lobby: set to off/)).toBeNull();
+    expect(
+      within(dialog).getByText("2 flags stay off (they were not set)"),
+    ).toBeTruthy();
+    expect(within(dialog).getByText("3 settings")).toBeTruthy();
+  });
+
+  it("decides which servers take a draft and which chips are quiet", () => {
+    expect(bulkSelectable(server("a", "A"))).toBe(true);
+    expect(bulkSelectable(server("a", "A", false))).toBe(false);
+    expect(bulkSelectable(server("a", "A", true, "read"))).toBe(false);
+    const { shown, quiet } = splitQuietChips([
+      {
+        kind: "added",
+        fileId: "launch",
+        settingKey: "Launch.PublicLobby",
+        label: "Public lobby",
+        from: null,
+        to: false,
+        restartRequired: false,
+      },
+      {
+        kind: "added",
+        fileId: "launch",
+        settingKey: "Launch.Threads",
+        label: "Threads",
+        from: null,
+        to: true,
+        restartRequired: false,
+      },
+      {
+        kind: "changed",
+        fileId: "settings",
+        settingKey: "ExpRate",
+        label: "Experience rate",
+        from: true,
+        to: false,
+        restartRequired: false,
+      },
+    ]);
+    expect(quiet.map((chip) => chip.settingKey)).toEqual([
+      "Launch.PublicLobby",
+    ]);
+    expect(shown.map((chip) => chip.settingKey)).toEqual([
+      "Launch.Threads",
+      "ExpRate",
+    ]);
   });
 
   it("puts every result status into words", () => {

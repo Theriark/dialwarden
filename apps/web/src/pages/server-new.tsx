@@ -607,9 +607,9 @@ export function NewServerPage() {
           done={false}
         >
           <p className="text-sm text-fg-muted">
-            The launch source — how Dialwarden starts and stops this server —
-            arrives with phase P6. Adding the server now is safe: settings can
-            be edited and saved by hand from day one.
+            The launch line and the hooks that stop and start this server are
+            set on its Launch and Hooks tabs once it is added. Adding the server
+            now is safe: its settings can be edited and saved from day one.
           </p>
         </Step>
 

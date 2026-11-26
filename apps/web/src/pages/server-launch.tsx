@@ -44,8 +44,10 @@ import {
   settingsMetaQuery,
 } from "../api/queries";
 import type { ChangeSet } from "../api/schema";
+import { canWriteServer, readGrantOnly, useSessionUser } from "../api/session";
 import { PageHeader } from "../components/layout/page-header";
 import { LaunchSnippetPanel } from "../components/launch-snippets";
+import { ReadOnlyNotice } from "../components/read-only-notice";
 import { SaveDialog } from "../components/save-dialog";
 import {
   isServerMissing,
@@ -199,6 +201,12 @@ export function ServerLaunchPage() {
   });
   const phone = !useMediaQuery("(min-width: 640px)");
   const toast = useToast();
+  const user = useSessionUser();
+  // The role and the grant decide who edits the flags (P10-A L22); the plan
+  // decides whether the server takes edits at all. The server stays the
+  // authority on both.
+  const canWrite = canWriteServer(user, settings.data?.access);
+  const grantOnly = readGrantOnly(user, settings.data?.access);
   const [chosen, setChosen] = useState<SourceKind | null>(() =>
     storedSource(slug),
   );
@@ -244,9 +252,14 @@ export function ServerLaunchPage() {
       ).length,
     [draft, settings.data],
   );
-  const onFieldChange = useCallback((key: string, value: unknown) => {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }, []);
+  const onFieldChange = useCallback(
+    (key: string, value: unknown) => {
+      // A reader's fields are disabled; no edit reaches the draft either.
+      if (!canWrite) return;
+      setDraft((current) => ({ ...current, [key]: value }));
+    },
+    [canWrite],
+  );
   const onFieldReset = useCallback((key: string) => {
     setDraft((current) =>
       Object.fromEntries(Object.entries(current).filter(([k]) => k !== key)),
@@ -351,7 +364,8 @@ export function ServerLaunchPage() {
     "dialwarden-args.txt";
   const preview = previewLine(pack, launchFile.id, effective);
   const warnings = launchPanelWarnings(pack, launchFile.id);
-  const editable = settings.data.editable;
+  const planEditable = settings.data.editable;
+  const editable = planEditable && canWrite;
   const stoppedOnlyFiles = pack.files
     .filter((file) => file.applyPolicy === "stopped-only")
     .map((file) => file.id);
@@ -515,7 +529,15 @@ export function ServerLaunchPage() {
               keys.
             </p>
           </div>
-          {editable ? null : (
+          {canWrite ? null : (
+            <ReadOnlyNotice
+              role={user?.role ?? "viewer"}
+              reads="these flags"
+              writes="changes them"
+              grant={grantOnly}
+            />
+          )}
+          {planEditable ? null : (
             <Alert kind="warning">
               This server is read-only on the Free plan: the three editable
               servers are chosen in Settings → Plan.

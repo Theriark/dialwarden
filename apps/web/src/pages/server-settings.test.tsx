@@ -71,6 +71,7 @@ const SERVER = {
   hasPassword: false,
   demo: false,
   editable: true,
+  access: "write",
   createdAt: "2026-11-23T00:00:00Z",
   updatedAt: "2026-11-23T00:00:00Z",
   lastEditedAt: null,
@@ -82,6 +83,7 @@ function settingsAnswer(overrides: Record<string, unknown> = {}) {
     packId: "testpack",
     packVersion: "1.0",
     editable: true,
+    access: "write",
     files: [
       {
         fileId: "settings",
@@ -183,6 +185,76 @@ describe("ServerSettingsPage", () => {
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     const back = screen.getByRole("link", { name: "Go to the fleet" });
     expect(back.getAttribute("href")).toBe("/");
+  });
+
+  // P10-A L22: the server's answer carries this caller's grant; an editor
+  // with a read grant gets a viewer's fields and a sentence about the grant.
+  it("keeps an editor whose grant only reads this server out of the fields (L22)", async () => {
+    stubViewport(1280);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/auth/session") {
+        return {
+          status: 200,
+          body: { ...OWNER, user: { ...OWNER.user, role: "editor" } },
+        };
+      }
+      if (method === "GET" && path === "/api/v1/servers/home/settings") {
+        return { status: 200, body: settingsAnswer({ access: "read" }) };
+      }
+      return undefined;
+    });
+    startRouter("/servers/home/settings");
+    const field = (await screen.findByLabelText(
+      "Exp rate",
+    )) as HTMLInputElement;
+    expect(field.disabled).toBe(true);
+    expect(
+      screen.getByText(
+        /You are signed in as editor with read access to this server: you read these settings\. A write grant from the owner or an admin changes them\./,
+      ),
+    ).toBeTruthy();
+    fireEvent.change(field, { target: { value: "2" } });
+    expect(screen.queryByText("Edited")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Review and save" }),
+    ).toBeNull();
+  });
+
+  // phase-report-07 F-P7-2: a warning-severity lint is not an error.
+  it("shows a warning lint in the warning style, not as an error", async () => {
+    stubViewport(1280);
+    stubWorld(([method, path]) => {
+      if (method === "GET" && path === "/api/v1/servers/home/settings") {
+        return {
+          status: 200,
+          body: settingsAnswer({
+            lint: [
+              {
+                fileId: "settings",
+                settingKey: "expRate",
+                code: "removed",
+                severity: "warning",
+                message: "Gone in 3.0: the game ignores it.",
+                line: null,
+                column: null,
+                serverEvaluated: false,
+              },
+            ],
+          }),
+        };
+      }
+      return undefined;
+    });
+    startRouter("/servers/home/settings");
+    const note = await screen.findByText("Gone in 3.0: the game ignores it.");
+    expect(note.getAttribute("role")).toBe("status");
+    expect(note.className).toContain("text-warning");
+    expect(screen.queryByRole("alert")).toBeNull();
+    const field = screen.getByLabelText("Exp rate") as HTMLInputElement;
+    expect(field.getAttribute("aria-invalid")).toBeNull();
+    expect(field.getAttribute("aria-describedby")).toContain(
+      "setting-expRate-warning",
+    );
   });
 
   it("lets an editor edit where the plan allows edits", async () => {

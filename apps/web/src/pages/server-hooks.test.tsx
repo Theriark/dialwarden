@@ -14,7 +14,7 @@ import {
   type Handler,
 } from "../test/render";
 import { startRouter } from "../test/start";
-import { hooksErrorMessage, sourceWord } from "./server-hooks";
+import { controlWords, hooksErrorMessage, sourceWord } from "./server-hooks";
 import { ApiError } from "../api/client";
 
 afterEach(resetAfterEach);
@@ -29,6 +29,7 @@ const SERVER = {
   hasPassword: false,
   demo: false,
   editable: true,
+  access: "write",
   createdAt: "2026-11-23T00:00:00Z",
   updatedAt: "2026-11-23T00:00:00Z",
   lastEditedAt: null,
@@ -37,6 +38,11 @@ const SERVER = {
 const VIEWER: SignedIn = {
   ...OWNER,
   user: { ...OWNER.user, role: "viewer" },
+};
+
+const EDITOR: SignedIn = {
+  ...OWNER,
+  user: { ...OWNER.user, role: "editor" },
 };
 
 function view(overrides: Partial<HooksView> = {}): HooksView {
@@ -230,6 +236,65 @@ describe("ServerHooksPage", () => {
       (screen.getByRole("button", { name: "Run stop" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("keeps an editor with a read grant out of the actions with the reason (L22)", async () => {
+    stubViewport(1280);
+    stubWorld(EDITOR, ([method, path]) => {
+      if (method === "GET" && path === "/api/v1/servers/home") {
+        return { status: 200, body: { ...SERVER, access: "read" } };
+      }
+      if (method === "GET" && path === "/api/v1/servers/home/hooks") {
+        return {
+          status: 200,
+          body: view({
+            available: {
+              save: "palworldRest",
+              stop: "palworldRest",
+              start: null,
+              restart: null,
+            },
+          }),
+        };
+      }
+      return undefined;
+    });
+    startRouter("/servers/home/hooks");
+    await screen.findByRole("heading", { name: "Home hooks" });
+    expect(
+      screen.getByText(/Your grant on this server is read-only/),
+    ).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "Run stop" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Run save" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  // P10-B: every control error answers 4xx with its code in the body, so
+  // the toast can say what the game server did.
+  it("words a control error by its code", () => {
+    expect(
+      hooksErrorMessage(
+        new ApiError(424, {
+          error: "control_error",
+          code: "Timeout",
+          message: "no answer in 5 s",
+        } as never),
+      ),
+    ).toBe("The game server did not answer in time: no answer in 5 s.");
+    expect(
+      hooksErrorMessage(
+        new ApiError(422, { error: "control_error", code: "Refused" } as never),
+      ),
+    ).toBe("The game server refused the command.");
+    expect(controlWords("HostKey")).toContain("host key");
+    expect(controlWords("whatever")).toBe(
+      "The game server could not be reached",
+    );
   });
 
   it("puts the hook refusals into sentences", () => {

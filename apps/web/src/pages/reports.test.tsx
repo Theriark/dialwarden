@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 // The reports page: the selection becomes the query, the preview looks like
 // the export with the chips, the Markdown and Discord tabs carry the
-// server's texts, and the Free plan renders the upgrade hint.
+// server's texts with a Copied state each (P9 live check L7), and the Free
+// plan renders the upgrade hint before anything is built (L6) as well as on
+// a 402 of the build.
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
-import type { Report } from "../api/schema";
-import { entitlement, OWNER } from "../test/fixtures";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Entitlement, Report } from "../api/schema";
+import { entitlement, OWNER, paidFromUi } from "../test/fixtures";
 import {
   resetAfterEach,
   stubFetch,
@@ -15,7 +17,10 @@ import {
 import { startRouter } from "../test/start";
 import { selectionOf, utcWords } from "./reports";
 
-afterEach(resetAfterEach);
+afterEach(() => {
+  resetAfterEach();
+  Reflect.deleteProperty(navigator, "clipboard");
+});
 
 const REPORT: Report = {
   generatedAt: "2026-11-26T10:00:00.000Z",
@@ -50,7 +55,7 @@ const REPORT: Report = {
   },
 };
 
-function stubWorld(extra?: Handler) {
+function stubWorld(plan: Entitlement, extra?: Handler) {
   const seen: string[] = [];
   stubFetch((route, init) => {
     const special = extra?.(route, init);
@@ -65,7 +70,7 @@ function stubWorld(extra?: Handler) {
       return { status: 200, body: OWNER };
     }
     if (method === "GET" && path === "/api/v1/entitlement") {
-      return { status: 200, body: entitlement() };
+      return { status: 200, body: plan };
     }
     if (method === "GET" && path === "/api/v1/servers") {
       return {
@@ -82,6 +87,7 @@ function stubWorld(extra?: Handler) {
               hasPassword: false,
               demo: false,
               editable: true,
+              access: "write",
               createdAt: "2026-11-23T00:00:00Z",
               updatedAt: "2026-11-23T00:00:00Z",
               lastEditedAt: null,
@@ -99,10 +105,20 @@ function stubWorld(extra?: Handler) {
   return seen;
 }
 
+/** A clipboard that accepts every write (jsdom has none). */
+function stubClipboard() {
+  const writeText = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return writeText;
+}
+
 describe("ReportsPage", () => {
   it("builds the report and previews it like the export", async () => {
     stubViewport(1440);
-    const seen = stubWorld();
+    const seen = stubWorld(paidFromUi());
     startRouter("/reports");
     await screen.findByText("No report built yet");
 
@@ -137,10 +153,51 @@ describe("ReportsPage", () => {
     expect(within(discord).getByText("Experience rate: 1 to 2")).toBeTruthy();
   });
 
-  it("sends the chosen servers and renders the upgrade hint on Free", async () => {
+  it("keeps the Copied state of one tab out of the next (L7)", async () => {
+    stubViewport(1440);
+    stubWorld(paidFromUi());
+    const writeText = stubClipboard();
+    startRouter("/reports");
+    await screen.findByText("No report built yet");
+    fireEvent.click(screen.getByRole("button", { name: "Build the report" }));
+    await screen.findByLabelText("Report preview");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Markdown" }));
+    const panel = await screen.findByRole("tabpanel");
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Copy Markdown" }),
+    );
+    await within(panel).findByRole("button", { name: "Copied" });
+    expect(writeText).toHaveBeenCalledWith(REPORT.markdown);
+
+    // The Discord tab's own button starts fresh: it never says Copied for
+    // a text that was not copied.
+    fireEvent.click(screen.getByRole("tab", { name: "Discord" }));
+    const next = await screen.findByRole("tabpanel");
+    await within(next).findByRole("button", { name: "Copy the message" });
+    expect(within(next).queryByRole("button", { name: "Copied" })).toBeNull();
+  });
+
+  it("says before anything is built that reports are Paid, on Free (L6)", async () => {
+    stubViewport(1440);
+    const seen = stubWorld(entitlement());
+    startRouter("/reports");
+    await screen.findByText("Reports is part of the Paid plan.");
+    expect(screen.getByText("What a report holds")).toBeTruthy();
+    expect(screen.queryByText("No report built yet")).toBeNull();
+    const build = screen.getByRole("button", {
+      name: "Build the report",
+    }) as HTMLButtonElement;
+    expect(build.disabled).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
+  it("sends the chosen servers and renders the upgrade hint on a 402 of the build", async () => {
     stubViewport(1440);
     const seen: string[] = [];
-    stubWorld(([method, path]) => {
+    // The entitlement still says Paid (the licence ended meanwhile): the
+    // build goes out and its 402 renders the hint.
+    stubWorld(paidFromUi(), ([method, path]) => {
       if (method === "GET" && path.startsWith("/api/v1/reports/changes")) {
         seen.push(path);
         return {
