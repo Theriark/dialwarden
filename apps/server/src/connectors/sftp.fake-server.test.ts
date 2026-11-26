@@ -189,7 +189,10 @@ afterEach(async () => {
   server = undefined;
 });
 
-async function lyingServer(table: Table) {
+async function lyingServer(
+  table: Table,
+  extra: { root?: string; rootMayBeSlash?: boolean } = {},
+) {
   const hostKey = hostKeyPair();
   const log: Logged[] = [];
   server = await startSshServer({
@@ -201,11 +204,14 @@ async function lyingServer(table: Table) {
     host: "127.0.0.1",
     port: server.port,
     username: "game",
-    root: ROOT,
+    root: extra.root ?? ROOT,
     auth: { method: "password", password: PASSWORD },
     pinnedFingerprint: hostKey.fingerprint,
     readyTimeoutMs: 5000,
     operationTimeoutMs: 5000,
+    ...(extra.rootMayBeSlash === undefined
+      ? {}
+      : { rootMayBeSlash: extra.rootMayBeSlash }),
   });
   return { sftp, log };
 }
@@ -278,5 +284,50 @@ describe("a lying SFTP server (T9)", () => {
     }
     expect(log.filter((entry) => entry.path.includes(".."))).toEqual([]);
     expect(log).toContainEqual({ kind: "OPENDIR", path: SAVES });
+  });
+});
+
+// P10-A L4: a root that resolves to / is the whole host, refused unless the
+// server is panel SFTP, which is chrooted.
+describe("the server root of an SFTP server (L4)", () => {
+  const withSlash = () =>
+    new Map<string, Entry>([
+      ["/", { type: "directory" }],
+      ...serverOf({ "a.ini": "a=1\n" }),
+    ]);
+
+  it("refuses / as the root, given or answered for the login folder", async () => {
+    for (const root of ["/", ""]) {
+      const { sftp } = await lyingServer(
+        {
+          files: withSlash(),
+          realpaths: new Map([[ROOT, "/"]]),
+        },
+        { root },
+      );
+      try {
+        const tested = await sftp.test();
+        expect(tested, JSON.stringify(root)).toMatchObject({
+          ok: false,
+          error: "PathEscape",
+        });
+      } finally {
+        await sftp.close();
+      }
+      await server?.close();
+      server = undefined;
+    }
+  });
+
+  it("keeps / for panel SFTP, which is chrooted", async () => {
+    const { sftp } = await lyingServer(
+      { files: withSlash() },
+      { root: "/", rootMayBeSlash: true },
+    );
+    try {
+      expect(await sftp.test()).toMatchObject({ ok: true, root: "/" });
+    } finally {
+      await sftp.close();
+    }
   });
 });

@@ -215,6 +215,30 @@ describe("connector endpoints", () => {
     }
   });
 
+  // P10-A G1.4: / and a relative root are refused by the connector; a NUL
+  // never reaches it.
+  it("G1.4 refuses / and a relative Local root, and a root with a NUL", async () => {
+    const { app, headers } = await signedIn();
+    const test = (root: string) =>
+      app.inject({
+        method: "POST",
+        url: TEST,
+        headers,
+        payload: { kind: "local", root },
+      });
+    for (const root of ["/", "relative/game", "./game"]) {
+      const response = await test(root);
+      expect(response.statusCode, root).toBe(200);
+      expect(response.json(), root).toMatchObject({
+        ok: false,
+        error: "PathEscape",
+      });
+    }
+    const nul = await test(`${await folder()}\0x`);
+    expect(nul.statusCode).toBe(400);
+    expect(nul.json()).toMatchObject({ error: "validation" });
+  });
+
   it("answers NotFound for a Local root that does not exist", async () => {
     const { app, headers } = await signedIn();
     const root = join(await folder(), "missing");
