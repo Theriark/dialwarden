@@ -271,4 +271,54 @@ describe("server limits (contract C1)", () => {
     });
     expect(refused.statusCode).toBe(402);
   });
+
+  // P10-A G6.5: every other write on a server past the editable three.
+  it("G6.5 refuses rename, preset apply and bulk drafts on a read-only server", async () => {
+    const api = await owner();
+    const token = customerLicence({ maxServers: 5 });
+    expect((await api.put("/api/v1/licence", { token })).statusCode).toBe(200);
+    const [a, b, c, d] = await addMany(api, ["a", "b", "c", "d"]);
+    for (const slug of [b, c, d]) {
+      await change(api, slug ?? "", { ExpRate: 2 });
+    }
+    const preset = await api.post("/api/v1/presets", {
+      name: "rates",
+      description: "",
+      packId: "palworld",
+      values: { ExpRate: 3 },
+    });
+    expect(preset.statusCode).toBe(201);
+    const id = preset.json<{ id: string }>().id;
+    expect((await api.delete("/api/v1/licence")).statusCode).toBe(200);
+    const before = (await history(api, a ?? "")).entries.length;
+
+    const renamed = await api.patch(`/api/v1/servers/${a}`, { name: "x" });
+    expect(renamed.statusCode).toBe(402);
+    expect(renamed.json()).toMatchObject({ limit: "servers" });
+    const applied = await api.post(`/api/v1/presets/${id}/apply`, {
+      server: a,
+    });
+    expect(applied.statusCode).toBe(402);
+    const bulk = await api.post(`/api/v1/presets/${id}/bulk-drafts`, {
+      servers: [a],
+    });
+    expect(bulk.statusCode).toBe(402);
+    expect((await listed(api)).find((s) => s.id === a)?.name).toBe("a");
+    expect((await history(api, a ?? "")).entries).toHaveLength(before);
+    const drafts = current?.app.ctx.store.sqlite
+      .prepare("SELECT count(*) AS n FROM change_sets WHERE server_id = ?")
+      .get(a) as { n: number };
+    expect(drafts.n).toBe(before);
+  });
+
+  // P10-A G1.2: a file id that tries to climb out answers file_not_found.
+  it("G1.2 answers a traversal file id with 404 file_not_found", async () => {
+    const api = await owner();
+    const [slug] = await addMany(api, ["a"]);
+    for (const fileId of ["..%2F..%2Fetc%2Fpasswd", "%2e%2e%2fsecret"]) {
+      const raw = await api.get(`/api/v1/servers/${slug}/files/${fileId}`);
+      expect(raw.statusCode, fileId).toBe(404);
+      expect(raw.json(), fileId).toEqual({ error: "file_not_found" });
+    }
+  });
 });
