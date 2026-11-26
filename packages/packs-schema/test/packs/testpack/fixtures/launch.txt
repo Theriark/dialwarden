@@ -1,2 +1,1 @@
-# Synthetic fixture written by Theriark (see SYNTHETIC.md).
 ./TestServer.sh -port=7777 -log
