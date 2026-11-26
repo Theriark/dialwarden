@@ -11,3 +11,8 @@
 # the commit that added the hex one.
 7d190b367da3e3ac998d0447719f0f5af6a5a482:apps/web/src/pages/settings/notifications.test.tsx:generic-api-key:257
 7d190b367da3e3ac998d0447719f0f5af6a5a482:apps/web/src/pages/settings/notifications.test.tsx:generic-api-key:264
+# THE-2857: the generic-api-key rule read the made-up AdminPassword marker of
+# the G3.5/G4.7 test in apps/server/src/presets/bulk.test.ts as a key. The
+# tree now uses a letters-only marker; this entry clears the commit that
+# added the old one.
+9d91ef983ae75e42ef3cb1bc641ffaa4d4c69c5f:apps/server/src/presets/bulk.test.ts:generic-api-key:260

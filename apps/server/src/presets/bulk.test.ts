@@ -257,7 +257,7 @@ describe("bulk preset apply", () => {
       packId: "palworld",
       values: {
         "Launch.ServerName": "a `touch /tmp/dw-pwn` b",
-        AdminPassword: "MARKER-bulk-secret-7c",
+        AdminPassword: "MARKER-bulk-secret-value",
       },
     });
     expect(made.statusCode).toBe(201);
@@ -272,7 +272,7 @@ describe("bulk preset apply", () => {
       { servers: [t.servers.a] },
     );
     expect(drafted.statusCode).toBe(200);
-    expect(drafted.body).not.toContain("MARKER-bulk-secret-7c");
+    expect(drafted.body).not.toContain("MARKER-bulk-secret-value");
     const item = drafted.json<{ items: DraftItem[] }>().items[0];
     const changeSet = item?.changeSet;
     if (changeSet === null || changeSet === undefined) {
