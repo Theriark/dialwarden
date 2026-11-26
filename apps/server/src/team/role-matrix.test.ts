@@ -1,11 +1,12 @@
 // The role matrix (dev-work-plan P8-A tests; p8-threat-specs A-01 and A-02):
 // every API route, every role. EXPECTED_ACCESS is the reviewable record of
 // who may do what: one policy per route, expanded below into the answer of
-// each principal on demo-a (E writes, V reads) and demo-b (no grant for E,
-// E2 or V). A route missing from the table, or a table row without a route,
-// fails the test. The app runs with the authProbe seam: a request that
-// passes every check answers 299 and its handler never runs, so the matrix
-// changes nothing and needs no valid body.
+// each principal on demo-a (E writes, ER, an editor with a read grant, and
+// V read) and demo-b (no grant for E, ER, E2 or V). A route missing from
+// the table, or a table row without a route, fails the test. The app runs
+// with the authProbe seam: a request that passes every check answers 299
+// and its handler never runs, so the matrix changes nothing and needs no
+// valid body.
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -155,44 +156,48 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "POST /api/v1/notifications/read": "user",
 };
 
-const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
+/** ER is an editor whose grant on demo-a is read only (P10-A G7.1). */
+const PRINCIPALS = ["O", "A", "E", "ER", "E2", "V", "anon"] as const;
 type Who = (typeof PRINCIPALS)[number];
 
 const ALLOWED = 299;
 
-/** The answers of O, A, E, E2, V and anonymous, in that order. */
+/** The answers of O, A, E, ER, E2, V and anonymous, in that order. */
 function expected(policy: Policy, server: "a" | "b"): number[] {
   const ok = ALLOWED;
   const onB = server === "b";
+  const noGrant = [ok, ok, 404, 404, 404, 404, 401];
   switch (policy) {
     case "public":
-      return [ok, ok, ok, ok, ok, ok];
+      return [ok, ok, ok, ok, ok, ok, ok];
     case "setupDone":
-      return [409, 409, 409, 409, 409, 409];
+      return [409, 409, 409, 409, 409, 409, 409];
     case "user":
-      return [ok, ok, ok, ok, ok, 401];
+      return [ok, ok, ok, ok, ok, ok, 401];
     case "editor":
-      return [ok, ok, ok, ok, 403, 401];
+      return [ok, ok, ok, ok, ok, 403, 401];
     case "admin":
-      return [ok, ok, 403, 403, 403, 401];
+      return [ok, ok, 403, 403, 403, 403, 401];
     case "owner":
-      return [ok, 403, 403, 403, 403, 401];
+      return [ok, 403, 403, 403, 403, 403, 401];
     case "serverRead":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, ok, 404, ok, 401];
+      return onB ? noGrant : [ok, ok, ok, ok, 404, ok, 401];
     case "serverWrite":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, ok, 404, 403, 401];
+      return onB ? noGrant : [ok, ok, ok, 403, 404, 403, 401];
     case "serverAdmin":
-      return onB ? [ok, ok, 404, 404, 404, 401] : [ok, ok, 403, 404, 403, 401];
+      return onB ? noGrant : [ok, ok, 403, 403, 404, 403, 401];
     case "serverOwner":
       return onB
-        ? [ok, 403, 404, 404, 404, 401]
-        : [ok, 403, 403, 404, 403, 401];
+        ? [ok, 403, 404, 404, 404, 404, 401]
+        : [ok, 403, 403, 403, 404, 403, 401];
   }
 }
 
 const isServerPolicy = (policy: Policy): boolean => policy.startsWith("server");
 
 let fixture: TeamFixture;
+/** ER: an editor with a read grant on demo-a and none on demo-b. */
+let reader: SignedIn;
 let ids: {
   changeSet: { a: string; b: string };
   snapshot: { a: string; b: string };
@@ -221,6 +226,13 @@ beforeAll(async () => {
   fixture = await teamFixture({ authProbe: true });
   const { app, owner, servers } = fixture;
   const api = apiOf(app, owner);
+  reader = await inviteAndAccept(
+    app,
+    owner,
+    "editor",
+    [{ server: servers.a, level: "read" }],
+    "reader",
+  );
   const onA = await draft(api, servers.a, { [INT_SETTING]: 20 });
   const onB = await draft(api, servers.b, { [INT_SETTING]: 21 });
   const snap = (serverId: string): string => {
@@ -281,6 +293,7 @@ function principal(who: Who): SignedIn | null {
     ["O", fixture.owner],
     ["A", fixture.admin],
     ["E", fixture.editor],
+    ["ER", reader],
     ["E2", fixture.loner],
     ["V", fixture.viewer],
   ]);
