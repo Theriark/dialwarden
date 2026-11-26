@@ -175,13 +175,21 @@ export function nextOccurrence(
 }
 
 /**
- * Checks a cron pattern: croner must read it, it must run again, and two
- * runs must be at least MIN_CRON_GAP_MS apart.
+ * How many next runs the gap check reads: a week of runs at the shortest
+ * gap allowed. Three were not enough (P9 R4): 0,59 0,12,23 * * * keeps an
+ * hour between its next three runs and still runs at 23:59 and 00:00.
+ */
+const CRON_CHECK_RUNS = (7 * 24 * 60 * 60 * 1000) / MIN_CRON_GAP_MS + 1;
+
+/**
+ * Checks a cron pattern: croner must read it, it must run again, and no two
+ * runs of the next week may be less than MIN_CRON_GAP_MS apart (the rule of
+ * the web form, which measures every gap of a day).
  */
 function checkCron(cron: string, timezone: string, now: Date): void {
   let runs: Date[];
   try {
-    runs = patternOf(cron, timezone).nextRuns(3, now);
+    runs = patternOf(cron, timezone).nextRuns(CRON_CHECK_RUNS, now);
   } catch {
     throw invalid("cron", "not a cron pattern");
   }
