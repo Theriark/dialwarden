@@ -6,6 +6,7 @@
 // value check. The Palworld launch file (adapter launch) is the shell-read
 // file here; the settings file (ueini) is a plain one.
 import { afterEach, describe, expect, it } from "vitest";
+import { ConnectorError } from "../connectors/types.js";
 import { changeSets } from "../db/schema.js";
 import type { TestApp } from "../../test/helpers.js";
 import {
@@ -191,5 +192,110 @@ describe("raw patches and shell-read files (H-01 to H-04)", () => {
     const full = await call(t.app, t.admin, "GET", hooksUrl);
     expect(full.statusCode).toBe(200);
     expect(full.json<{ hook: { url: string } }>().hook.url).toBe(proxy.url);
+  });
+
+  // P10-A G3.4: a typed edit of a shell-read value holding a command is
+  // drafted with its lint error and never written.
+  it("G3.4 never writes a command an editor types into a launch value", async () => {
+    const t = await fixture();
+    const before = await fileText(t.servers.rootA, LAUNCH);
+    for (const value of ["Name $(touch /tmp/dw-pwn)", "Name\nrm -rf /"]) {
+      const made = await call(t.app, t.editor, "POST", changesUrl(t), {
+        edits: [{ settingKey: "Launch.ServerName", value }],
+      });
+      if (made.statusCode === 422) {
+        // Refused before any draft: nothing to apply.
+        expect(made.json()).toMatchObject({ error: "invalid_value" });
+        continue;
+      }
+      expect(made.statusCode, JSON.stringify(value)).toBe(201);
+      const draftBody = made.json<{
+        id: string;
+        lint: { severity: string }[];
+      }>();
+      expect(draftBody.lint.some((entry) => entry.severity === "error")).toBe(
+        true,
+      );
+      const url = `/api/v1/change-sets/${draftBody.id}/apply`;
+      const applied = await call(t.app, t.editor, "POST", url, {
+        runHooks: "none",
+      });
+      expect(applied.statusCode).toBe(200);
+      expect(applied.json()).toMatchObject({
+        status: "failed",
+        error: { code: "validation" },
+      });
+    }
+    expect(await fileText(t.servers.rootA, LAUNCH)).toBe(before);
+  });
+
+  // P10-A G3.7: an admin's restore into the launch file that did not end
+  // applied stays the admin's: an editor cannot apply it again.
+  it("G3.7 refuses an editor's apply of an admin's failed launch restore", async () => {
+    const t = await fixture();
+    const snapshot = await beforeSnapshot(t, "launch", { [PLAYERS]: 30 });
+    t.app.ctx.changes.beforeWrite = async () => {
+      throw new ConnectorError("Connection", "simulated drop");
+    };
+    const restore = await call(
+      t.app,
+      t.admin,
+      "POST",
+      `/api/v1/snapshots/${snapshot}/restore`,
+    );
+    t.app.ctx.changes.beforeWrite = null;
+    const rollback = restore.json<{ id: string; status: string }>();
+    expect(rollback.status).toBe("failed");
+    const before = await fileText(t.servers.rootA, LAUNCH);
+    const url = `/api/v1/change-sets/${rollback.id}/apply`;
+    const byEditor = await call(t.app, t.editor, "POST", url, {
+      runHooks: "none",
+    });
+    expect(byEditor.statusCode).toBe(403);
+    expect(byEditor.json()).toEqual({ error: "shell_file_requires_admin" });
+    expect(await fileText(t.servers.rootA, LAUNCH)).toBe(before);
+  });
+
+  // P10-A G4.2: the SSH command of a hook is hidden below admin, like the
+  // proxy URL of H-06.
+  it("G4.2 hides an SSH hook command from editors and viewers", async () => {
+    const t = await fixture();
+    t.app.ctx.servers.insert({
+      id: "sftp-a",
+      name: "SFTP A",
+      packId: "palworld",
+      os: "linux",
+      spec: {
+        kind: "sftp",
+        host: "127.0.0.1",
+        port: 1,
+        username: "game",
+        root: "/srv/game",
+        panel: false,
+      },
+      demo: false,
+    });
+    const command = "systemctl restart palworld --secret-flag";
+    const hooksUrl = "/api/v1/servers/sftp-a/hooks";
+    const set = await call(t.app, t.owner, "PUT", hooksUrl, {
+      hook: { kind: "sshCommand", command },
+    });
+    expect(set.statusCode).toBe(200);
+    for (const [user, level] of [
+      [t.editor, "write"],
+      [t.viewer, "read"],
+    ] as const) {
+      const grants = `/api/v1/users/${user.userId}/grants`;
+      const granted = await call(t.app, t.owner, "PUT", grants, {
+        servers: [{ server: "sftp-a", level }],
+      });
+      expect(granted.statusCode).toBe(200);
+      const view = await call(t.app, user, "GET", hooksUrl);
+      expect(view.statusCode).toBe(200);
+      expect(view.json()).toMatchObject({ hook: { kind: "sshCommand" } });
+      expect(view.body).not.toContain(command);
+    }
+    const full = await call(t.app, t.admin, "GET", hooksUrl);
+    expect(full.json()).toMatchObject({ hook: { command } });
   });
 });
