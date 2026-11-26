@@ -51,6 +51,62 @@ describe("SettingField", () => {
     );
   });
 
+  // phase-report-07 F-P7-2: a warning is told in the warning colour as a
+  // status; the control stays valid. An error keeps the alert.
+  it("renders a warning-severity issue as a status in the warning style", () => {
+    render(
+      <SettingField
+        setting={setting({ removedIn: "3.0" })}
+        value={2}
+        edited={false}
+        issue="Gone in 3.0: the game ignores it."
+        severity="warning"
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const note = screen.getByText("Gone in 3.0: the game ignores it.");
+    expect(note.getAttribute("role")).toBe("status");
+    expect(note.className).toContain("text-warning");
+    expect(screen.queryByRole("alert")).toBeNull();
+    const input = screen.getByLabelText("Exp rate") as HTMLInputElement;
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+    expect(input.getAttribute("aria-describedby")).toBe(
+      "setting-expRate-warning setting-expRate-help",
+    );
+  });
+
+  it("lets a screen word a secret field's help in its own way", () => {
+    render(
+      <SettingField
+        setting={setting({
+          key: "adminPassword",
+          label: "Admin password",
+          type: "string",
+          secret: true,
+        })}
+        value=""
+        edited={false}
+        issue={undefined}
+        secretHelp="Type the secret this run writes."
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    expect(screen.getByText("Type the secret this run writes.")).toBeTruthy();
+    expect(screen.queryByText(/Leave empty to keep/)).toBeNull();
+  });
+
   it("shows the edited marker and Reset hands the key back", () => {
     const onReset = vi.fn();
     render(
