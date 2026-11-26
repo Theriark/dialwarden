@@ -238,3 +238,61 @@ describe("Rust WebRCON client: refusals (simulated)", () => {
     acceptHandshake = true;
   });
 });
+
+// P10-A L5: the console URL is built by the URL parser, so an IPv6 host
+// works and a host that would move the URL is refused before any connection.
+describe("Rust WebRCON client: the console address (simulated)", () => {
+  it("L5 saves through an IPv6 host", async (context) => {
+    const server6 = createServer();
+    server6.on("upgrade", (request, socket, head) => {
+      server.emit("upgrade", request, socket, head);
+    });
+    const listening = await new Promise<boolean>((resolve) => {
+      server6.once("error", () => resolve(false));
+      server6.listen(0, "::1", () => resolve(true));
+    });
+    if (!listening) {
+      // No IPv6 loopback on this machine.
+      context.skip();
+      return;
+    }
+    try {
+      paths = [];
+      frames = [];
+      answerWith = () => "Saved";
+      const control = new RustWebRcon({
+        host: "::1",
+        port: (server6.address() as AddressInfo).port,
+        password: PASSWORD,
+        allow: ALLOW,
+        saveCommand: "server.write",
+        readMs: 2_000,
+      });
+      await control.save?.();
+      expect(paths).toEqual([`/${PASSWORD}`]);
+      expect(frames.map((frame) => frame.Message)).toEqual(["server.write"]);
+    } finally {
+      for (const socket of upgraded) socket.destroy();
+      server6.closeAllConnections();
+      await new Promise<void>((resolve) => server6.close(() => resolve()));
+    }
+  });
+
+  it("L5 refuses a host that would move the URL, with no connection", async () => {
+    paths = [];
+    for (const host of ["evil.example/x?", "a@b", "host:1", "[::1]"]) {
+      const control = new RustWebRcon({
+        host,
+        port,
+        password: PASSWORD,
+        allow: ALLOW,
+        saveCommand: "server.write",
+        connectMs: 500,
+      });
+      await expect(control.save?.(), host).rejects.toMatchObject({
+        code: "Refused",
+      });
+    }
+    expect(paths).toEqual([]);
+  });
+});

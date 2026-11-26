@@ -250,9 +250,64 @@ describe("docker proxy hook: refusals (simulated)", () => {
     "unix:///var/run/docker.sock",
     "http://user@127.0.0.1:2375",
     "http://127.0.0.1:2375/v1.43",
+    // P10-A L6: link-local (cloud metadata), unspecified and multicast.
+    "http://169.254.169.254/",
+    "http://[fe80::1]:2375/",
+    "http://0.0.0.0:2375/",
+    "http://224.0.0.1:2375/",
+    "http://[::ffff:169.254.169.254]/",
   ])("refuses the proxy URL %j at construction", (url) => {
     expect(() => new DockerProxy({ url, containerLabel: LABEL })).toThrow(
       expect.objectContaining({ code: "Refused" }),
     );
+  });
+
+  it("L6 keeps private and loopback proxies usable", () => {
+    for (const url of [
+      "http://10.0.0.8:2375/",
+      "http://127.0.0.1:2375/",
+      "http://[::1]:2375/",
+      "http://socket-proxy:2375/",
+    ]) {
+      expect(
+        () => new DockerProxy({ url, containerLabel: LABEL }),
+      ).not.toThrow();
+    }
+  });
+
+  // P10-A G2.7: a proxy that redirects never moves a request elsewhere.
+  it("G2.7 follows no redirect of the proxy", async () => {
+    const elsewhere: string[] = [];
+    const second = createServer((request, response) => {
+      elsewhere.push(request.url ?? "");
+      response.writeHead(200, { "content-type": "application/json" }).end("[]");
+    });
+    await new Promise<void>((resolve) => {
+      second.listen(0, "127.0.0.1", () => resolve());
+    });
+    const target = `http://127.0.0.1:${(second.address() as AddressInfo).port}`;
+    const redirecting = createServer((request, response) => {
+      response.writeHead(302, { location: `${target}${request.url ?? "/"}` });
+      response.end();
+    });
+    await new Promise<void>((resolve) => {
+      redirecting.listen(0, "127.0.0.1", () => resolve());
+    });
+    try {
+      const where = redirecting.address() as AddressInfo;
+      const proxy = new DockerProxy({
+        url: `http://127.0.0.1:${where.port}`,
+        containerLabel: LABEL,
+        readMs: 2_000,
+      });
+      expect(await proxy.probe()).toEqual({ state: "unknown" });
+      await expect(proxy.restart()).rejects.toMatchObject({
+        code: "Connection",
+      });
+      expect(elsewhere).toEqual([]);
+    } finally {
+      await new Promise<void>((resolve) => redirecting.close(() => resolve()));
+      await new Promise<void>((resolve) => second.close(() => resolve()));
+    }
   });
 });
