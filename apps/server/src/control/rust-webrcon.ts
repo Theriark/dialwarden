@@ -230,7 +230,17 @@ export class RustWebRcon implements GameControl {
         "the web console address is not usable",
       );
     }
-    url.pathname = `/${encodeURIComponent(password)}`;
+    try {
+      url.pathname = `/${encodeURIComponent(password)}`;
+    } catch (error) {
+      // A lone surrogate cannot be encoded (URIError): refused like a bad
+      // address, so it answers control_error, never a 500 (P10-B N4).
+      throw new ControlError(
+        "Refused",
+        "the web console password is not usable",
+        error,
+      );
+    }
     return url;
   }
 

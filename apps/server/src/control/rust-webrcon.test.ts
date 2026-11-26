@@ -295,4 +295,23 @@ describe("Rust WebRCON client: the console address (simulated)", () => {
     }
     expect(paths).toEqual([]);
   });
+
+  // P10-B N4: a password the URL cannot encode is a ControlError (so the
+  // route answers control_error), never a URIError that becomes a 500.
+  it("N4 refuses a password with a lone surrogate, with no connection", async () => {
+    paths = [];
+    const control = new RustWebRcon({
+      host: "127.0.0.1",
+      port,
+      password: "pass\uD800word",
+      allow: ALLOW,
+      saveCommand: "server.write",
+      connectMs: 500,
+    });
+    await expect(control.save?.()).rejects.toMatchObject({
+      name: "ControlError",
+      code: "Refused",
+    });
+    expect(paths).toEqual([]);
+  });
 });
