@@ -12,6 +12,7 @@ import { readCapped } from "./http.js";
 import {
   ControlError,
   LIMITS,
+  usableHost,
   type ControlTimeouts,
   type GameControl,
   type ProbeResult,
@@ -59,6 +60,9 @@ export class DockerProxy implements GameControl {
 
   constructor(options: DockerProxyOptions) {
     const url = URL.parse(options.url);
+    // The host as an address or a name, without the brackets of IPv6; a
+    // link-local or metadata address is refused like a bad URL (P10-A L6).
+    const host = url?.hostname.replace(/^\[(.*)\]$/, "$1") ?? "";
     if (
       url === null ||
       (url.protocol !== "http:" && url.protocol !== "https:") ||
@@ -66,7 +70,8 @@ export class DockerProxy implements GameControl {
       url.password !== "" ||
       url.search !== "" ||
       url.hash !== "" ||
-      url.pathname !== "/"
+      url.pathname !== "/" ||
+      !usableHost(host)
     ) {
       throw new ControlError("Refused", "the proxy URL is not usable");
     }

@@ -11,6 +11,7 @@
 // throw ControlError; authentication failures are configuration blockers and
 // are never retried (the caller shows them as such).
 import { isIP } from "node:net";
+import ipaddr from "ipaddr.js";
 import type { JsonValue } from "@dialwarden/packs-schema";
 
 /** The six control kinds of contract C7. */
@@ -132,13 +133,45 @@ export type AllowList = readonly string[];
 const HOST_LABEL = /^[A-Za-z0-9-]{1,63}$/;
 
 /**
+ * Address ranges no control client reaches (P10-A L6): link-local (where
+ * cloud metadata services answer), unspecified, multicast and broadcast.
+ * Private and loopback addresses stay usable: game servers live there.
+ */
+const REFUSED_RANGES = new Set([
+  "unspecified",
+  "linkLocal",
+  "multicast",
+  "broadcast",
+]);
+
+/** True when an IP address literal is outside REFUSED_RANGES. */
+function usableAddress(value: string): boolean {
+  const bare = value.split("%")[0] ?? "";
+  if (!ipaddr.isValid(bare)) return false;
+  let address = ipaddr.parse(bare);
+  if (address.kind() === "ipv6") {
+    const v6 = address as ipaddr.IPv6;
+    const [a, b, c, d, e, f, high = 0, low = 0] = v6.parts;
+    const compatible =
+      [a, b, c, d, e, f].every((part) => part === 0) && (high !== 0 || low > 1);
+    if (v6.isIPv4MappedAddress()) address = v6.toIPv4Address();
+    else if (compatible) {
+      const bytes = [high >> 8, high & 0xff, low >> 8, low & 0xff];
+      address = ipaddr.IPv4.parse(bytes.join("."));
+    }
+  }
+  return !REFUSED_RANGES.has(address.range());
+}
+
+/**
  * A control host: an IP address or a DNS name, nothing else (no scheme,
  * port, user, brackets or path), the rule the SFTP connector applies
  * (routes/connectors.ts isHost). A host like evil.example/x? would otherwise
- * move a request, credentials included, to another address.
+ * move a request, credentials included, to another address. An address in
+ * a refused range (link-local, metadata) is not usable either (P10-A L6).
  */
 export function usableHost(value: string): boolean {
-  if (isIP(value) !== 0) return true;
+  if (isIP(value) !== 0) return usableAddress(value);
   if (value === "" || value.length > 253) return false;
   return value
     .split(".")
