@@ -364,8 +364,9 @@ test("notifications: channels, a masked secret kept through an edit, the send te
   form = page.getByRole("form", { name: "New channel" });
   await form.getByLabel("Name").fill("Ops hook");
   await form.getByRole("radio", { name: /^Webhook/ }).check();
+  // The Discord radio's own name holds "webhook address", so by the role.
   await form
-    .getByLabel("Webhook address")
+    .getByRole("textbox", { name: "Webhook address" })
     .fill("https://hooks.example.invalid/dialwarden");
   await form.getByLabel("Signing secret").fill("0123456789abcdef0123");
   await form.getByRole("button", { name: "Create channel" }).click();
@@ -381,8 +382,11 @@ test("notifications: channels, a masked secret kept through an edit, the send te
   // with both untouched keeps them.
   await hook.getByRole("button", { name: "Edit" }).click();
   const edit = page.getByRole("form", { name: "Edit channel" });
-  await expect(edit.getByLabel("Webhook address")).toHaveValue(/\*\*\*$/);
-  await expect(edit.getByLabel("Signing secret")).toHaveAttribute(
+  await expect(
+    edit.getByRole("textbox", { name: "Webhook address" }),
+  ).toHaveValue(/\*\*\*$/);
+  // The "Remove the stored signing secret" box shares the words: by id.
+  await expect(edit.locator("#channel-signing-secret")).toHaveAttribute(
     "placeholder",
     "Stored; leave empty to keep it",
   );
