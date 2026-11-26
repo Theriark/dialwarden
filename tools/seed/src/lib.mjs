@@ -32,7 +32,8 @@
 // pair; the crew never holds the owner password and adds team accounts in
 // the browser instead. --team also makes the in-app notification channel
 // when the instance has none (phase-report-09 G3), so the bell is not
-// empty; on Free that step is skipped and said so.
+// empty. Invitations and channels are Paid: on Free --team stops at the
+// first invitation (402, exit 1) and the channel step answers skipped.
 import { execFile } from "node:child_process";
 import { randomInt } from "node:crypto";
 import { parseArgs } from "node:util";
