@@ -357,6 +357,72 @@ function stubWorld(who: SignedIn, extra?: Handler) {
   });
 }
 
+/** One pending change set, and a stop hook the server can run. */
+function pendingWorld(access: "read" | "write"): Handler {
+  return ([method, path]) => {
+    if (method === "GET" && path === "/api/v1/servers/home") {
+      return { status: 200, body: { ...SERVER, access } };
+    }
+    if (method === "GET" && path === "/api/v1/servers/home/pending") {
+      return {
+        status: 200,
+        body: {
+          items: [
+            {
+              id: "cs-pending",
+              serverId: "home",
+              status: "pending",
+              cause: "app",
+              author: "editor@example.test",
+              createdAt: "2026-11-24T12:00:00Z",
+              updatedAt: "2026-11-24T12:00:00Z",
+              appliedAt: null,
+              restoreOf: null,
+              diff: {
+                semantic: [
+                  {
+                    kind: "changed",
+                    fileId: "launch",
+                    settingKey: "Launch.Port",
+                    label: "Port",
+                    from: 8211,
+                    to: 8212,
+                    restartRequired: true,
+                  },
+                ],
+                text: [],
+              },
+              lint: [],
+              conflict: null,
+              error: null,
+            },
+          ],
+        },
+      };
+    }
+    if (method === "GET" && path === "/api/v1/servers/home/hooks") {
+      return {
+        status: 200,
+        body: {
+          packId: "testpack",
+          hooksSupported: ["stop"],
+          hook: null,
+          probes: [],
+          available: {
+            save: null,
+            stop: "dockerProxy",
+            start: null,
+            restart: null,
+          },
+          updatedAt: null,
+          updatedBy: null,
+        },
+      };
+    }
+    return undefined;
+  };
+}
+
 describe("ServerHistoryPage", () => {
   it("shows a viewer the timeline with the read-only sentence and no restore control (F1)", async () => {
     stubViewport(1280);
@@ -414,6 +480,34 @@ describe("ServerHistoryPage", () => {
     expect(
       screen.queryByRole("button", { name: "Restore this version" }),
     ).toBeNull();
+  });
+
+  // P10-B2 review L1 and test check G2: the stop button of the pending list
+  // follows the grant too, with its own reason.
+  it("keeps the pending-list stop off for an editor with a read grant (L22)", async () => {
+    stubViewport(1280);
+    stubWorld(session("editor"), pendingWorld("read"));
+    startRouter("/servers/home/history");
+    await screen.findByText("Waiting for the server to stop");
+    const stop = screen.getByRole("button", {
+      name: "Stop the server now",
+    }) as HTMLButtonElement;
+    expect(stop.disabled).toBe(true);
+    expect(stop.getAttribute("title")).toBe(
+      "Running a hook needs write access to this server",
+    );
+  });
+
+  it("offers the pending-list stop to an editor with a write grant", async () => {
+    stubViewport(1280);
+    stubWorld(session("editor"), pendingWorld("write"));
+    startRouter("/servers/home/history");
+    await screen.findByText("Waiting for the server to stop");
+    const stop = screen.getByRole("button", {
+      name: "Stop the server now",
+    }) as HTMLButtonElement;
+    expect(stop.disabled).toBe(false);
+    expect(stop.getAttribute("title")).toBeNull();
   });
 
   it("lets the owner restore every version", async () => {
