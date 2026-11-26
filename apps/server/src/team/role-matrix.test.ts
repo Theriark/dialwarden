@@ -33,6 +33,7 @@ type Policy =
   | "public"
   | "setupDone"
   | "user"
+  | "editor"
   | "admin"
   | "owner"
   | "serverRead"
@@ -127,6 +128,21 @@ const EXPECTED_ACCESS: Readonly<Record<string, Policy>> = {
   "GET /api/v1/tokens": "user",
   "POST /api/v1/tokens": "user",
   "DELETE /api/v1/tokens/:id": "user",
+  // The Paid fleet layer (P9-A). A bulk preset apply checks each server's
+  // grant in its items, so the route itself needs an editor or more.
+  "POST /api/v1/presets/:id/bulk-drafts": "editor",
+  "POST /api/v1/presets/bulk-apply": "editor",
+  "GET /api/v1/schedules": "user",
+  "POST /api/v1/schedules": "serverWrite",
+  "GET /api/v1/schedules/:id": "serverRead",
+  "DELETE /api/v1/schedules/:id": "serverWrite",
+  "GET /api/v1/drift": "user",
+  "PUT /api/v1/servers/:slug/drift": "serverAdmin",
+  "POST /api/v1/servers/:slug/drift/check": "serverRead",
+  "GET /api/v1/fleet/matrix": "user",
+  "GET /api/v1/reports/changes": "user",
+  "GET /api/v1/reports/changes/print": "user",
+  "POST /api/v1/system/demo-drift/run": "owner",
 };
 
 const PRINCIPALS = ["O", "A", "E", "E2", "V", "anon"] as const;
@@ -145,6 +161,8 @@ function expected(policy: Policy, server: "a" | "b"): number[] {
       return [409, 409, 409, 409, 409, 409];
     case "user":
       return [ok, ok, ok, ok, ok, 401];
+    case "editor":
+      return [ok, ok, ok, ok, 403, 401];
     case "admin":
       return [ok, ok, 403, 403, 403, 401];
     case "owner":
@@ -168,8 +186,26 @@ let fixture: TeamFixture;
 let ids: {
   changeSet: { a: string; b: string };
   snapshot: { a: string; b: string };
+  schedule: { a: string; b: string };
   preset: string;
 };
+
+/** A run-at schedule on a server, made by the owner; its id. */
+async function scheduleOn(
+  api: ReturnType<typeof apiOf>,
+  server: string,
+): Promise<string> {
+  const response = await api.post("/api/v1/schedules", {
+    server,
+    name: "matrix",
+    edits: [{ settingKey: INT_SETTING, value: 30 }],
+    runAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  if (response.statusCode !== 201) {
+    throw new Error(`schedule: ${response.statusCode} ${response.body}`);
+  }
+  return response.json<{ id: string }>().id;
+}
 
 beforeAll(async () => {
   fixture = await teamFixture({ authProbe: true });
@@ -192,6 +228,10 @@ beforeAll(async () => {
   ids = {
     changeSet: { a: onA.id, b: onB.id },
     snapshot: { a: snap(servers.a), b: snap(servers.b) },
+    schedule: {
+      a: await scheduleOn(api, servers.a),
+      b: await scheduleOn(api, servers.b),
+    },
     preset: preset.json<{ id: string }>().id,
   };
 });
@@ -206,6 +246,7 @@ function concrete(url: string, server: "a" | "b") {
   const slug = onA ? fixture.servers.a : fixture.servers.b;
   const changeSet = onA ? ids.changeSet.a : ids.changeSet.b;
   const snapshot = onA ? ids.snapshot.a : ids.snapshot.b;
+  const schedule = onA ? ids.schedule.a : ids.schedule.b;
   const path = url
     .replace(":slug", slug)
     .replace(":fileId", "settings")
@@ -216,8 +257,11 @@ function concrete(url: string, server: "a" | "b") {
     .replace("/tokens/:id", `/tokens/${randomUUID()}`)
     .replace("/presets/:id", `/presets/${ids.preset}`)
     .replace("/change-sets/:id", `/change-sets/${changeSet}`)
-    .replace("/snapshots/:id", `/snapshots/${snapshot}`);
-  const body = url.endsWith("/presets/:id/apply") ? { server: slug } : {};
+    .replace("/snapshots/:id", `/snapshots/${snapshot}`)
+    .replace("/schedules/:id", `/schedules/${schedule}`);
+  const onBody =
+    url.endsWith("/presets/:id/apply") || url === "/api/v1/schedules";
+  const body = onBody ? { server: slug } : {};
   return { path, body };
 }
 
@@ -291,6 +335,9 @@ describe("role matrix (A-01, A-02)", () => {
       "POST /api/v1/change-sets/:id/apply",
       "POST /api/v1/snapshots/:id/restore",
       "POST /api/v1/presets/:id/apply",
+      "POST /api/v1/schedules",
+      "GET /api/v1/schedules/:id",
+      "DELETE /api/v1/schedules/:id",
     ];
     for (const key of scoped) {
       const route = fixture.app.ctx.routes.find(
@@ -476,6 +523,8 @@ describe("privilege escalation (A-03 to A-18)", () => {
       "users",
       "invitations",
       "api_tokens",
+      "schedules",
+      "drift_checks",
     ];
     const counts = (): Record<string, number> =>
       Object.fromEntries(
