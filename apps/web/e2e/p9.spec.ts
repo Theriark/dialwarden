@@ -285,8 +285,10 @@ test("drift: the background check finds an outside edit, on the card, the fleet 
   await card.getByRole("button", { name: "Check now" }).click();
   await expect(page.getByText("Checked: clean").first()).toBeVisible();
 
-  // The timer goes on, every five minutes.
-  await card.getByRole("switch", { name: "Check on a timer" }).click();
+  // The timer is on by default (the server's first row says so, every 15
+  // minutes); it goes to every five minutes.
+  const timer = card.getByRole("switch", { name: "Check on a timer" });
+  await expect(timer).toBeChecked();
   await card.getByLabel("Every (minutes)").fill("5");
   await card.getByRole("button", { name: "Save drift settings" }).click();
   await expect(
@@ -331,7 +333,9 @@ test("drift: the background check finds an outside edit, on the card, the fleet 
 
   // The timer goes off again, so nothing runs behind the later walks.
   await page.goto("/servers/palworld-home/history");
-  await card.getByRole("switch", { name: "Check on a timer" }).click();
+  await expect(timer).toBeChecked();
+  await timer.click();
+  await expect(timer).not.toBeChecked();
   await card.getByRole("button", { name: "Save drift settings" }).click();
   await expect(page.getByText("Background check off").first()).toBeVisible();
 });
