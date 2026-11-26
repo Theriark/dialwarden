@@ -921,6 +921,33 @@ describe("history limits (contract C1)", () => {
     expect(await settingsText(root)).toBe(before);
   });
 
+  // P10-B N1: snapshot retention keeps no snapshot of a failed rollback,
+  // but its payload still holds the bytes: the check then falls back on
+  // the rollback entry itself, so a hidden one still answers 402 on Free.
+  it("N1 refuses a hidden failed rollback whose snapshot was pruned", async () => {
+    const { app, api, root, slug } = await palworld();
+    const made = await bothFiles(api, slug);
+    const ids = await beforeSnapshots(api, slug, made.id);
+    app.ctx.changes.beforeWrite = async () => {
+      throw new ConnectorError("Connection", "simulated drop");
+    };
+    const rollback = await restoreSnapshot(api, ids.settings);
+    app.ctx.changes.beforeWrite = null;
+    const failed = rollback.json<ChangeSetBody>();
+    expect(failed.status).toBe("failed");
+    for (const rate of [3, 4, 5, 6, 7]) {
+      await change(api, slug, { ExpRate: rate });
+    }
+    app.ctx.store.sqlite
+      .prepare("DELETE FROM snapshots WHERE id = ?")
+      .run(ids.settings);
+    const before = await settingsText(root);
+    const again = await api.post(`/api/v1/change-sets/${failed.id}/apply`);
+    expect(again.statusCode).toBe(402);
+    expect(again.json()).toMatchObject({ limit: "historyVisible", max: 5 });
+    expect(await settingsText(root)).toBe(before);
+  });
+
   it("F10 adds no history entry for a restore that writes nothing", async () => {
     const { api, slug } = await palworld();
     const made = await bothFiles(api, slug);
