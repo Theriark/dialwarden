@@ -346,7 +346,8 @@ describe("raw patches and shell-read files (H-01 to H-04)", () => {
 
   // P10-A L7: a sourced LinuxGSM cfg (adapter shellvar) is read by bash, so
   // an admin's raw patch that puts a command in it is linted like a typed
-  // edit and never written: an earlier duplicate and a lone CR included.
+  // edit and never written: an earlier duplicate, a lone CR, and a form
+  // feed, vertical tab or BOM before a # included.
   it("L7 never writes an admin raw patch with a command into a shellvar file", async () => {
     const base = await tempDir("dialwarden-shellvar-");
     try {
@@ -370,6 +371,9 @@ describe("raw patches and shell-read files (H-01 to H-04)", () => {
         `servername="$(touch /tmp/dw-pwn)"\nport="2456"\n`,
         `servername="$(touch /tmp/dw-pwn)"\nservername=x\nport="2456"\n`,
         `servername=a\r touch /tmp/dw-pwn\nport="2456"\n`,
+        `servername=a\n\f#;touch /tmp/dw-pwn\nport="2456"\n`,
+        `servername=a\n\v#;touch /tmp/dw-pwn\nport="2456"\n`,
+        `\u{FEFF}#;touch /tmp/dw-pwn\nservername=a\nport="2456"\n`,
       ];
       for (const text of patches) {
         const made = await call(current.app, admin, "POST", url, {

@@ -236,6 +236,19 @@ describe("lintFile", () => {
     expect(loneCr).toContainEqual(
       expect.objectContaining({ severity: "error", line: 1 }),
     );
+    // A form feed, a vertical tab or a BOM is a word byte to the shell, so a
+    // # after one starts no comment.
+    const bom = String.fromCharCode(0xfeff);
+    for (const text of [
+      "servername=a\n\f#;touch /tmp/x\n",
+      "servername=a\n\v#;touch /tmp/x\n",
+      `${bom}#;touch /tmp/x\nservername=a\n`,
+    ]) {
+      const issues = lintFile(shellvar, "lgsm", bytes(text));
+      expect(issues, JSON.stringify(text)).toContainEqual(
+        expect.objectContaining({ severity: "error" }),
+      );
+    }
     const crlf = lintFile(
       shellvar,
       "lgsm",
