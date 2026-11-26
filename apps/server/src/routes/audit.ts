@@ -6,6 +6,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { auditCsv } from "../audit/csv.js";
 import { IP_MODES } from "../audit/ip.js";
+import { ApiError } from "../http/errors.js";
 import type { ZodTypeProvider } from "../http/zod.js";
 
 const filterSchema = z.object({
@@ -45,6 +46,17 @@ export const auditSettingsSchema = z.object({
   ipMode: z.enum(IP_MODES),
   retentionDays: z.number().int().min(1).max(3650).nullable(),
 });
+
+/**
+ * True when a retention change keeps the log for less time than now: from
+ * forever (null) to any number of days, or to fewer days.
+ */
+export function shortensRetention(
+  current: number | null,
+  next: number | null,
+): boolean {
+  return next !== null && (current === null || next < current);
+}
 
 /** The filters without the fields left out (exactOptionalPropertyTypes). */
 function filtersOf(query: z.infer<typeof filterSchema>) {
@@ -133,6 +145,15 @@ export function auditRoutes(app: FastifyInstance): void {
     },
     async (request) => {
       const { ipMode, retentionDays } = request.body;
+      // Only the owner shortens the retention (P10-A L24): an admin cannot
+      // purge the trail of their own actions; raising it stays open to admins.
+      const current = app.ctx.audit.settingsOf().retentionDays;
+      const shorter =
+        retentionDays !== undefined &&
+        shortensRetention(current, retentionDays);
+      if (shorter && request.principal?.role !== "owner") {
+        throw new ApiError(403, "forbidden");
+      }
       return app.ctx.audit.setSettings({
         ...(ipMode === undefined ? {} : { ipMode }),
         ...(retentionDays === undefined ? {} : { retentionDays }),

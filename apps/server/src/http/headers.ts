@@ -4,8 +4,10 @@
 // no nonce, so the page stays the same bytes with a stable ETag. Every other
 // answer (API, health, assets, 404) gets a policy that allows nothing, and an
 // answer under /api/ is never stored unless its route says otherwise.
-// No Strict-Transport-Security: the app runs on plain http on a LAN as often
-// as behind TLS, so HSTS belongs to the proxy that terminates TLS.
+// Strict-Transport-Security only when BASE_URL starts with https (P10-A
+// L19): then the app knows it is reached over TLS. On plain http on a LAN
+// the header would be wrong, so without an https BASE_URL it stays off and
+// HSTS is left to the proxy that terminates TLS.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
 const PERMISSIONS = [
@@ -24,6 +26,9 @@ const COMMON_HEADERS = new Map([
   ["x-robots-tag", "noindex, nofollow"],
   ["permissions-policy", PERMISSIONS],
 ]);
+
+/** One year; no includeSubDomains, the app knows only its own host. */
+export const HSTS = "max-age=31536000";
 
 /** Every answer that is not HTML loads nothing and is never framed. */
 const LOCKED = "default-src 'none'; frame-ancestors 'none'";
@@ -64,12 +69,15 @@ function isApi(request: FastifyRequest): boolean {
 export function registerSecurityHeaders(
   app: FastifyInstance,
   scriptHashes: readonly string[],
+  baseUrl: string | null = null,
 ): void {
   const pagePolicy = htmlPolicy(scriptHashes);
+  const hsts = baseUrl?.startsWith("https://") === true;
   app.addHook("onSend", async (request, reply, payload) => {
     for (const [name, value] of COMMON_HEADERS) {
       void reply.header(name, value);
     }
+    if (hsts) void reply.header("strict-transport-security", HSTS);
     const type = reply.getHeader("content-type");
     if (typeof type === "string" && type.startsWith("text/html")) {
       void reply.header("content-security-policy", pagePolicy);
