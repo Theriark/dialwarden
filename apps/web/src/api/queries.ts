@@ -11,19 +11,26 @@ import type {
   AuditVerify,
   BackupList,
   ChangeSet,
+  ChannelList,
+  DriftList,
   EditableServers,
   Entitlement,
   GameList,
   Health,
   History,
   HooksView,
+  InboxPage,
   InstanceKey,
   InvitationList,
+  Matrix,
   OidcStatus,
   OidcView,
   PendingList,
   RawFile,
   Registry,
+  Report,
+  ReportSelection,
+  ScheduleList,
   Server,
   ServerList,
   ServerSettings,
@@ -294,6 +301,11 @@ export const PLAN_DEPENDENT_KEYS: readonly (readonly string[])[] = [
   p8keys.tokens,
   ["oidc"],
   ["servers"],
+  ["schedules"],
+  ["drift"],
+  ["matrix"],
+  ["reports"],
+  ["notifications"],
 ];
 
 /**
@@ -404,5 +416,129 @@ export const oidcStatusQuery = () =>
     queryKey: p8keys.oidcStatus,
     queryFn: () => api<OidcStatus>("/api/v1/auth/oidc"),
     staleTime: 60_000,
+    retry: false,
+  });
+
+// ---- P9: the Paid fleet layer (schedules, drift.background, fleet.matrix, ----
+// ---- reports and notifications, contract C1). Every answer here is 402 on ----
+// ---- Free, so nothing retries and the pages render the upgrade hint.      ----
+
+export const p9keys = {
+  schedules: (server: string | null) =>
+    ["schedules", "list", server ?? "all"] as const,
+  drift: ["drift"] as const,
+  matrix: (game: string, group: string | null, servers: readonly string[]) =>
+    ["matrix", game, group ?? "", servers.join(",")] as const,
+  report: (selection: ReportSelection) => ["reports", selection] as const,
+  channels: ["notifications", "channels"] as const,
+  inbox: ["notifications", "inbox"] as const,
+};
+
+/** The schedules of the servers the user may see, or of one server. */
+export const schedulesQuery = (server: string | null = null) =>
+  queryOptions({
+    queryKey: p9keys.schedules(server),
+    queryFn: () =>
+      api<ScheduleList>(
+        server === null
+          ? "/api/v1/schedules"
+          : `/api/v1/schedules?server=${encodeURIComponent(server)}`,
+      ),
+    staleTime: 15_000,
+    retry: false,
+  });
+
+/** The background drift checks of the visible servers. */
+export const driftQuery = () =>
+  queryOptions({
+    queryKey: p9keys.drift,
+    queryFn: () => api<DriftList>("/api/v1/drift"),
+    staleTime: 15_000,
+    retry: false,
+  });
+
+/** The query string of GET /api/v1/fleet/matrix. */
+export function matrixSearch(
+  game: string,
+  group: string | null,
+  servers: readonly string[],
+): string {
+  const search = new URLSearchParams({ game });
+  if (group !== null && group !== "") {
+    search.set("group", group);
+  }
+  if (servers.length > 0) {
+    search.set("servers", servers.join(","));
+  }
+  return search.toString();
+}
+
+/** The settings of one game by its servers; empty servers means every one. */
+export const matrixQuery = (
+  game: string,
+  group: string | null,
+  servers: readonly string[],
+) =>
+  queryOptions({
+    queryKey: p9keys.matrix(game, group, servers),
+    queryFn: () =>
+      api<Matrix>(`/api/v1/fleet/matrix?${matrixSearch(game, group, servers)}`),
+    staleTime: 15_000,
+    retry: false,
+  });
+
+/** The query string both report routes take. */
+export function reportSearch(selection: ReportSelection): string {
+  const search = new URLSearchParams();
+  if (selection.changeSets !== undefined && selection.changeSets.length > 0) {
+    search.set("changeSets", selection.changeSets.join(","));
+  }
+  if (selection.from !== undefined && selection.from !== "") {
+    search.set("from", selection.from);
+  }
+  if (selection.to !== undefined && selection.to !== "") {
+    search.set("to", selection.to);
+  }
+  if (selection.servers !== undefined && selection.servers.length > 0) {
+    search.set("servers", selection.servers.join(","));
+  }
+  return search.toString();
+}
+
+/** The HTML print view of a report (opened in a new tab). */
+export function reportPrintUrl(selection: ReportSelection): string {
+  const search = reportSearch(selection);
+  return `/api/v1/reports/changes/print${search === "" ? "" : `?${search}`}`;
+}
+
+/** The report data with its Markdown and Discord texts. */
+export const reportQuery = (selection: ReportSelection) =>
+  queryOptions({
+    queryKey: p9keys.report(selection),
+    queryFn: () => {
+      const search = reportSearch(selection);
+      return api<Report>(
+        `/api/v1/reports/changes${search === "" ? "" : `?${search}`}`,
+      );
+    },
+    staleTime: 0,
+    retry: false,
+  });
+
+/** The notification channels (owner and admin). */
+export const channelsQuery = () =>
+  queryOptions({
+    queryKey: p9keys.channels,
+    queryFn: () => api<ChannelList>("/api/v1/notifications/channels"),
+    staleTime: 15_000,
+    retry: false,
+  });
+
+/** The first page of the in-app notifications and the unread count. */
+export const inboxQuery = () =>
+  queryOptions({
+    queryKey: p9keys.inbox,
+    queryFn: () => api<InboxPage>("/api/v1/notifications?limit=50"),
+    staleTime: 30_000,
     retry: false,
   });

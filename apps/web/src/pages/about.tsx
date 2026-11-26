@@ -2,9 +2,18 @@
 // list from the registry, the licence words, the outbound connections list
 // and the not-affiliated notice (dev-work-plan P1-B, legal-input-1 rule 4).
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Check, Minus } from "lucide-react";
-import { entitlementQuery, healthQuery, registryQuery } from "../api/queries";
+import {
+  channelsQuery,
+  entitlementQuery,
+  healthQuery,
+  registryQuery,
+} from "../api/queries";
 import { errorMessage } from "../api/errors";
+import type { ChannelView } from "../api/schema";
+import { useCanManageUsers } from "../api/session";
+import { KIND_WORDS } from "../components/channel-form";
 import { PageHeader } from "../components/layout/page-header";
 import { Badge } from "../components/ui/badge";
 import { Card, Fact } from "../components/ui/card";
@@ -153,6 +162,83 @@ function PlansCard() {
   );
 }
 
+/** The host a channel talks to; the in-app channel talks to nobody. */
+export function outboundHost(channel: ChannelView): string | null {
+  const settings = channel.settings;
+  switch (settings.kind) {
+    case "webhook":
+    case "discord":
+      return settings.host;
+    case "smtp":
+      return `${settings.host}:${settings.port}`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The outbound list (P9-B follow-up): the hosts of the configured
+ * notification channels, read by the owner and admins; everyone else, and a
+ * Free instance (402), sees the no-outbound sentence, which is then true.
+ */
+function OutboundCard() {
+  const canManage = useCanManageUsers();
+  const channels = useQuery({ ...channelsQuery(), enabled: canManage });
+  const outbound = (channels.data?.items ?? [])
+    .map((channel) => ({ channel, host: outboundHost(channel) }))
+    .filter(
+      (item): item is { channel: ChannelView; host: string } =>
+        item.host !== null,
+    );
+  return (
+    <Card
+      title="Outbound connections"
+      description="Everything this instance may talk to. Nothing is on by default."
+    >
+      {outbound.length === 0 ? (
+        <ul className="text-sm text-fg">
+          <li className="flex items-center gap-2">
+            <Badge kind="neutral">none</Badge>
+            {NO_OUTBOUND}
+          </li>
+        </ul>
+      ) : (
+        <ul className="flex flex-col gap-2 text-sm text-fg">
+          {outbound.map(({ channel, host }) => {
+            const { Icon, word } = KIND_WORDS[channel.kind];
+            return (
+              <li
+                key={channel.id}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <Badge kind="info" icon={<Icon className="size-3.5" />}>
+                  {word}
+                </Badge>
+                <span className="font-medium">{channel.name}</span>
+                <span className="font-mono text-xs text-fg-muted">{host}</span>
+                {channel.enabled ? null : (
+                  <span className="text-xs text-fg-muted">(off)</span>
+                )}
+              </li>
+            );
+          })}
+          <li className="text-xs text-fg-muted">
+            Only these notification channels; there is no telemetry and no
+            update check. Set up on the{" "}
+            <Link
+              to="/settings/notifications"
+              className="font-medium text-primary hover:underline"
+            >
+              Notifications page
+            </Link>
+            .
+          </li>
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export function AboutPage() {
   return (
     <>
@@ -167,17 +253,7 @@ export function AboutPage() {
           <p className="text-sm text-fg">{SOURCE_AVAILABLE}</p>
           <p className="text-sm text-fg">{NOT_AFFILIATED}</p>
         </Card>
-        <Card
-          title="Outbound connections"
-          description="Everything this instance may talk to. Nothing is on by default."
-        >
-          <ul className="text-sm text-fg">
-            <li className="flex items-center gap-2">
-              <Badge kind="neutral">none</Badge>
-              {NO_OUTBOUND}
-            </li>
-          </ul>
-        </Card>
+        <OutboundCard />
       </div>
     </>
   );

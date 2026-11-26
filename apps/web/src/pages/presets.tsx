@@ -6,7 +6,7 @@
 // page is built against the contract Delivery hands the small Backend task,
 // and while the server answers 404 it shows its designed state.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, Trash2 } from "lucide-react";
+import { Layers, Plus, Server as ServerIcon, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { applyPreset, createPreset, deletePreset } from "../api/changes";
 import { ApiError } from "../api/client";
@@ -18,8 +18,14 @@ import {
   serversQuery,
   settingsMetaQuery,
 } from "../api/queries";
-import type { ChangeSet, PaymentRequiredBody, UserPreset } from "../api/schema";
-import { useIsOwner } from "../api/session";
+import type {
+  ChangeSet,
+  PaymentRequiredBody,
+  Server,
+  UserPreset,
+} from "../api/schema";
+import { useIsOwner, useSessionUser } from "../api/session";
+import { BulkApplyWizard } from "../components/bulk-apply-wizard";
 import { PageHeader } from "../components/layout/page-header";
 import { SaveDialog } from "../components/save-dialog";
 import { UpgradeHint } from "../components/upgrade-hint";
@@ -33,16 +39,27 @@ import { useToast } from "../components/ui/toast";
 import { formatDate } from "../lib/format";
 import type { PackFile, Setting } from "@dialwarden/packs-schema";
 
+/**
+ * The roles that may apply a preset to many servers at once (the bulk
+ * routes need the editor role or more; each server is then checked against
+ * the caller's grants by the server).
+ */
+export const BULK_ROLES: readonly string[] = ["owner", "admin", "editor"];
+
 function PresetCard({
   preset,
   servers,
+  canBulk,
   onApply,
+  onBulk,
   onDelete,
   deleting,
 }: {
   preset: UserPreset;
   servers: readonly { id: string; name: string; packId: string }[];
+  canBulk: boolean;
   onApply: (preset: UserPreset, server: string) => void;
+  onBulk: (preset: UserPreset) => void;
   onDelete: (preset: UserPreset) => void;
   deleting: boolean;
 }) {
@@ -90,6 +107,16 @@ function PresetCard({
             >
               Apply with diff
             </Button>
+            {canBulk ? (
+              <Button
+                icon={<ServerIcon className="size-4" aria-hidden="true" />}
+                onClick={() => {
+                  onBulk(preset);
+                }}
+              >
+                Apply to many servers
+              </Button>
+            ) : null}
           </>
         )}
         <Button
@@ -109,12 +136,15 @@ function PresetCard({
 
 export function PresetsPage() {
   const isOwner = useIsOwner();
+  const user = useSessionUser();
+  const canBulk = user !== null && BULK_ROLES.includes(user.role);
   const client = useQueryClient();
   const toast = useToast();
   const presets = useQuery(presetsQuery());
   const servers = useQuery(serversQuery());
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [bulkPreset, setBulkPreset] = useState<UserPreset | null>(null);
   const [presetServer, setPresetServer] = useState("");
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
@@ -368,14 +398,27 @@ export function PresetsPage() {
               key={preset.id}
               preset={preset}
               servers={ownerServers}
+              canBulk={canBulk}
               onApply={(item, server) => {
                 apply.mutate({ preset: item, server });
               }}
+              onBulk={setBulkPreset}
               onDelete={setRemoving}
               deleting={remove.isPending}
             />
           ))}
         </div>
+      )}
+      {bulkPreset === null ? null : (
+        <BulkApplyWizard
+          preset={bulkPreset}
+          servers={items.filter(
+            (server: Server) => server.packId === bulkPreset.packId,
+          )}
+          onClose={() => {
+            setBulkPreset(null);
+          }}
+        />
       )}
       {createOpen ? (
         <ConfirmDialog
