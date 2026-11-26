@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cronMatchesDay,
+  cronMinGapMinutes,
   cronRunsPerDay,
   cronTimesOfDay,
   expandField,
@@ -115,5 +116,20 @@ describe("cronTimesOfDay", () => {
     expect(often).not.toBeNull();
     if (often === null) return;
     expect(cronRunsPerDay(often)).toBe(1440);
+  });
+
+  it("measures the shortest gap between runs, over midnight too", () => {
+    const gapOf = (pattern: string) => {
+      const fields = parseCron(pattern);
+      return fields === null ? null : cronMinGapMinutes(fields);
+    };
+    expect(gapOf("0 4 * * *")).toBe(1440);
+    expect(gapOf("*/5 * * * *")).toBe(5);
+    expect(gapOf("* * * * *")).toBe(1);
+    // 48 runs a day, yet a minute apart.
+    expect(gapOf("0,1 * * * *")).toBe(1);
+    // 23:59 and 00:00 are a minute apart across midnight.
+    expect(gapOf("59,0 23,0 * * *")).toBe(1);
+    expect(gapOf("0 0,12 * * *")).toBe(720);
   });
 });

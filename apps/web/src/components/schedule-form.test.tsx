@@ -90,6 +90,13 @@ describe("validateScheduleForm", () => {
     expect(
       validateScheduleForm({ ...cron, cron: "* * * * *" }, NOW).get("cron"),
     ).toBe("A schedule runs at most every 5 minutes.");
+    // Few runs a day, yet a minute apart: the server refuses it, so does the form.
+    expect(
+      validateScheduleForm({ ...cron, cron: "0,1 * * * *" }, NOW).get("cron"),
+    ).toBe("A schedule runs at most every 5 minutes.");
+    expect(
+      validateScheduleForm({ ...cron, cron: "*/5 * * * *" }, NOW).has("cron"),
+    ).toBe(false);
     expect(
       validateScheduleForm({ ...cron, revertAfter: "20000" }, NOW).get(
         "revertAfterMinutes",

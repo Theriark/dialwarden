@@ -17,7 +17,12 @@ import type { RunHooks } from "../api/changes";
 import { fieldErrors, errorMessage } from "../api/errors";
 import { serverSettingsQuery, settingsMetaQuery } from "../api/queries";
 import type { Chip, Schedule, ScheduleInput, Server } from "../api/schema";
-import { parseCron, cronRunsPerDay, cronTimesOfDay } from "../lib/cron";
+import {
+  parseCron,
+  cronMinGapMinutes,
+  cronRunsPerDay,
+  cronTimesOfDay,
+} from "../lib/cron";
 import { describeSchedule } from "../lib/format";
 import { issuesOf, packOf, settingsByKey } from "../lib/pack";
 import {
@@ -147,7 +152,8 @@ export function validateScheduleForm(
       out.set("cron", "Enter a cron pattern, such as 0 4 * * *.");
     } else if (fields === null) {
       out.set("cron", "The pattern is not a five-field cron pattern.");
-    } else if (cronRunsPerDay(fields) > 288) {
+    } else if (cronMinGapMinutes(fields) < 5) {
+      // The server's rule is the gap between two runs, not a count a day.
       out.set("cron", "A schedule runs at most every 5 minutes.");
     }
     if (state.revertAfter.trim() !== "") {

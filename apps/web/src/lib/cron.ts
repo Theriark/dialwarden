@@ -201,3 +201,30 @@ export function cronTimesOfDay(fields: CronFields, limit = 48): string[] {
 export function cronRunsPerDay(fields: CronFields): number {
   return fields.hours.size * fields.minutes.size;
 }
+
+/**
+ * The shortest gap in minutes between two runs of a day, the wrap over
+ * midnight included: the server refuses a pattern closer than 5 minutes,
+ * which a per-day count misses (0,1 * * * * is 48 runs a minute apart).
+ */
+export function cronMinGapMinutes(fields: CronFields): number {
+  const stamps: number[] = [];
+  for (const hour of fields.hours) {
+    for (const minute of fields.minutes) {
+      stamps.push(hour * 60 + minute);
+    }
+  }
+  stamps.sort((a, b) => a - b);
+  const first = stamps.at(0);
+  const last = stamps.at(-1);
+  if (first === undefined || last === undefined || stamps.length === 1) {
+    return 24 * 60;
+  }
+  let gap = first + 24 * 60 - last;
+  let previous = first;
+  for (const stamp of stamps.slice(1)) {
+    gap = Math.min(gap, stamp - previous);
+    previous = stamp;
+  }
+  return gap;
+}
