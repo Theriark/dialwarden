@@ -122,6 +122,11 @@ export interface MessageSources {
   readonly reports: ReportService;
 }
 
+/** "By Alice, 2026-11-26 03:50 UTC": the actor label and the event time. */
+export function bylineOf(actorLabel: string, at: string): string {
+  return `By ${actorLabel}, ${timeText(at)}`;
+}
+
 /** The message of one C6 row. */
 export function messageOf(
   event: ActivityEvent,
@@ -158,7 +163,7 @@ export function messageOf(
   const where = server === null ? "" : ` on ${server.name} (${server.game})`;
   return {
     title: `${titleOf(event)}${where}`,
-    byline: `By ${actor}, ${timeText(event.at)}`,
+    byline: bylineOf(actor, event.at),
     lines,
     server,
     actor,

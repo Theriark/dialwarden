@@ -493,8 +493,10 @@ export const notificationInbox = sqliteTable(
     type: text("type").notNull(),
     serverId: text("server_id"),
     at: text("at").notNull(),
+    /** The actor id of the event (D7), labelled when read; null for a test. */
+    actor: text("actor"),
     title: text("title").notNull(),
-    /** The message lines as a JSON array. */
+    /** The message lines as a JSON array (no byline for an event). */
     lines: text("lines").notNull(),
   },
   (table) => [index("notification_inbox_server").on(table.serverId)],

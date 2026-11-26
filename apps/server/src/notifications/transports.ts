@@ -77,6 +77,12 @@ export interface SendContext {
   readonly maySend: () => boolean;
 }
 
+/** Throws stopped when the app closes, plan_free once the plan is Free. */
+export function assertMaySend(context: SendContext): void {
+  if (context.signal.aborted) throw new DeliveryError("stopped", false);
+  if (!context.maySend()) throw new DeliveryError("plan_free", false);
+}
+
 /** A Retry-After value in milliseconds: seconds, or an HTTP date. */
 function retryAfterMs(value: string | null, now: Date): number | null {
   if (value === null || value.trim() === "") return null;
@@ -123,7 +129,7 @@ export async function withRetries<T>(
 ): Promise<T> {
   let last: DeliveryError = new DeliveryError("not_sent", false);
   for (let index = 0; index < MAX_ATTEMPTS; index += 1) {
-    if (!context.maySend()) throw new DeliveryError("plan_free", false);
+    assertMaySend(context);
     try {
       return await attempt();
     } catch (error) {
@@ -292,7 +298,7 @@ export async function sendDiscord(
   await withRetries(context, async () => {
     const wait = pace.waitFor(context.now().getTime());
     if (wait > 0) await context.sleep(wait, context.signal);
-    if (!context.maySend()) throw new DeliveryError("plan_free", false);
+    assertMaySend(context);
     pace.sent(context.now().getTime());
     const answer = await policyFetch(
       url,

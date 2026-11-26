@@ -239,6 +239,9 @@ async function swapDatabase(
         await ctx.store.open();
       }
       ctx.licences.reload();
+      // The channels of the imported database reach the dispatcher now, not
+      // at the next restart (P9-B).
+      ctx.channels.reload();
     } finally {
       ctx.maintenance = false;
     }

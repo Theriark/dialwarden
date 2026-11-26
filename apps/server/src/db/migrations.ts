@@ -384,7 +384,8 @@ CREATE TABLE drift_checks (
 // JSON, and the secrets (webhook URL, signing secret, SMTP password) as one
 // JSON value encrypted with APP_SECRET_KEY; the last delivery result keeps a
 // code only, never a server answer. notification_inbox holds what the in-app
-// channel shows, and notification_reads how far each user has read it.
+// channel shows, naming the actor by id (D7) so erasing a user rewrites
+// nothing, and notification_reads how far each user has read it.
 const notifications = `
 CREATE TABLE notification_channels (
   id TEXT PRIMARY KEY NOT NULL,
@@ -411,6 +412,7 @@ CREATE TABLE notification_inbox (
   type TEXT NOT NULL,
   server_id TEXT,
   at TEXT NOT NULL,
+  actor TEXT,
   title TEXT NOT NULL,
   lines TEXT NOT NULL
 );
