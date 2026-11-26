@@ -6,7 +6,9 @@
 // who made the schedule; that user must still hold write access on the
 // server when it runs. An optional revert writes the values the run found
 // back: at a set time for a run-at schedule, a number of minutes after each
-// run for a cron schedule.
+// run for a cron schedule. A cron run while an earlier run's revert is still
+// due leaves that revert as it was, so the values from before the first run
+// are the ones written back.
 //
 // The scheduler is one croner job that calls tick() every 30 seconds; tick()
 // is also what runs at start, so missed runs after a restart follow the same
@@ -245,7 +247,11 @@ export class ScheduleService {
     return this.#aead.encrypt(JSON.stringify(edits), context);
   }
 
-  /** The edits as the API shows them: a secret setting's value masked. */
+  /**
+   * The edits as the API shows them: a secret setting's value masked. When
+   * the pack is unknown (no server, or a pack this image no longer ships),
+   * which settings are secret is unknown too, so every value is masked.
+   */
   #shownEdits(row: ScheduleRow): ScheduleEdit[] {
     const server = this.#servers.get(row.serverId);
     const pack = server === null ? undefined : this.#packOf(server);
@@ -254,9 +260,10 @@ export class ScheduleService {
         .filter((setting) => setting.secret === true)
         .map((setting) => setting.key),
     );
+    const masked = (key: string) => pack === undefined || secrets.has(key);
     return this.#edits(row).map((edit) => ({
       settingKey: edit.key,
-      value: secrets.has(edit.key) ? SECRET_MASK : edit.value,
+      value: masked(edit.key) ? SECRET_MASK : edit.value,
     }));
   }
 
@@ -548,7 +555,11 @@ export class ScheduleService {
       });
       return;
     }
-    const outcome = await this.#write(row, this.#edits(row), true);
+    // A revert still owed by an earlier run (a cron revert longer than the
+    // period) keeps its time and the values it writes back: those are the
+    // values from before the first run, and this run must not drop them.
+    const owed = row.revertDueAt !== null && row.revertEnc !== null;
+    const outcome = await this.#write(row, this.#edits(row), !owed);
     const revertDue = this.#revertDue(row, at, outcome.result);
     const previous = outcome.previous ?? [];
     const revertEnc =
@@ -557,13 +568,15 @@ export class ScheduleService {
         : this.#encrypt(previous, REVERT_CONTEXT);
     const finished =
       row.kind === "once" && (revertDue === null || revertEnc === null);
+    const revert = owed
+      ? {}
+      : { revertDueAt: revertEnc === null ? null : revertDue, revertEnc };
     this.#update(row.id, {
       nextRunAt,
       lastRunAt: at.toISOString(),
       lastResult: outcome.result,
       lastChangeSetId: outcome.changeSetId,
-      revertDueAt: revertEnc === null ? null : revertDue,
-      revertEnc,
+      ...revert,
       ...(finished ? { state: "done" } : {}),
     });
     this.#activity.record("schedule.run", {
@@ -705,7 +718,10 @@ export class ScheduleService {
       if (error instanceof ConnectorError || error instanceof ControlError) {
         return { ...failed(error.code), changeSetId };
       }
-      throw error;
+      // Anything else is still a result: recorded as failed, so the run
+      // moves on to its next time instead of retrying every tick.
+      this.#log.error({ err: error, schedule: row.id }, "schedule run failed");
+      return { ...failed("internal"), changeSetId };
     }
   }
 

@@ -7,10 +7,12 @@
 // it; on Free every schedule is paused (nothing runs or reverts) and Paid
 // resumes them. Each run is a change set of cause schedule and writes
 // schedule.run, each revert schedule.reverted (contract C6).
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activityOf,
   apiOf,
+  editOutside,
   fileText,
   PALWORLD_SETTINGS,
 } from "../../test/servers.js";
@@ -249,6 +251,88 @@ describe("cron schedules", () => {
     expect(scheduleChangeSets()).toBe(3);
   });
 
+  it("keeps the revert a run still owes when the next run comes first", async () => {
+    // Hourly with a 90-minute revert: the 12:00 run comes before the 12:30
+    // revert of the 11:00 run, finds the values already there, and must
+    // leave that revert and the values from before 11:00 as they are.
+    const made = await schedule({ cron: "0 * * * *", revertAfterMinutes: 90 });
+    await tickAt(60.5);
+    expect(await maxPlayers()).toBe("7");
+    expect(stateOf(made.id).revertDueAt).toBe(iso(150));
+    await tickAt(120.5);
+    expect(stateOf(made.id)).toMatchObject({
+      lastRunAt: iso(120),
+      lastResult: "no_change",
+      revertDueAt: iso(150),
+      nextRunAt: iso(180),
+    });
+    await tickAt(150.5);
+    expect(await maxPlayers()).toBe("32");
+    expect(stateOf(made.id)).toMatchObject({
+      revertDueAt: null,
+      lastRevertResult: "applied",
+    });
+    // The next run starts the cycle again with a revert of its own.
+    await tickAt(180.5);
+    expect(await maxPlayers()).toBe("7");
+    expect(stateOf(made.id).revertDueAt).toBe(iso(270));
+    const events = await scheduleEvents();
+    expect(events.map((row) => row.type)).toEqual([
+      "schedule.run",
+      "schedule.run",
+      "schedule.reverted",
+      "schedule.run",
+    ]);
+  });
+
+  it("writes back the values from before the first run, not a later run's", async () => {
+    const made = await schedule({ cron: "0 * * * *", revertAfterMinutes: 90 });
+    await tickAt(60.5);
+    // Someone changes the value outside the app before the next run.
+    const from = "ServerPlayerMaxNum=7";
+    await editOutside(
+      t.servers.rootA,
+      PALWORLD_SETTINGS,
+      from,
+      "ServerPlayerMaxNum=20",
+    );
+    await tickAt(120.5);
+    expect(await maxPlayers()).toBe("7");
+    expect(stateOf(made.id)).toMatchObject({
+      lastResult: "applied",
+      revertDueAt: iso(150),
+    });
+    await tickAt(150.5);
+    expect(await maxPlayers()).toBe("32");
+  });
+
+  it("records an unexpected error as failed and moves on to the next run", async () => {
+    const made = await schedule({ cron: "0 * * * *" });
+    const create = vi
+      .spyOn(t.app.ctx.changes, "create")
+      .mockRejectedValueOnce(new Error("unexpected"));
+    await tickAt(60.5);
+    expect(stateOf(made.id)).toMatchObject({
+      state: "active",
+      lastRunAt: iso(60),
+      lastResult: "failed",
+      nextRunAt: iso(120),
+    });
+    // Not retried at the next tick: it waits for its next occurrence.
+    await tickAt(61);
+    expect(create).toHaveBeenCalledTimes(1);
+    const events = await scheduleEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.data).toMatchObject({
+      result: "failed",
+      error: "internal",
+    });
+    create.mockRestore();
+    await tickAt(120.5);
+    expect(stateOf(made.id).lastResult).toBe("applied");
+    expect(await maxPlayers()).toBe("7");
+  });
+
   it("runs once for many occurrences missed while the app was down", async () => {
     const made = await schedule({ cron: "0 * * * *" });
     // Down for five hours: the 15:00 run is 10 minutes late, the rest older.
@@ -417,6 +501,28 @@ describe("who a schedule acts as", () => {
       .prepare("SELECT payload_enc FROM schedules WHERE id = ?")
       .get(made.id) as { payload_enc: string };
     expect(stored.payload_enc).not.toContain("hunter-2-secret");
+  });
+
+  it("masks every value when the server's pack is no longer known", async () => {
+    const made = await schedule({
+      runAt: iso(10),
+      edits: [
+        { settingKey: "AdminPassword", value: "hunter-2-secret" },
+        { settingKey: INT_SETTING, value: 7 },
+      ],
+    });
+    // A pack id this image no longer ships: which settings are secret is
+    // unknown, so nothing is shown in clear.
+    t.app.ctx.store.sqlite
+      .prepare("UPDATE servers SET pack_id = 'retired-pack' WHERE id = ?")
+      .run(t.servers.a);
+    const one = await apiOf(t.app, t.owner).get(`/api/v1/schedules/${made.id}`);
+    expect(one.statusCode).toBe(200);
+    expect(one.body).not.toContain("hunter-2-secret");
+    expect(one.json<ScheduleBody>().edits).toEqual([
+      { settingKey: "AdminPassword", value: SECRET_MASK },
+      { settingKey: INT_SETTING, value: SECRET_MASK },
+    ]);
   });
 
   it("removes a schedule, and a revert still due is dropped", async () => {
