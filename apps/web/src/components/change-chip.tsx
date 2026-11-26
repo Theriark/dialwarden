@@ -104,23 +104,74 @@ interface ChangeChipProps {
   className?: string | undefined;
 }
 
+const CHIP =
+  "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium";
+
 export function ChangeChip({ chip, className }: ChangeChipProps) {
   const { Icon, word } = kindIcon(chip.kind);
   const text = chipText(chip);
   return (
-    <li
-      className={cn(
-        "inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium",
-        kindClass(chip.kind),
-        className,
-      )}
-    >
+    <li className={cn(CHIP, kindClass(chip.kind), className)}>
       <Icon className="size-3.5 shrink-0" aria-hidden="true" />
       <span className="sr-only">{word}: </span>
       <span className="truncate" title={text}>
         {text}
       </span>
       {chip.restartRequired ? (
+        <span
+          className="inline-flex items-center gap-1 text-pending"
+          title="The server must restart for this change to take effect"
+        >
+          <RotateCw className="size-3.5 shrink-0" aria-hidden="true" />
+          <span className="sr-only">Restart required</span>
+        </span>
+      ) : null}
+    </li>
+  );
+}
+
+/**
+ * The kind of a chip the server already rendered as text (the P9 reports
+ * and the Discord message body): the report words name the kind, so the
+ * same colour and icon can be given back to it.
+ */
+export function chipKindOfText(text: string): ChipKind {
+  if (text.includes("(secret, hidden)")) {
+    return "masked";
+  }
+  if (/: set to /.test(text)) {
+    return "added";
+  }
+  if (/: removed \(was /.test(text)) {
+    return "removed";
+  }
+  if (/ lines? changed/.test(text)) {
+    return "lines";
+  }
+  return "changed";
+}
+
+interface TextChipProps {
+  text: string;
+  /** Read from the text when not given. */
+  kind?: ChipKind | undefined;
+  className?: string | undefined;
+}
+
+/** The same chip for a change the server already put into words. */
+export function TextChip({ text, kind, className }: TextChipProps) {
+  const chosen = kind ?? chipKindOfText(text);
+  const { Icon, word } = kindIcon(chosen);
+  const restart = text.endsWith("(restart required)");
+  const shown = restart ? text.replace(/ \(restart required\)$/, "") : text;
+  return (
+    <li className={cn(CHIP, kindClass(chosen), className)}>
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="sr-only">{word}: </span>
+      <span className="truncate" title={shown}>
+        {shown}
+      </span>
+      {restart ? (
         <span
           className="inline-flex items-center gap-1 text-pending"
           title="The server must restart for this change to take effect"

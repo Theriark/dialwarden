@@ -129,7 +129,7 @@ describe("router", () => {
     });
     const { router, client } = startRouter("/login?redirect=%2Fschedules");
     await signIn();
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(router.state.location.pathname).toBe("/schedules");
     expect(bodies).toEqual([
       { email: "owner@example.test", password: OWNER_PASSPHRASE },

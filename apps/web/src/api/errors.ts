@@ -64,6 +64,32 @@ const MESSAGES = new Map<string, string>([
     "oidc_email_conflict",
     "The provider's e-mail address belongs to another account.",
   ],
+  ["schedule_not_found", "This schedule no longer exists."],
+  [
+    "author_cannot_write",
+    "The person who made this schedule no longer has write access.",
+  ],
+  ["preset_not_found", "This preset no longer exists."],
+  ["unknown_game", "No game pack has this id."],
+  ["unknown_group", "This pack has no settings group with that name."],
+  ["channel_not_found", "This channel no longer exists."],
+  ["url_required", "A webhook address is needed to create the channel."],
+  ["url_refused", "The address is not allowed: https only, no credentials."],
+  [
+    "host_refused",
+    "The host is not allowed: private and local addresses need the private host switch.",
+  ],
+  ["in_app_exists", "There is already an in-app channel."],
+  ["channel_limit", "This instance holds the most channels it may have."],
+  ["kind_immutable", "A channel keeps its kind; make a new one instead."],
+  ["test_running", "A test is already running on this channel."],
+  ["no_url", "This channel has no address to send to."],
+  ["timeout", "The receiver did not answer in time."],
+  ["connection", "The receiver could not be reached."],
+  ["tls_failed", "The secure connection could not be made."],
+  ["auth_failed", "The mail server refused the sign-in."],
+  ["smtp_failed", "The mail server refused the message."],
+  ["demo_seed_off", "The demo simulation is off on this instance."],
 ]);
 
 /** The fields the P1 screens send, as the subject of a sentence. */
@@ -87,7 +113,44 @@ const FIELD_WORDS = new Map<string, string>([
   ["scope", "The scope"],
   ["groupsClaim", "The groups claim"],
   ["retentionDays", "The retention"],
+  ["server", "The server"],
+  ["edits", "The settings to change"],
+  ["runAt", "The run time"],
+  ["cron", "The cron pattern"],
+  ["timezone", "The time zone"],
+  ["revertAt", "The revert time"],
+  ["revertAfterMinutes", "The revert delay"],
+  ["intervalMinutes", "The check interval"],
+  ["url", "The address"],
+  ["signingSecret", "The signing secret"],
+  ["host", "The host"],
+  ["port", "The port"],
+  ["username", "The user name"],
+  ["from", "The sender address"],
+  ["to", "The recipients"],
+  ["types", "The event types"],
 ]);
+
+/**
+ * An error code on its own in words (a bulk item, a schedule result, a
+ * notification delivery or send test): the same table as the API errors,
+ * plus the http_NNN and smtp_NNN shapes the transports report.
+ */
+export function codeWords(code: string): string {
+  const known = MESSAGES.get(code);
+  if (known !== undefined) {
+    return known;
+  }
+  const http = /^http_(\d{3})$/.exec(code);
+  if (http !== null) {
+    return `The receiver answered ${http[1] ?? ""}.`;
+  }
+  const smtp = /^smtp_(\d{3})$/.exec(code);
+  if (smtp !== null) {
+    return `The mail server answered ${smtp[1] ?? ""}.`;
+  }
+  return `The send failed (${code}).`;
+}
 
 export interface ValidationIssue {
   path: string;

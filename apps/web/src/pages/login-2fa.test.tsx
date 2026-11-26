@@ -85,7 +85,7 @@ describe("second sign-in step", () => {
 
     await user.type(screen.getByLabelText(CODE_LABEL), "123 456");
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByText("Coming in a later phase");
+    await screen.findByRole("heading", { name: "Schedules", level: 1 });
     expect(router.state.location.pathname).toBe("/schedules");
     expect(state.bodies).toEqual([{ challenge: "c-1", code: "123456" }]);
     expect(client.getQueryData(keys.session)).toEqual(OWNER);
