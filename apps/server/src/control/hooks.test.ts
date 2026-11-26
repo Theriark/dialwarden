@@ -204,6 +204,8 @@ class SimGame {
   #dockerPort = 0;
   #running = true;
   #obeysShutdown = true;
+  /** When set, the REST save answers this instead of 200 (G2.8). */
+  saveAnswer: { readonly status: number; readonly body: string } | null = null;
 
   constructor() {
     this.#rest = createServer((request, response) => {
@@ -222,7 +224,9 @@ class SimGame {
         answer(200, '{"servername":"hookgame"}');
       } else if (request.method === "POST" && url === "/v1/api/save") {
         record("save");
-        answer(200, "{}");
+        const forced = this.saveAnswer;
+        if (forced === null) answer(200, "{}");
+        else answer(forced.status, forced.body);
       } else if (request.method === "POST" && url === "/v1/api/shutdown") {
         record("shutdown");
         answer(200, "{}");
@@ -802,7 +806,8 @@ describe("the hook run API and its roles (contract C7)", () => {
     });
     expect(dead.statusCode).toBe(200);
     const broken = await runHook(api, slug, "restart");
-    expect(broken.statusCode).toBe(502);
+    // P6 O1: a 4xx, so a proxy in front never swaps the body for its page.
+    expect(broken.statusCode).toBe(424);
     expect(broken.json()).toMatchObject({
       error: "control_error",
       code: "Connection",
@@ -834,5 +839,168 @@ describe("the hook run API and its roles (contract C7)", () => {
     const flushed = await statusOf(api, slug);
     expect(flushed).toMatchObject({ state: "stopped", pending: 0 });
     expect(await fileText(root, WORLD_PATH)).toContain("WorldSize=5");
+  });
+
+  // P10-A G2.8: a failing game answer comes back as a code, never quoted.
+  it("G2.8 answers a failing save with control_error and no game text", async () => {
+    const { api, slug } = await setup();
+    game().saveAnswer = { status: 500, body: "LEAKME internal error" };
+    const run = await runHook(api, slug, "save");
+    expect(run.statusCode).toBe(424);
+    expect(run.json()).toMatchObject({ error: "control_error" });
+    expect(run.body).not.toContain("LEAKME");
+    expect(run.body).not.toContain("override-secret");
+  });
+
+  // P10-A G3.2: the SSH command is checked when it is set; editors never
+  // set one. The server only has to be an SFTP server for the check.
+  it("G3.2 refuses an unusable SSH command and any from an editor", async () => {
+    const { app, api } = await setup(PAID);
+    app.ctx.servers.insert({
+      id: "sftp-game",
+      name: "SFTP game",
+      packId: "hookgame",
+      os: "linux",
+      spec: {
+        kind: "sftp",
+        host: "127.0.0.1",
+        port: 1,
+        username: "game",
+        root: "/srv/game",
+        panel: false,
+      },
+      demo: false,
+    });
+    const command = (text: string) => ({
+      hook: { kind: "sshCommand", command: text },
+    });
+    for (const text of ["a\nb", "a\rb", "a\0b", "", "x".repeat(2001)]) {
+      const refused = await putHooks(api, "sftp-game", command(text));
+      expect(refused.statusCode, JSON.stringify(text)).toBe(422);
+      expect(refused.json()).toMatchObject({
+        error: "hook_command_not_usable",
+      });
+    }
+    const editor = apiOf(app, await roleUser(app, "editor", "sftp-game"));
+    const byEditor = await putHooks(
+      editor,
+      "sftp-game",
+      command("systemctl restart hookgame"),
+    );
+    expect(byEditor.statusCode).toBe(403);
+    expect(byEditor.json()).toEqual({ error: "forbidden" });
+    const byOwner = await putHooks(
+      api,
+      "sftp-game",
+      command("systemctl restart hookgame"),
+    );
+    expect(byOwner.statusCode).toBe(200);
+  });
+
+  // P10-A G3.3: a run takes an action, never a command: extra fields of the
+  // body are dropped and the client runs only its fixed verb.
+  it("G3.3 ignores a command sent with a hook run", async () => {
+    const { api, slug } = await setup();
+    await putHooks(api, slug, dockerHook(game()));
+    const run = await api.post(`/api/v1/servers/${slug}/hooks/run`, {
+      action: "restart",
+      command: "rm -rf /",
+    });
+    expect(run.statusCode).toBe(200);
+    expect(game().dockerCalls).toEqual(["restart"]);
+  });
+
+  it("L6 refuses link-local, metadata and other unusable control hosts", async () => {
+    const { api, slug } = await setup();
+    const metadata = await putHooks(api, slug, {
+      hook: {
+        kind: "dockerProxy",
+        url: "http://169.254.169.254/",
+        containerLabel: "com.example.game=hookgame",
+      },
+    });
+    expect(metadata.statusCode).toBe(422);
+    expect(metadata.json()).toMatchObject({ error: "hook_command_not_usable" });
+    for (const host of ["169.254.169.254", "fe80::1", "0.0.0.0", "224.0.0.1"]) {
+      const probe = await putHooks(api, slug, {
+        probes: { palworldRest: { host } },
+      });
+      expect(probe.statusCode, host).toBe(422);
+      expect(probe.json(), host).toMatchObject({
+        error: "probe_host_not_usable",
+      });
+    }
+    for (const host of ["10.0.0.8", "127.0.0.1"]) {
+      const probe = await putHooks(api, slug, {
+        probes: { palworldRest: { host } },
+      });
+      expect(probe.statusCode, host).toBe(200);
+    }
+  });
+
+  /** One more server of the synthetic pack, in its own folder. */
+  async function extraServer(api: Api, name: string): Promise<string> {
+    const root = join(base, name);
+    await mkdir(join(root, "Config"), { recursive: true });
+    await mkdir(join(root, "World"), { recursive: true });
+    await writeFile(join(root, "Game.sh"), "");
+    await writeFile(join(root, "Config", "Server.ini"), `${CFG}\n`);
+    await writeFile(join(root, "World", "World.ini"), `${WORLD}\n`);
+    return addServer(api, name, root);
+  }
+
+  const appliedOn = async (api: Api, slug: string) =>
+    (await activityOf(api, slug)).filter(
+      (row) => row.type === "change.applied",
+    );
+
+  it("L21 (A) keeps a pending change while its server is not editable", async () => {
+    const { api, root, slug } = await setup(PAID);
+    const made = await draft(api, slug, { WorldSize: 5 });
+    expect((await apply(api, made.id)).status).toBe("pending");
+    // Three more servers, each edited since: on Free they are the editable
+    // three, and the never-edited first server is not editable any more.
+    for (const name of ["Second", "Third", "Fourth"]) {
+      const other = await extraServer(api, name);
+      const edit = await draft(api, other, { Slots: 10 });
+      expect((await apply(api, edit.id)).status).toBe("applied");
+    }
+    const environment = "/api/v1/licence/environment";
+    expect((await api.put(environment, { ignored: true })).statusCode).toBe(
+      200,
+    );
+    game().takeDown();
+    const before = await fileText(root, WORLD_PATH);
+    const status = await statusOf(api, slug);
+    expect(status).toMatchObject({ state: "stopped", pending: 1 });
+    expect(await fileText(root, WORLD_PATH)).toBe(before);
+    expect(await appliedOn(api, slug)).toHaveLength(0);
+    // Back on Paid, the next status read writes it.
+    expect((await api.put(environment, { ignored: false })).statusCode).toBe(
+      200,
+    );
+    const paid = await statusOf(api, slug);
+    expect(paid).toMatchObject({ state: "stopped", pending: 0 });
+    expect(await fileText(root, WORLD_PATH)).toContain("WorldSize=5");
+  });
+
+  it("L21 (B) never writes a parked change of a user who lost the grant", async () => {
+    const { app, api, root, slug } = await setup(PAID);
+    const user = await roleUser(app, "editor", slug);
+    const editor = apiOf(app, user);
+    const made = await draft(editor, slug, { WorldSize: 5 });
+    expect((await apply(editor, made.id)).status).toBe("pending");
+    const grants = `/api/v1/users/${user.userId}/grants`;
+    expect((await api.put(grants, { servers: [] })).statusCode).toBe(200);
+    game().takeDown();
+    const status = await statusOf(api, slug);
+    expect(status).toMatchObject({ state: "stopped", pending: 0 });
+    expect(await fileText(root, WORLD_PATH)).not.toContain("WorldSize=5");
+    const failed = await api.get(`/api/v1/change-sets/${made.id}`);
+    expect(failed.json()).toMatchObject({
+      status: "failed",
+      error: { code: "author_cannot_write" },
+    });
+    expect(await appliedOn(api, slug)).toHaveLength(0);
   });
 });
