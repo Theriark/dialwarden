@@ -236,7 +236,8 @@ test("schedules: a run-at schedule, its replacement, a cron pattern and the cale
   await cron.getByLabel("Server").selectOption("palworld-away");
   await cron.getByLabel("Name").fill("Nightly reset");
   await cron.getByRole("radio", { name: /Repeat on a cron pattern/ }).check();
-  await cron.getByLabel("Cron pattern").fill("0 4 * * *");
+  // The radio's own name holds "cron pattern" too, so the field by its role.
+  await cron.getByRole("textbox", { name: "Cron pattern" }).fill("0 4 * * *");
   await cron.getByLabel("Time zone").selectOption("UTC");
   await expect(cron.getByText(/Every day at 04:00 \(UTC\)/)).toBeVisible();
   await cron.getByLabel("Revert after (minutes, optional)").fill("60");
@@ -358,7 +359,7 @@ test("notifications: channels, a masked secret kept through an edit, the send te
   await page.getByRole("button", { name: "Add channel" }).first().click();
   form = page.getByRole("form", { name: "New channel" });
   await form.getByLabel("Name").fill("Ops hook");
-  await form.getByRole("radio", { name: /Webhook/ }).check();
+  await form.getByRole("radio", { name: /^Webhook/ }).check();
   await form
     .getByLabel("Webhook address")
     .fill("https://hooks.example.invalid/dialwarden");
