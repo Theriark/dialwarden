@@ -81,6 +81,71 @@ describe("SettingField", () => {
     );
   });
 
+  // P10-B2 review L2: the masked list field (adminlist and the like) tells a
+  // warning the same way as every other field, and keeps the alert for an
+  // error.
+  it("renders a warning on a secret list setting in the warning style", () => {
+    render(
+      <SettingField
+        setting={setting({
+          key: "adminlist",
+          label: "Admins",
+          type: "list",
+          secret: true,
+        })}
+        value="********"
+        edited={false}
+        issue="Gone in 3.0: the game ignores it."
+        severity="warning"
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const note = screen.getByText("Gone in 3.0: the game ignores it.");
+    expect(note.getAttribute("role")).toBe("status");
+    expect(note.className).toContain("text-warning");
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Replace the list" }));
+    const box = screen.getByLabelText("Admins") as HTMLTextAreaElement;
+    expect(box.getAttribute("aria-invalid")).toBeNull();
+    expect(box.getAttribute("aria-describedby")).toContain(note.id);
+  });
+
+  it("keeps the alert for an error on a secret list setting", () => {
+    render(
+      <SettingField
+        setting={setting({
+          key: "adminlist",
+          label: "Admins",
+          type: "list",
+          secret: true,
+        })}
+        value={["1"]}
+        edited={true}
+        issue="One id is too short."
+        disabled={false}
+        onChange={() => {
+          /* not used here */
+        }}
+        onReset={() => {
+          /* not used here */
+        }}
+      />,
+    );
+    const note = screen.getByRole("alert");
+    expect(note.textContent).toContain("One id is too short.");
+    expect(note.className).toContain("text-error");
+    expect(screen.queryByRole("status")).toBeNull();
+    const box = screen.getByLabelText("Admins") as HTMLTextAreaElement;
+    expect(box.getAttribute("aria-invalid")).toBe("true");
+    expect(box.getAttribute("aria-describedby")).toContain(note.id);
+  });
+
   it("lets a screen word a secret field's help in its own way", () => {
     render(
       <SettingField

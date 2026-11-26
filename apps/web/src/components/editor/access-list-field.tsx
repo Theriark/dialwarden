@@ -4,8 +4,18 @@
 // masks a setting marked secret, contract C3), so the field shows that a
 // list is stored and lets the user replace it: one id per row, every row
 // masked until Show, a counter, and Keep the stored list to hand the key
-// back to the server.
-import { Eye, EyeOff, ListChecks, Plus, X } from "lucide-react";
+// back to the server. A lint of severity warning sits under the field in
+// the warning colour as a status (phase-report-07 F-P7-2); an error keeps
+// the alert and marks the box invalid.
+import {
+  CircleX,
+  Eye,
+  EyeOff,
+  ListChecks,
+  Plus,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { useId, useState, type KeyboardEvent } from "react";
 import type { Setting } from "@dialwarden/packs-schema";
 import { Button, IconButton } from "../ui/button";
@@ -39,7 +49,10 @@ export interface AccessListFieldProps {
   setting: Setting;
   value: unknown;
   edited: boolean;
+  /** An error of the lint: the box is invalid and the text is an alert. */
   issue: string | undefined;
+  /** A warning of the lint: the value is accepted, the text is a status. */
+  warning?: string | undefined;
   disabled: boolean;
   onChange: (key: string, value: unknown) => void;
   onReset: (key: string) => void;
@@ -50,12 +63,22 @@ export function AccessListField({
   value,
   edited,
   issue,
+  warning,
   disabled,
   onChange,
   onReset,
 }: AccessListFieldProps) {
   const id = `setting-${setting.key}`;
   const helpId = useId();
+  const errorId = `${helpId}-error`;
+  const warningId = `${helpId}-warning`;
+  const describedBy = [
+    issue !== undefined ? errorId : null,
+    warning !== undefined ? warningId : null,
+    helpId,
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" ");
   const [shown, setShown] = useState(false);
   const [draft, setDraft] = useState("");
   const [replacing, setReplacing] = useState(false);
@@ -158,7 +181,7 @@ export function AccessListField({
               value={draft}
               disabled={disabled}
               aria-invalid={issue !== undefined ? true : undefined}
-              aria-describedby={helpId}
+              aria-describedby={describedBy}
               onChange={(event) => {
                 setDraft(event.target.value);
               }}
@@ -173,11 +196,6 @@ export function AccessListField({
               Add
             </Button>
           </div>
-          {issue !== undefined ? (
-            <p role="alert" className="text-sm text-error">
-              {issue}
-            </p>
-          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="flex items-center gap-1 text-xs text-fg-muted">
               <ListChecks className="size-3.5" aria-hidden="true" />
@@ -209,6 +227,26 @@ export function AccessListField({
           </Button>
         </div>
       )}
+      {issue !== undefined ? (
+        <p
+          id={errorId}
+          role="alert"
+          className="flex items-center gap-1.5 text-sm text-error"
+        >
+          <CircleX className="size-4 shrink-0" aria-hidden="true" />
+          {issue}
+        </p>
+      ) : null}
+      {warning !== undefined ? (
+        <p
+          id={warningId}
+          role="status"
+          className="flex items-center gap-1.5 text-sm text-warning"
+        >
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          {warning}
+        </p>
+      ) : null}
       <p id={helpId} className="text-sm text-fg-muted">
         {setting.description} One id per row; the list is masked in the browser
         and in every export.
