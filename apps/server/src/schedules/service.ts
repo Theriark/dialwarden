@@ -72,12 +72,7 @@ export type ScheduleState = "active" | "paused" | "done" | "missed";
  * grace window, or failed when it could not be made or applied.
  */
 export type RunResult =
-  | "applied"
-  | "pending"
-  | "conflict"
-  | "failed"
-  | "no_change"
-  | "missed";
+  "applied" | "pending" | "conflict" | "failed" | "no_change" | "missed";
 
 export interface ScheduleEdit {
   readonly settingKey: string;
@@ -191,7 +186,8 @@ function checkCron(cron: string, timezone: string, now: Date): void {
   if (runs.length === 0) throw invalid("cron", "the pattern never runs");
   const times = runs.map((run) => run.getTime());
   const gap = (time: number, index: number) => time - (times.at(index) ?? 0);
-  if (times.slice(1).map(gap).some((each) => each < MIN_CRON_GAP_MS)) {
+  const gaps = times.slice(1).map(gap);
+  if (gaps.some((each) => each < MIN_CRON_GAP_MS)) {
     throw invalid("cron", "a schedule runs at most every 5 minutes");
   }
 }
@@ -554,10 +550,11 @@ export class ScheduleService {
     }
     const outcome = await this.#write(row, this.#edits(row), true);
     const revertDue = this.#revertDue(row, at, outcome.result);
+    const previous = outcome.previous ?? [];
     const revertEnc =
-      revertDue === null || outcome.previous === null
+      revertDue === null || previous.length === 0
         ? null
-        : this.#encrypt(outcome.previous, REVERT_CONTEXT);
+        : this.#encrypt(previous, REVERT_CONTEXT);
     const finished =
       row.kind === "once" && (revertDue === null || revertEnc === null);
     this.#update(row.id, {
@@ -647,7 +644,8 @@ export class ScheduleService {
   /**
    * Makes and applies one change set of cause schedule. With remember, the
    * values the files hold now for the edited settings are returned, so the
-   * revert can write them back (null: the setting was not in the file).
+   * revert can write them back; a setting the files do not hold has no value
+   * to go back to and is left out.
    */
   async #write(
     row: ScheduleRow,
@@ -674,10 +672,11 @@ export class ScheduleService {
     try {
       if (remember && reverts) {
         const values = await this.#changes.controlValues(server);
-        previous = edits.map((edit) => ({
-          key: edit.key,
-          value: values(edit.key) ?? null,
-        }));
+        previous = [];
+        for (const edit of edits) {
+          const value = await values(edit.key);
+          if (value !== undefined) previous.push({ key: edit.key, value });
+        }
       }
       const draft = await this.#changes.create(
         server,

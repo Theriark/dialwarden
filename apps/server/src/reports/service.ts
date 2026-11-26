@@ -211,12 +211,15 @@ export function reportMarkdown(report: Report): string {
   return `${lines.join("\n")}\n`;
 }
 
+/** Written by code point, so no tool turns it into an invisible literal. */
+const ZERO_WIDTH_SPACE = String.fromCodePoint(0x200b);
+
 /**
  * Discord text: its markdown escaped, and every @ broken with a zero-width
  * space, so a value such as @everyone never pings anybody.
  */
 function discord(text: string): string {
-  return md(text).replace(/@/g, "@​");
+  return md(text).replace(/@/g, `@${ZERO_WIDTH_SPACE}`);
 }
 
 /** The report as a Discord message body: { content }, at most 2000 long. */
