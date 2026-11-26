@@ -211,6 +211,12 @@ describe("restoreAccessOf", () => {
     expect(restoreAccessOf("owner", launchEntry, shell)).toBe("allowed");
     expect(restoreAccessOf("admin", launchEntry, shell)).toBe("allowed");
   });
+
+  it("reads only when the server says the grant is read, whatever the role (L22)", () => {
+    expect(restoreAccessOf("editor", entry(), shell, "read")).toBe("read-only");
+    expect(restoreAccessOf("editor", entry(), shell, "write")).toBe("allowed");
+    expect(restoreAccessOf("owner", entry(), shell, "write")).toBe("allowed");
+  });
 });
 
 const SERVER = {
@@ -223,6 +229,7 @@ const SERVER = {
   hasPassword: false,
   demo: false,
   editable: true,
+  access: "write",
   createdAt: "2026-11-23T00:00:00Z",
   updatedAt: "2026-11-23T00:00:00Z",
   lastEditedAt: null,
@@ -386,6 +393,27 @@ describe("ServerHistoryPage", () => {
       name: "Restore this version",
     }) as HTMLButtonElement[];
     expect(buttons.map((button) => button.disabled)).toEqual([false, true]);
+  });
+
+  it("shows an editor with a read grant no restore control and names the grant (L22)", async () => {
+    stubViewport(1280);
+    stubWorld(session("editor"), ([method, path]) => {
+      if (method === "GET" && path === "/api/v1/servers/home") {
+        return { status: 200, body: { ...SERVER, access: "read" } };
+      }
+      return undefined;
+    });
+    startRouter("/servers/home/history");
+    await screen.findByText("Home history");
+    expect(
+      screen.getByText(
+        /You are signed in as editor with read access to this server: you read this history\. A write grant from the owner or an admin restores a version\./,
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Changed in Dialwarden").length).toBe(2);
+    expect(
+      screen.queryByRole("button", { name: "Restore this version" }),
+    ).toBeNull();
   });
 
   it("lets the owner restore every version", async () => {
