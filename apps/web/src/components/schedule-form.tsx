@@ -5,11 +5,14 @@
 // over the server's current values. The chips preview what the run writes.
 // The API makes and removes schedules (no edit in place), so editing one
 // means replacing it: the page does the create then the delete.
+// A secret setting is never copied: the API answers a stored secret edit as
+// the mask and drops a mask it is sent, so the form asks for the secret
+// again (replace) or starts it empty (new) and refuses to send a mask.
 /* eslint-disable security/detect-object-injection -- the keys are the pack's setting keys and the server's own JSON answer, never free-form input */
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Plus, Repeat, Undo2 } from "lucide-react";
 import { useMemo, useState, type FormEvent } from "react";
-import type { Setting } from "@dialwarden/packs-schema";
+import { SECRET_MASK, type Setting } from "@dialwarden/packs-schema";
 import type { RunHooks } from "../api/changes";
 import { fieldErrors, errorMessage } from "../api/errors";
 import { serverSettingsQuery, settingsMetaQuery } from "../api/queries";
@@ -31,6 +34,15 @@ import { Button } from "./ui/button";
 import { SelectField, TextField } from "./ui/field";
 
 export const MAX_REVERT_MINUTES = 7 * 24 * 60;
+
+/** The inline words of a secret setting whose value would not be stored. */
+export const SECRET_RETYPE =
+  "Type the secret: a stored secret is never copied into a schedule.";
+
+/** True when a secret edit holds nothing the API would keep: the mask or nothing. */
+export function secretMissing(value: unknown): boolean {
+  return value === SECRET_MASK || value === "" || value === null;
+}
 
 export interface ScheduleFormState {
   readonly server: string;
@@ -94,6 +106,8 @@ export function stateOfSchedule(schedule: Schedule): ScheduleFormState {
  * sent: the same rules the server checks (both or neither of a run time and
  * a pattern, a run in the past, a revert before the run, an unknown zone, a
  * pattern more often than every 5 minutes), so the dialog says them inline.
+ * An edit that still holds the server's secret mask is refused here too:
+ * the API would drop it without a word.
  */
 export function validateScheduleForm(
   state: ScheduleFormState,
@@ -152,6 +166,15 @@ export function validateScheduleForm(
   }
   if (state.edits.length === 0) {
     out.set("edits", "Add at least one setting to change.");
+  }
+  const masked = state.edits
+    .filter((edit) => edit.value === SECRET_MASK)
+    .map((edit) => edit.settingKey);
+  if (masked.length > 0) {
+    out.set(
+      "edits",
+      `Type the secret of ${masked.join(", ")} again: a stored secret is never copied into a new schedule.`,
+    );
   }
   return out;
 }
@@ -259,9 +282,20 @@ export function ScheduleForm({
       if (issue !== undefined) {
         mine.set(edit.settingKey, issue);
       }
+      // A secret the API would drop (its mask, or nothing typed yet) is an
+      // error on the field: the schedule must carry the real value.
+      if (
+        byKey.get(edit.settingKey)?.secret === true &&
+        secretMissing(edit.value)
+      ) {
+        mine.set(edit.settingKey, {
+          severity: "error",
+          message: SECRET_RETYPE,
+        });
+      }
     }
     return mine;
-  }, [pack, current, draft, state.edits]);
+  }, [pack, byKey, current, draft, state.edits]);
 
   const problems = useMemo(
     () => (touched ? validateScheduleForm(state) : new Map<string, string>()),
@@ -277,13 +311,15 @@ export function ScheduleForm({
   const chips: Chip[] = state.edits.map((edit) => {
     const setting = byKey.get(edit.settingKey);
     const from = current[edit.settingKey];
+    // A secret never reaches a chip: the server's own chips mask it too.
+    const secret = setting?.secret === true;
     return {
-      kind: from === undefined ? "added" : "changed",
+      kind: secret ? "masked" : from === undefined ? "added" : "changed",
       fileId: setting?.file ?? "",
       settingKey: edit.settingKey,
       label: setting?.label ?? edit.settingKey,
       from: from ?? null,
-      to: edit.value,
+      to: secret ? SECRET_MASK : edit.value,
       restartRequired: setting?.restartRequired === true,
     };
   });
@@ -300,7 +336,10 @@ export function ScheduleForm({
     if (setting === undefined) {
       return;
     }
-    const value = current[key] ?? setting.default ?? null;
+    // A secret starts empty: the settings read holds only its mask, which
+    // the API would drop, so the person types the value the run writes.
+    const value =
+      setting.secret === true ? "" : (current[key] ?? setting.default ?? null);
     patch({ edits: [...state.edits, { settingKey: key, value }] });
     setAdding("");
   };
@@ -607,7 +646,9 @@ export function ScheduleForm({
                     <li key={edit.settingKey}>
                       <SettingField
                         setting={setting}
-                        value={edit.value}
+                        // The server's mask is not a value: the box starts
+                        // empty and the issue below it asks for the secret.
+                        value={edit.value === SECRET_MASK ? "" : edit.value}
                         edited
                         issue={issues.get(edit.settingKey)?.message}
                         disabled={pending}

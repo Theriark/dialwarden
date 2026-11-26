@@ -74,7 +74,7 @@ const MESSAGES = new Map<string, string>([
   ["unknown_group", "This pack has no settings group with that name."],
   ["channel_not_found", "This channel no longer exists."],
   ["url_required", "A webhook address is needed to create the channel."],
-  ["url_refused", "The address is not allowed: https only, no credentials."],
+  ["url_refused", "The address is not allowed."],
   [
     "host_refused",
     "The host is not allowed: private and local addresses need the private host switch.",
@@ -199,9 +199,11 @@ export function errorMessage(error: unknown): string {
       }
       return "Too many attempts. Wait a moment and try again.";
     }
-    if (error.code === "invalid_licence") {
+    if (error.code === "invalid_licence" || error.code === "url_refused") {
+      // Both carry the server's short reason (not a URL, https only,
+      // credentials in the URL, address not allowed, ...).
       const reason = error.body?.reason;
-      const base = MESSAGES.get("invalid_licence") ?? "";
+      const base = MESSAGES.get(error.code) ?? "";
       return typeof reason === "string" ? `${base} (${reason})` : base;
     }
     if (error.code === "validation") {

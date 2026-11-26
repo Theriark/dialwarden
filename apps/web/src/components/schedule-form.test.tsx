@@ -4,6 +4,7 @@
 // with a setting picked from the pack and typed with the editor's field.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { SECRET_MASK } from "@dialwarden/packs-schema";
 import type { Schedule, ScheduleInput, Server } from "../api/schema";
 import {
   renderWithProviders,
@@ -16,6 +17,8 @@ import {
   emptyScheduleState,
   inputOfState,
   ScheduleForm,
+  SECRET_RETYPE,
+  secretMissing,
   stateOfSchedule,
   validateScheduleForm,
   type ScheduleFormState,
@@ -95,6 +98,24 @@ describe("validateScheduleForm", () => {
     expect(validateScheduleForm({ ...cron, revertAfter: "60" }, NOW).size).toBe(
       0,
     );
+  });
+
+  it("refuses an edit that still holds the server's secret mask", () => {
+    const problems = validateScheduleForm(
+      once({
+        edits: [
+          { settingKey: "ExpRate", value: 2 },
+          { settingKey: "AdminPassword", value: SECRET_MASK },
+        ],
+      }),
+      NOW,
+    );
+    expect(problems.get("edits")).toBe(
+      "Type the secret of AdminPassword again: a stored secret is never copied into a new schedule.",
+    );
+    expect(secretMissing(SECRET_MASK)).toBe(true);
+    expect(secretMissing("")).toBe(true);
+    expect(secretMissing("hunter2")).toBe(false);
   });
 });
 
@@ -184,65 +205,197 @@ const HOME: Server = {
   lastEditedAt: null,
 };
 
+/** The settings read of the home server and its pack: a rate and a secret. */
+function stubPack() {
+  stubFetch(([method, path]) => {
+    if (method === "GET" && path === "/api/v1/servers/home/settings") {
+      return {
+        status: 200,
+        body: {
+          serverId: "home",
+          packId: "testpack",
+          packVersion: "1.0.0",
+          editable: true,
+          files: [],
+          // The server masks a stored secret in every read.
+          values: { expRate: 1, adminPassword: SECRET_MASK },
+          lint: [],
+        },
+      };
+    }
+    if (method === "GET" && path === "/api/v1/games/testpack/settings-meta") {
+      return {
+        status: 200,
+        body: {
+          id: "testpack",
+          version: "1.0.0",
+          displayName: "Test Pack",
+          steamAppId: 1,
+          os: ["linux"],
+          files: [
+            {
+              id: "settings",
+              paths: { linux: ["s.ini"] },
+              adapter: "ini",
+              encoding: "utf-8",
+              applyPolicy: "anytime",
+            },
+          ],
+          settings: [
+            {
+              key: "expRate",
+              label: "Exp rate",
+              file: "settings",
+              locator: { section: "a", key: "ExpRate" },
+              type: "float",
+              min: 0.1,
+              max: 20,
+              group: "Rates",
+              description:
+                "How fast experience is gained by everyone on the server.",
+              restartRequired: true,
+            },
+            {
+              key: "adminPassword",
+              label: "Admin password",
+              file: "settings",
+              locator: { section: "a", key: "AdminPassword" },
+              type: "string",
+              secret: true,
+              group: "Access",
+              description: "The password that opens the admin commands.",
+            },
+          ],
+          rules: [],
+          presets: [],
+          hooksSupported: [],
+          sources: [],
+        },
+      };
+    }
+    return undefined;
+  });
+}
+
+const STORED_WITH_SECRET: Schedule = {
+  id: "s1",
+  serverId: "home",
+  name: "Private weekend",
+  author: "Owner",
+  kind: "once",
+  runAt: "2099-01-01T04:00:00.000Z",
+  cron: null,
+  timezone: "UTC",
+  revertAt: null,
+  revertAfterMinutes: null,
+  runHooks: "none",
+  // GET /api/v1/schedules answers a secret edit as the mask.
+  edits: [
+    { settingKey: "adminPassword", value: SECRET_MASK },
+    { settingKey: "expRate", value: 2 },
+  ],
+  state: "active",
+  pausedReason: null,
+  nextRunAt: "2099-01-01T04:00:00.000Z",
+  revertDueAt: null,
+  lastRunAt: null,
+  lastResult: null,
+  lastChangeSetId: null,
+  lastRevertAt: null,
+  lastRevertResult: null,
+  createdAt: "2026-11-26T00:00:00Z",
+  updatedAt: "2026-11-26T00:00:00Z",
+};
+
 describe("ScheduleForm", () => {
-  it("picks a setting from the pack, types it and submits the body", async () => {
-    stubFetch(([method, path]) => {
-      if (method === "GET" && path === "/api/v1/servers/home/settings") {
-        return {
-          status: 200,
-          body: {
-            serverId: "home",
-            packId: "testpack",
-            packVersion: "1.0.0",
-            editable: true,
-            files: [],
-            values: { expRate: 1 },
-            lint: [],
-          },
-        };
-      }
-      if (method === "GET" && path === "/api/v1/games/testpack/settings-meta") {
-        return {
-          status: 200,
-          body: {
-            id: "testpack",
-            version: "1.0.0",
-            displayName: "Test Pack",
-            steamAppId: 1,
-            os: ["linux"],
-            files: [
-              {
-                id: "settings",
-                paths: { linux: ["s.ini"] },
-                adapter: "ini",
-                encoding: "utf-8",
-                applyPolicy: "anytime",
-              },
-            ],
-            settings: [
-              {
-                key: "expRate",
-                label: "Exp rate",
-                file: "settings",
-                locator: { section: "a", key: "ExpRate" },
-                type: "float",
-                min: 0.1,
-                max: 20,
-                group: "Rates",
-                description:
-                  "How fast experience is gained by everyone on the server.",
-                restartRequired: true,
-              },
-            ],
-            rules: [],
-            presets: [],
-            hooksSupported: [],
-            sources: [],
-          },
-        };
-      }
-      return undefined;
+  it("asks for a masked secret again before a replace and never shows it", async () => {
+    stubPack();
+    const sent: ScheduleInput[] = [];
+    const client = testQueryClient();
+    withSession(client);
+    renderWithProviders(
+      <ScheduleForm
+        servers={[HOME]}
+        initial={STORED_WITH_SECRET}
+        pending={false}
+        onSubmit={(input) => {
+          sent.push(input);
+        }}
+        onCancel={() => undefined}
+      />,
+      client,
+    );
+
+    // The mask is not a value: the box is empty, the field says why and the
+    // replace cannot be sent (the API would drop the edit without a word).
+    const password = (await screen.findByLabelText(
+      "Admin password",
+    )) as HTMLInputElement;
+    expect(password.value).toBe("");
+    expect(screen.getByText(SECRET_RETYPE)).toBeTruthy();
+    const replace = screen.getByRole("button", {
+      name: "Replace schedule",
+    }) as HTMLButtonElement;
+    expect(replace.disabled).toBe(true);
+    expect(
+      screen.getByText("Admin password: ******** → ********"),
+    ).toBeTruthy();
+
+    fireEvent.change(password, { target: { value: "weekend-only" } });
+    await waitFor(() => {
+      expect(screen.queryByText(SECRET_RETYPE)).toBeNull();
     });
+    // The chip keeps the mask: the typed secret is nowhere on the screen
+    // but in the password box.
+    expect(screen.queryByText(/weekend-only/)).toBeNull();
+    expect(replace.disabled).toBe(false);
+    fireEvent.click(replace);
+    await waitFor(() => {
+      expect(sent.length).toBe(1);
+    });
+    expect(sent[0]?.edits).toEqual([
+      { settingKey: "adminPassword", value: "weekend-only" },
+      { settingKey: "expRate", value: 2 },
+    ]);
+  });
+
+  it("starts a newly added secret setting empty instead of with the mask", async () => {
+    stubPack();
+    const client = testQueryClient();
+    withSession(client);
+    renderWithProviders(
+      <ScheduleForm
+        servers={[HOME]}
+        pending={false}
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />,
+      client,
+    );
+    fireEvent.change(screen.getByLabelText("Server"), {
+      target: { value: "home" },
+    });
+    const add = (await screen.findByLabelText(
+      "Add a setting",
+    )) as HTMLSelectElement;
+    fireEvent.change(add, { target: { value: "adminPassword" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const password = (await screen.findByLabelText(
+      "Admin password",
+    )) as HTMLInputElement;
+    expect(password.value).toBe("");
+    expect(screen.getByText(SECRET_RETYPE)).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Create schedule",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("picks a setting from the pack, types it and submits the body", async () => {
+    stubPack();
     const sent: ScheduleInput[] = [];
     const client = testQueryClient();
     withSession(client);

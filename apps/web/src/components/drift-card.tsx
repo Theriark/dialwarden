@@ -69,13 +69,17 @@ export function DriftCard({ slug }: { slug: string }) {
   const [enabled, setEnabled] = useState(false);
   const [interval, setInterval] = useState(String(DRIFT_INTERVAL.default));
 
+  const storedEnabled = drift?.enabled;
+  const storedInterval = drift?.intervalMinutes;
   useEffect(() => {
-    // The stored settings arrive, or a save answers: the form follows.
-    if (drift !== undefined) {
-      setEnabled(drift.enabled);
-      setInterval(String(drift.intervalMinutes));
+    // The stored settings arrive, or a save answers: the form follows. Only
+    // the two stored values count, so a refetch that moves lastCheckedAt
+    // (a background check, a focus) leaves an interval being typed alone.
+    if (storedEnabled !== undefined && storedInterval !== undefined) {
+      setEnabled(storedEnabled);
+      setInterval(String(storedInterval));
     }
-  }, [drift]);
+  }, [storedEnabled, storedInterval]);
 
   const settle = (answer: Drift) => {
     client.setQueryData(

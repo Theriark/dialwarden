@@ -180,6 +180,48 @@ describe("SchedulesPage", () => {
     await screen.findByText("Schedule deleted");
   });
 
+  it("closes the replace form and warns when the old schedule was not removed", async () => {
+    stubViewport(1440);
+    const calls = stubWorld(([method, path]) => {
+      if (method === "POST" && path === "/api/v1/schedules") {
+        return {
+          status: 201,
+          body: schedule({ name: "Weekend rates", id: "s-new" }),
+        };
+      }
+      if (method === "DELETE" && path === "/api/v1/schedules/s-weekend-rates") {
+        return { status: 404, body: { error: "schedule_not_found" } };
+      }
+      return undefined;
+    });
+    startRouter("/schedules");
+    await screen.findByText("Weekend rates");
+
+    const row = screen.getByText("Weekend rates").closest("li");
+    expect(row).not.toBeNull();
+    if (row === null) return;
+    fireEvent.click(within(row).getByRole("button", { name: "Edit" }));
+    const form = await screen.findByRole("form", { name: "Replace schedule" });
+    fireEvent.click(
+      within(form).getByRole("button", { name: "Replace schedule" }),
+    );
+    // The new one exists; the dialog closes so a second Replace cannot make
+    // a third copy, and the toast says the old one must go by hand.
+    await screen.findByText("Schedule created, but the old one is still there");
+    expect(
+      screen.getByText(/was not removed \(This schedule no longer exists\.\)/),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("form", { name: "Replace schedule" }),
+      ).toBeNull();
+    });
+    // The list is asked for again after the half-done replace.
+    expect(
+      calls.filter((call) => call === "GET /api/v1/schedules").length,
+    ).toBeGreaterThan(1);
+  });
+
   it("renders the upgrade hint and the paused explanation on Free", async () => {
     stubViewport(1440);
     stubWorld(([method, path]) => {

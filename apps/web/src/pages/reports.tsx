@@ -223,7 +223,17 @@ export function ReportsPage() {
 
   const list: readonly Server[] = servers.data?.items ?? [];
   const build = () => {
-    setSelection(selectionOf(fromLocal, toLocal, picked, all));
+    const next = selectionOf(fromLocal, toLocal, picked, all);
+    // The same selection again (an empty To means up to now) asks the
+    // server again instead of keeping the report already shown.
+    if (
+      selection !== null &&
+      JSON.stringify(next) === JSON.stringify(selection)
+    ) {
+      void report.refetch();
+      return;
+    }
+    setSelection(next);
   };
   const payment =
     report.error instanceof ApiError ? report.error.paymentRequired : null;

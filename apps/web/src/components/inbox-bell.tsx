@@ -1,16 +1,17 @@
 // The in-app notifications (dev-work-plan P9-C step 4): the bell in the top
 // bar with the unread count, and the list behind it. The rows are the ones
 // the in-app channel stored for the servers this person may see; the read
-// marker is the person's own. On Free the route answers 402 and the bell is
-// not shown at all (the Free fallback of this screen is its absence; the
-// Notifications settings page carries the upgrade hint).
+// marker is the person's own. On Free the bell is not shown at all and the
+// list is never asked for (the route would answer 402 every minute; the
+// Free fallback of this screen is its absence, and the Notifications
+// settings page carries the upgrade hint).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Bell, FlaskConical, MailOpen } from "lucide-react";
 import { useState } from "react";
 import { errorMessage } from "../api/errors";
 import { markInboxRead } from "../api/fleet";
-import { inboxQuery, p9keys } from "../api/queries";
+import { entitlementQuery, inboxQuery, p9keys } from "../api/queries";
 import type { InboxItem, InboxPage } from "../api/schema";
 import { formatDateTime } from "../lib/format";
 import { Alert } from "./ui/alert";
@@ -52,7 +53,13 @@ function Row({ item }: { item: InboxItem }) {
 
 export function InboxBell() {
   const client = useQueryClient();
-  const inbox = useQuery({ ...inboxQuery(), refetchInterval: 60_000 });
+  const entitlement = useQuery(entitlementQuery());
+  const allowed = entitlement.data?.features.notifications === true;
+  const inbox = useQuery({
+    ...inboxQuery(),
+    enabled: allowed,
+    refetchInterval: allowed ? 60_000 : false,
+  });
   const [open, setOpen] = useState(false);
   const read = useMutation({
     mutationFn: (upTo: number) => markInboxRead(upTo),

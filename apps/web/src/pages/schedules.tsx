@@ -274,18 +274,34 @@ export function SchedulesPage() {
       replace: Schedule | null;
     }) => {
       const created = await createSchedule(input.body);
-      if (input.replace !== null) {
-        await deleteSchedule(input.replace.id);
+      if (input.replace === null) {
+        return { created, oldKept: null };
       }
-      return created;
+      // The new one exists from here on: a failed delete of the old one
+      // (gone meanwhile, or the network) must not leave the form open for a
+      // second Replace, which would make a third copy.
+      try {
+        await deleteSchedule(input.replace.id);
+        return { created, oldKept: null };
+      } catch (error: unknown) {
+        return { created, oldKept: error };
+      }
     },
-    onSuccess: (created, input) => {
-      toast.push({
-        kind: "success",
-        title:
-          input.replace === null ? "Schedule created" : "Schedule replaced",
-        description: `${created.name}: next run ${formatDateTime(created.nextRunAt)}.`,
-      });
+    onSuccess: ({ created, oldKept }, input) => {
+      if (oldKept !== null) {
+        toast.push({
+          kind: "error",
+          title: "Schedule created, but the old one is still there",
+          description: `${created.name} was made; ${input.replace?.name ?? "the old schedule"} was not removed (${errorMessage(oldKept)}). Delete it by hand so both do not run.`,
+        });
+      } else {
+        toast.push({
+          kind: "success",
+          title:
+            input.replace === null ? "Schedule created" : "Schedule replaced",
+          description: `${created.name}: next run ${formatDateTime(created.nextRunAt)}.`,
+        });
+      }
       setForm("closed");
       setHighlighted(created.id);
       refresh();
