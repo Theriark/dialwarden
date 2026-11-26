@@ -91,6 +91,31 @@ export function fsError(error: unknown, rel: string): ConnectorError {
   );
 }
 
+/**
+ * A write the file system refused, said as a refused write (P9 L1). A file
+ * system that refuses new files (/proc answers ENOENT) and a folder that may
+ * not be written (EACCES, EPERM, EROFS) both read "cannot be written"; only
+ * a folder that is really missing stays NotFound.
+ */
+async function writeRefused(
+  error: unknown,
+  rel: string,
+  folder: string,
+): Promise<ConnectorError> {
+  if (error instanceof ConnectorError) return error;
+  const code = errnoOf(error);
+  if (code === undefined || code === "ELOOP") return fsError(error, rel);
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    const found = await lstat(folder).catch(() => null);
+    if (found === null || !found.isDirectory()) return fsError(error, rel);
+  }
+  return new ConnectorError(
+    "Connection",
+    `${rel} cannot be written here (${code})`,
+    error,
+  );
+}
+
 function typeOf(stats: Stats): FileStat["type"] {
   if (stats.isFile()) return "file";
   if (stats.isDirectory()) return "directory";
@@ -350,7 +375,7 @@ export class LocalConnector implements Connector {
     try {
       handle = await open(temp, TEMP_FLAGS, 0o600);
     } catch (error) {
-      throw fsError(error, rel);
+      throw await writeRefused(error, rel, dirname(target));
     }
     try {
       await assertOpenedInside(handle, root, temp, rel);
@@ -370,7 +395,7 @@ export class LocalConnector implements Connector {
     } catch (error) {
       if (handle !== null) await handle.close().catch(() => undefined);
       await unlink(temp).catch(() => undefined);
-      throw fsError(error, rel);
+      throw await writeRefused(error, rel, dirname(target));
     }
     await this.#afterRename?.();
     // The rename resolves both names through the same folder, so it cannot

@@ -92,6 +92,8 @@ export class ConnectorService {
         this.knownHosts.get(spec.host, spec.port)?.fingerprint ?? null,
       readyTimeoutMs: this.#readyMs,
       operationTimeoutMs: this.#operationMs,
+      // Panel SFTP is chrooted: its / is the game folder (P10-A L4).
+      rootMayBeSlash: spec.panel,
     });
   }
 
