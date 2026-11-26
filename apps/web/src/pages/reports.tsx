@@ -15,8 +15,18 @@ import {
 import { useState } from "react";
 import { ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
-import { reportPrintUrl, reportQuery, serversQuery } from "../api/queries";
-import type { Report, ReportSelection, Server } from "../api/schema";
+import {
+  entitlementQuery,
+  reportPrintUrl,
+  reportQuery,
+  serversQuery,
+} from "../api/queries";
+import type {
+  PaymentRequiredBody,
+  Report,
+  ReportSelection,
+  Server,
+} from "../api/schema";
 import { TextChip } from "../components/change-chip";
 import { PageHeader } from "../components/layout/page-header";
 import { UpgradeHint } from "../components/upgrade-hint";
@@ -208,8 +218,33 @@ export function DiscordPreview({ content }: { content: string }) {
   );
 }
 
+/** The Free plan's view: the upgrade hint and what a report would hold. */
+function FreeReports({ body }: { body: PaymentRequiredBody }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <UpgradeHint body={body} />
+      <Alert kind="info" title="What a report holds">
+        Every change set of the range, grouped by server, with its time, cause,
+        status, author and the changes as chips; as a print page, as Markdown
+        and as a Discord message. The history of each server stays readable on
+        its own page.
+      </Alert>
+    </div>
+  );
+}
+
+const REPORTS_FEATURE: PaymentRequiredBody = {
+  error: "payment_required",
+  plan: "free",
+  feature: "reports",
+};
+
 export function ReportsPage() {
   const servers = useQuery(serversQuery());
+  // On Free the page says so before anything is built (P9 live check L6);
+  // the 402 of a build keeps its own path for a plan that changed meanwhile.
+  const entitlement = useQuery(entitlementQuery());
+  const reportsOff = entitlement.data?.features.reports === false;
   const [fromLocal, setFromLocal] = useState(() => daysAgoLocal(7));
   const [toLocal, setToLocal] = useState("");
   const [all, setAll] = useState(true);
@@ -318,7 +353,7 @@ export function ReportsPage() {
               variant="primary"
               icon={<FileText className="size-4" aria-hidden="true" />}
               loading={report.isFetching}
-              disabled={!all && picked.length === 0}
+              disabled={reportsOff || (!all && picked.length === 0)}
               onClick={build}
             >
               Build the report
@@ -344,24 +379,20 @@ export function ReportsPage() {
           </div>
         </Card>
         {selection === null ? (
-          <EmptyState
-            icon={<FileText className="size-6" aria-hidden="true" />}
-            title="No report built yet"
-            description="Choose a range and the servers, then build the report. The preview shows exactly what the print view and the Markdown carry."
-          />
+          reportsOff ? (
+            <FreeReports body={REPORTS_FEATURE} />
+          ) : (
+            <EmptyState
+              icon={<FileText className="size-6" aria-hidden="true" />}
+              title="No report built yet"
+              description="Choose a range and the servers, then build the report. The preview shows exactly what the print view and the Markdown carry."
+            />
+          )
         ) : report.isPending ? (
           <RowsSkeleton rows={6} />
         ) : report.isError ? (
           payment !== null ? (
-            <div className="flex flex-col gap-4">
-              <UpgradeHint body={payment} />
-              <Alert kind="info" title="What a report holds">
-                Every change set of the range, grouped by server, with its time,
-                cause, status, author and the changes as chips; as a print page,
-                as Markdown and as a Discord message. The history of each server
-                stays readable on its own page.
-              </Alert>
-            </div>
+            <FreeReports body={payment} />
           ) : (
             <ErrorState
               message={errorMessage(report.error)}
@@ -427,9 +458,12 @@ export function ReportsPage() {
               ]}
               value={tab}
               onChange={setTab}
+              // Each panel is keyed: the Copied state of one tab's copy
+              // button never carries over to the next tab's (P9 live
+              // check L7).
               panel={(id) =>
                 id === "markdown" ? (
-                  <div className="flex flex-col gap-2">
+                  <div key="markdown" className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Badge kind="info">
                         {report.data.markdown.length} characters
@@ -447,7 +481,7 @@ export function ReportsPage() {
                     </pre>
                   </div>
                 ) : id === "discord" ? (
-                  <div className="flex flex-col gap-2">
+                  <div key="discord" className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Badge
                         kind={
@@ -470,7 +504,7 @@ export function ReportsPage() {
                     </p>
                   </div>
                 ) : (
-                  <PrintPreview report={report.data} />
+                  <PrintPreview key="preview" report={report.data} />
                 )
               }
             />

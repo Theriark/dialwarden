@@ -5,8 +5,16 @@
 // states scheduled, ran, reverted, failed, missed and paused (the Free plan
 // pauses every schedule; the list itself answers 402 on Free and the page
 // renders the upgrade hint). A viewer reads; the owner, an admin and an
-// editor with write access on the server make and remove schedules.
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// editor with write access on the server make and remove schedules (the
+// server's access field says which, P10-A L22). The chips of a schedule
+// carry the pack's labels, read from the settings-meta of each server's
+// pack (P9 live check L3).
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   CalendarClock,
@@ -21,13 +29,22 @@ import {
   Undo2,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { SECRET_MASK, type Setting } from "@dialwarden/packs-schema";
 import { ApiError } from "../api/client";
 import { errorMessage } from "../api/errors";
 import { createSchedule, deleteSchedule } from "../api/fleet";
-import { schedulesQuery, serversQuery } from "../api/queries";
+import {
+  schedulesQuery,
+  serversQuery,
+  settingsMetaQuery,
+} from "../api/queries";
 import type { Chip, Schedule, ScheduleInput, Server } from "../api/schema";
-import { useSessionUser } from "../api/session";
+import {
+  canWriteServer,
+  SERVER_WRITE_ROLES,
+  useSessionUser,
+} from "../api/session";
 import { ChangeChip } from "../components/change-chip";
 import { PageHeader } from "../components/layout/page-header";
 import { ReadOnlyNotice } from "../components/read-only-notice";
@@ -48,15 +65,20 @@ import { EmptyState, ErrorState, RowsSkeleton } from "../components/ui/states";
 import { useToast } from "../components/ui/toast";
 import { cn } from "../lib/cn";
 import { describeSchedule, formatDateTime } from "../lib/format";
-
-/** The roles that may make or remove a schedule (write access on the server). */
-export const SCHEDULE_WRITE_ROLES: readonly string[] = [
-  "owner",
-  "admin",
-  "editor",
-];
+import { settingsByKey } from "../lib/pack";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * True when a schedule has a run or a revert due within a week of now (P9
+ * live check L5: the tile counted the runs only).
+ */
+export function dueWithinWeek(schedule: Schedule, now = Date.now()): boolean {
+  if (schedule.state !== "active") return false;
+  const soon = (at: string | null) =>
+    at !== null && Date.parse(at) - now < WEEK_MS;
+  return soon(schedule.nextRunAt) || soon(schedule.revertDueAt);
+}
 
 export interface StateWords {
   readonly kind: BadgeKind;
@@ -98,21 +120,33 @@ export function whenWords(schedule: Schedule): string {
   return `Once on ${formatDateTime(schedule.runAt)}`;
 }
 
-function chipsOf(schedule: Schedule): Chip[] {
-  return schedule.edits.map((edit) => ({
-    kind: "changed",
-    fileId: "",
-    settingKey: edit.settingKey,
-    label: edit.settingKey,
-    from: null,
-    to: edit.value,
-    restartRequired: false,
-  }));
+/**
+ * The chips of a schedule's edits, with the pack's labels and badges when
+ * its settings are known; a secret keeps the mask the API answers.
+ */
+export function chipsOf(
+  schedule: Schedule,
+  byKey?: ReadonlyMap<string, Setting> | undefined,
+): Chip[] {
+  return schedule.edits.map((edit) => {
+    const setting = byKey?.get(edit.settingKey);
+    const secret = setting?.secret === true || edit.value === SECRET_MASK;
+    return {
+      kind: secret ? "masked" : "changed",
+      fileId: setting?.file ?? "",
+      settingKey: edit.settingKey,
+      label: setting?.label ?? edit.settingKey,
+      from: null,
+      to: secret ? SECRET_MASK : edit.value,
+      restartRequired: setting?.restartRequired === true,
+    };
+  });
 }
 
 function ScheduleRow({
   schedule,
   serverName,
+  settings,
   canWrite,
   highlighted,
   onEdit,
@@ -120,6 +154,7 @@ function ScheduleRow({
 }: {
   schedule: Schedule;
   serverName: string;
+  settings: ReadonlyMap<string, Setting> | undefined;
   canWrite: boolean;
   highlighted: boolean;
   onEdit: (schedule: Schedule) => void;
@@ -192,7 +227,7 @@ function ScheduleRow({
         </div>
       </dl>
       <ul className="flex flex-wrap gap-1.5">
-        {chipsOf(schedule).map((chip) => (
+        {chipsOf(schedule, settings).map((chip) => (
           <ChangeChip
             key={`${schedule.id}-${chip.settingKey ?? ""}`}
             chip={chip}
@@ -251,7 +286,6 @@ function StatTile({
 
 export function SchedulesPage() {
   const user = useSessionUser();
-  const canWrite = user !== null && SCHEDULE_WRITE_ROLES.includes(user.role);
   const client = useQueryClient();
   const toast = useToast();
   const servers = useQuery(serversQuery());
@@ -278,12 +312,16 @@ export function SchedulesPage() {
         return { created, oldKept: null };
       }
       // The new one exists from here on: a failed delete of the old one
-      // (gone meanwhile, or the network) must not leave the form open for a
-      // second Replace, which would make a third copy.
+      // (the network, a server error) must not leave the form open for a
+      // second Replace, which would make a third copy. An old one that is
+      // already gone (404) is exactly what a replace wants (P9-C review R1).
       try {
         await deleteSchedule(input.replace.id);
         return { created, oldKept: null };
       } catch (error: unknown) {
+        if (error instanceof ApiError && error.code === "schedule_not_found") {
+          return { created, oldKept: null };
+        }
         return { created, oldKept: error };
       }
     },
@@ -326,6 +364,37 @@ export function SchedulesPage() {
 
   const serverList: readonly Server[] = servers.data?.items ?? [];
   const names = new Map(serverList.map((server) => [server.id, server.name]));
+  // The pack of each server names its settings: the chips show labels, not
+  // keys, and a secret setting keeps its mask (P9 live check L3).
+  const packIds = useMemo(
+    () => [...new Set(serverList.map((server) => server.packId))],
+    [serverList],
+  );
+  const metas = useQueries({
+    queries: packIds.map((packId) => settingsMetaQuery(packId)),
+  });
+  const settingsOfPack = new Map<string, ReadonlyMap<string, Setting>>();
+  packIds.forEach((packId, index) => {
+    // eslint-disable-next-line security/detect-object-injection -- a positional index into the parallel meta queries
+    const data = metas[index]?.data;
+    if (data !== undefined) {
+      settingsOfPack.set(packId, settingsByKey(data.settings as Setting[]));
+    }
+  });
+  const settingsOfServer = (serverId: string) =>
+    settingsOfPack.get(
+      serverList.find((server) => server.id === serverId)?.packId ?? "",
+    );
+  // Who writes what (P10-A L22): the role allows writes and the server's own
+  // answer says write for that server. The New button needs one such server.
+  const roleWrites = user !== null && SERVER_WRITE_ROLES.includes(user.role);
+  const writable = serverList.filter((server) =>
+    canWriteServer(user, server.access),
+  );
+  const accessOf = new Map(
+    serverList.map((server) => [server.id, server.access]),
+  );
+  const canWrite = writable.length > 0;
 
   if (schedules.isPending || servers.isPending) {
     return (
@@ -399,12 +468,7 @@ export function SchedulesPage() {
   const all = schedules.data.items;
   const shown = filter === "" ? all : all.filter((s) => s.serverId === filter);
   const now = Date.now();
-  const soon = all.filter(
-    (s) =>
-      s.state === "active" &&
-      s.nextRunAt !== null &&
-      Date.parse(s.nextRunAt) - now < WEEK_MS,
-  ).length;
+  const soon = all.filter((s) => dueWithinWeek(s, now)).length;
   const paused = all.filter((s) => s.state === "paused").length;
   const trouble = all.filter(
     (s) =>
@@ -423,7 +487,7 @@ export function SchedulesPage() {
     <Button
       variant="primary"
       icon={<Plus className="size-4" aria-hidden="true" />}
-      disabled={serverList.length === 0}
+      disabled={writable.length === 0}
       onClick={() => {
         setForm("new");
       }}
@@ -444,6 +508,7 @@ export function SchedulesPage() {
           role={user?.role ?? "viewer"}
           reads="the schedules"
           writes="makes and removes them"
+          grant={roleWrites}
           className="mb-4"
         />
       )}
@@ -467,7 +532,7 @@ export function SchedulesPage() {
               }
               label="Next 7 days"
               value={soon}
-              caption="Runs due this week"
+              caption="Runs and reverts due this week"
             />
             <StatTile
               icon={<Pause className="size-5 shrink-0" aria-hidden="true" />}
@@ -533,7 +598,11 @@ export function SchedulesPage() {
                       serverName={
                         names.get(schedule.serverId) ?? schedule.serverId
                       }
-                      canWrite={canWrite}
+                      settings={settingsOfServer(schedule.serverId)}
+                      canWrite={canWriteServer(
+                        user,
+                        accessOf.get(schedule.serverId),
+                      )}
                       highlighted={highlighted === schedule.id}
                       onEdit={(item) => {
                         setForm(item);
@@ -565,7 +634,7 @@ export function SchedulesPage() {
           className="max-w-3xl"
         >
           <ScheduleForm
-            servers={serverList}
+            servers={writable}
             initial={form === "new" ? undefined : form}
             pending={save.isPending}
             error={save.error ?? undefined}

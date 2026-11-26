@@ -50,21 +50,33 @@ function PresetCard({
   preset,
   servers,
   canBulk,
+  canDelete,
   onApply,
   onBulk,
   onDelete,
   deleting,
 }: {
   preset: UserPreset;
-  servers: readonly { id: string; name: string; packId: string }[];
+  servers: readonly {
+    id: string;
+    name: string;
+    packId: string;
+    access: string;
+  }[];
   canBulk: boolean;
+  /** Deleting a preset is the owner's (routes/presets.ts). */
+  canDelete: boolean;
   onApply: (preset: UserPreset, server: string) => void;
   onBulk: (preset: UserPreset) => void;
   onDelete: (preset: UserPreset) => void;
   deleting: boolean;
 }) {
   const [server, setServer] = useState("");
-  const packServers = servers.filter((item) => item.packId === preset.packId);
+  // Apply with diff is a write on that server: a server this caller's grant
+  // only reads is not offered (P10-A L22).
+  const packServers = servers.filter(
+    (item) => item.packId === preset.packId && item.access !== "read",
+  );
   return (
     <Card
       title={preset.name}
@@ -81,7 +93,7 @@ function PresetCard({
       <div className="flex flex-wrap items-end gap-2">
         {packServers.length === 0 ? (
           <p className="text-sm text-fg-muted">
-            No server of this pack to apply it to.
+            No server of this pack you can write to apply it to.
           </p>
         ) : (
           <>
@@ -119,16 +131,18 @@ function PresetCard({
             ) : null}
           </>
         )}
-        <Button
-          variant="ghost"
-          loading={deleting}
-          icon={<Trash2 className="size-4" aria-hidden="true" />}
-          onClick={() => {
-            onDelete(preset);
-          }}
-        >
-          Delete
-        </Button>
+        {canDelete ? (
+          <Button
+            variant="ghost"
+            loading={deleting}
+            icon={<Trash2 className="size-4" aria-hidden="true" />}
+            onClick={() => {
+              onDelete(preset);
+            }}
+          >
+            Delete
+          </Button>
+        ) : null}
       </div>
     </Card>
   );
@@ -247,6 +261,7 @@ export function PresetsPage() {
     id: server.id,
     name: server.name,
     packId: server.packId,
+    access: server.access,
   }));
   const settingsList = (meta.data?.settings ?? []) as Setting[];
 
@@ -344,8 +359,8 @@ export function PresetsPage() {
         {missing ? (
           <EmptyState
             icon={<Layers className="size-6" aria-hidden="true" />}
-            title="Presets are not on this build yet"
-            description="The presets API ships with the next server update; the screen is ready for it. Reported to Delivery with the result of this phase."
+            title="Presets are not on this server build"
+            description="The server answered 404 for the presets API: this web build is newer than the server it talks to. Update the server image and reload."
           />
         ) : (
           <ErrorState
@@ -399,6 +414,7 @@ export function PresetsPage() {
               preset={preset}
               servers={ownerServers}
               canBulk={canBulk}
+              canDelete={isOwner}
               onApply={(item, server) => {
                 apply.mutate({ preset: item, server });
               }}
